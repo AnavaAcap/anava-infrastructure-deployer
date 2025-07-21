@@ -1,0 +1,124 @@
+swagger: "2.0"
+info:
+  title: Anava API Gateway
+  description: API Gateway for Anava Vision system authentication and token management
+  version: "1.0.0"
+schemes:
+  - https
+produces:
+  - application/json
+x-google-management:
+  metrics:
+    - name: "device-auth-requests"
+      displayName: "Device Auth Requests"
+      description: "Number of device authentication requests"
+      valueType: INT64
+      metricKind: DELTA
+    - name: "token-exchange-requests"
+      displayName: "Token Exchange Requests"
+      description: "Number of token exchange requests"
+      valueType: INT64
+      metricKind: DELTA
+paths:
+  /device-auth/initiate:
+    post:
+      summary: Initiate device authentication
+      description: Generate a Firebase custom token for device authentication
+      operationId: deviceAuthInitiate
+      x-google-backend:
+        address: ${DEVICE_AUTH_URL}
+        deadline: 30.0
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            required:
+              - device_id
+            properties:
+              device_id:
+                type: string
+                description: Unique identifier for the device
+      responses:
+        200:
+          description: Successful authentication initiation
+          schema:
+            type: object
+            properties:
+              firebase_custom_token:
+                type: string
+                description: Firebase custom token for the device
+        400:
+          description: Bad request - missing or invalid parameters
+        403:
+          description: Forbidden - invalid API key
+        500:
+          description: Internal server error
+      security:
+        - api_key: []
+      x-google-management:
+        metrics:
+          - name: "device-auth-requests"
+            valueExtractor: "1"
+  
+  /gcp-token/vend:
+    post:
+      summary: Exchange Firebase token for GCP access token
+      description: Exchange a Firebase ID token for a GCP access token using Workload Identity Federation
+      operationId: tokenExchange
+      x-google-backend:
+        address: ${TVM_URL}
+        deadline: 30.0
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            required:
+              - firebase_id_token
+            properties:
+              firebase_id_token:
+                type: string
+                description: Firebase ID token to exchange
+      responses:
+        200:
+          description: Successful token exchange
+          schema:
+            type: object
+            properties:
+              gcp_access_token:
+                type: string
+                description: GCP access token
+              expires_in:
+                type: integer
+                description: Token expiration time in seconds
+        400:
+          description: Bad request - missing or invalid parameters
+        401:
+          description: Unauthorized - invalid Firebase token
+        403:
+          description: Forbidden - invalid API key
+        500:
+          description: Internal server error
+      security:
+        - api_key: []
+      x-google-management:
+        metrics:
+          - name: "token-exchange-requests"
+            valueExtractor: "1"
+
+securityDefinitions:
+  api_key:
+    type: apiKey
+    name: x-api-key
+    in: header
