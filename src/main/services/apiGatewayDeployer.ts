@@ -116,14 +116,17 @@ export class ApiGatewayDeployer {
 
     try {
       // Create or get the API
+      console.log(`Checking if API ${apiId} exists...`);
       try {
         await this.apigateway.projects.locations.apis.get({
           name: parent,
           auth: this.auth
         });
+        console.log(`API ${apiId} already exists`);
       } catch (error: any) {
         if (error.code === 404) {
           // Create the API
+          console.log(`API ${apiId} not found, creating it...`);
           const createResponse = await this.apigateway.projects.locations.apis.create({
             parent: `projects/${projectId}/locations/global`,
             apiId: apiId,
@@ -147,6 +150,7 @@ export class ApiGatewayDeployer {
       }
 
       // Create the API config with retry logic for "parent not ready" errors
+      console.log(`Creating API config ${configId}...`);
       let response;
       let retries = 0;
       const maxRetries = 10;
@@ -191,7 +195,9 @@ export class ApiGatewayDeployer {
         throw new Error('Failed to create API config');
       }
 
+      console.log('Waiting for API config creation to complete...');
       await this.waitForApiGatewayOperation(operation.name);
+      console.log(`API config ${configId} created successfully`);
 
       return configId;
     } catch (error: any) {
@@ -211,6 +217,8 @@ export class ApiGatewayDeployer {
     const parent = `projects/${projectId}/locations/${region}`;
     const gatewayName = `${parent}/gateways/${gatewayId}`;
 
+    console.log(`Creating gateway ${gatewayId} in region ${region}...`);
+    
     try {
       // Check if gateway exists
       const { data: existingGateway } = await this.apigateway.projects.locations.gateways.get({
@@ -265,7 +273,9 @@ export class ApiGatewayDeployer {
       throw new Error('Failed to create gateway');
     }
 
+    console.log('Waiting for gateway creation to complete...');
     await this.waitForApiGatewayOperation(operation.name);
+    console.log(`Gateway ${gatewayId} created successfully`);
 
     // Get the gateway to retrieve its URL
     const { data: gateway } = await this.apigateway.projects.locations.gateways.get({
@@ -285,6 +295,8 @@ export class ApiGatewayDeployer {
     const keyId = `${apiId}-key-${Date.now()}`;
     const parent = `projects/${projectId}/locations/global`;
 
+    console.log(`Creating API key ${keyId}...`);
+    
     // Create restrictions for the API key
     const restrictions: any = {
       apiTargets: [{
@@ -315,7 +327,9 @@ export class ApiGatewayDeployer {
     }
 
     // Wait for operation to complete
+    console.log('Waiting for API key creation to complete...');
     await this.waitForApiKeysOperation(operation.name);
+    console.log(`API key ${keyId} created successfully`);
 
     // Get the created key
     const keyName = `${parent}/keys/${keyId}`;
@@ -377,6 +391,9 @@ export class ApiGatewayDeployer {
           throw new Error(`Operation failed: ${JSON.stringify(operation.error)}`);
         }
       } else {
+        if (retries % 3 === 0) { // Log every 15 seconds
+          console.log(`Still waiting for operation ${operationName.split('/').pop()}... (${retries * 5}s elapsed)`);
+        }
         await new Promise(resolve => setTimeout(resolve, 5000));
         retries++;
       }
