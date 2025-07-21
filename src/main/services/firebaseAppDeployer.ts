@@ -183,7 +183,7 @@ export class FirebaseAppDeployer {
       storageBucket: storageBucket,
       messagingSenderId: configData.messagingSenderId || messagingSenderId || '',
       appId: configData.appId || appIdFull || '',
-      measurementId: configData.measurementId
+      measurementId: configData.measurementId || undefined
     };
     
     console.log('Final Firebase config:', JSON.stringify(finalConfig, null, 2));

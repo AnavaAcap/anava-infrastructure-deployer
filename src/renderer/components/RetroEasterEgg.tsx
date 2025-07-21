@@ -153,7 +153,7 @@ MAY THE CLOUD BE WITH YOU...`;
     
     // Konami code detector
     if (trigger === 'konami') {
-      const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+      const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a', 'Enter'];
       let konamiIndex = 0;
       
       const handleKeyPress = (e: KeyboardEvent) => {

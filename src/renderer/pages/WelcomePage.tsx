@@ -76,7 +76,7 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
           Firestore, and IAM configurations.
         </Typography>
       </Box>
-    </Paper>
+    </GradientPaper>
   );
 };
 
