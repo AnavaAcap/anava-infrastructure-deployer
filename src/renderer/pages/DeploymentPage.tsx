@@ -50,6 +50,7 @@ const deploymentSteps = [
   { key: 'createApiGateway', label: 'Create API Gateway' },
   { key: 'configureWorkloadIdentity', label: 'Configure Identity Federation' },
   { key: 'setupFirestore', label: 'Setup Firestore' },
+  { key: 'createFirebaseWebApp', label: 'Create Firebase Web App' },
 ];
 
 const DeploymentPage: React.FC<DeploymentPageProps> = ({
