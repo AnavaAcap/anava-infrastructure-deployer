@@ -140,31 +140,51 @@ export class ApiGatewayDeployer {
             console.log('Waiting for API creation to complete...');
             await this.waitForApiGatewayOperation(createResponse.data.name);
             console.log('API created successfully');
-            
-            // Add a small delay to ensure API is fully ready
-            await new Promise(resolve => setTimeout(resolve, 5000));
           }
         } else {
           throw error;
         }
       }
 
-      // Create the API config
-      const response = await this.apigateway.projects.locations.apis.configs.create({
-        parent: parent,
-        apiConfigId: configId,
-        auth: this.auth,
-        requestBody: {
-          name: `${parent}/configs/${configId}`,
-          displayName: `Config ${configId}`,
-          openapiDocuments: [{
-            document: {
-              path: 'openapi.yaml',
-              contents: Buffer.from(configContent).toString('base64')
+      // Create the API config with retry logic for "parent not ready" errors
+      let response;
+      let retries = 0;
+      const maxRetries = 10;
+      const retryDelay = 10000; // 10 seconds
+      
+      while (retries < maxRetries) {
+        try {
+          response = await this.apigateway.projects.locations.apis.configs.create({
+            parent: parent,
+            apiConfigId: configId,
+            auth: this.auth,
+            requestBody: {
+              name: `${parent}/configs/${configId}`,
+              displayName: `Config ${configId}`,
+              openapiDocuments: [{
+                document: {
+                  path: 'openapi.yaml',
+                  contents: Buffer.from(configContent).toString('base64')
+                }
+              }]
             }
-          }]
+          });
+          break; // Success, exit the retry loop
+        } catch (error: any) {
+          // Check if it's a "parent not ready" error
+          const errorMessage = error.response?.data?.error?.message || error.message || '';
+          if (error.code === 409 && errorMessage.includes('parent resource is not in ready state')) {
+            retries++;
+            if (retries < maxRetries) {
+              console.log(`API not ready yet, waiting ${retryDelay/1000}s before retry ${retries}/${maxRetries}...`);
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              continue;
+            }
+          }
+          // For other errors or max retries exceeded, throw the error
+          throw error;
         }
-      });
+      }
 
       const operation = response.data;
       if (!operation.name) {
@@ -204,17 +224,41 @@ export class ApiGatewayDeployer {
       if (error.code !== 404) throw error;
     }
 
-    // Create the gateway
-    const response = await this.apigateway.projects.locations.gateways.create({
-      parent: parent,
-      gatewayId: gatewayId,
-      auth: this.auth,
-      requestBody: {
-        name: gatewayName,
-        displayName: `Anava Gateway - ${apiId}`,
-        apiConfig: `projects/${projectId}/locations/global/apis/${apiId}/configs/${configId}`
+    // Create the gateway with retry logic
+    let response;
+    let retries = 0;
+    const maxRetries = 10;
+    const retryDelay = 10000; // 10 seconds
+    
+    while (retries < maxRetries) {
+      try {
+        response = await this.apigateway.projects.locations.gateways.create({
+          parent: parent,
+          gatewayId: gatewayId,
+          auth: this.auth,
+          requestBody: {
+            name: gatewayName,
+            displayName: `Anava Gateway - ${apiId}`,
+            apiConfig: `projects/${projectId}/locations/global/apis/${apiId}/configs/${configId}`
+          }
+        });
+        break; // Success, exit the retry loop
+      } catch (error: any) {
+        // Check if it's a timing-related error
+        const errorMessage = error.response?.data?.error?.message || error.message || '';
+        if ((error.code === 409 || error.code === 400) && 
+            (errorMessage.includes('not ready') || errorMessage.includes('does not exist'))) {
+          retries++;
+          if (retries < maxRetries) {
+            console.log(`Resources not ready yet, waiting ${retryDelay/1000}s before retry ${retries}/${maxRetries}...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue;
+          }
+        }
+        // For other errors or max retries exceeded, throw the error
+        throw error;
       }
-    });
+    }
 
     const operation = response.data;
     if (!operation.name) {
