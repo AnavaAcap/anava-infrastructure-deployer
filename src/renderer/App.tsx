@@ -1,23 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container, ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { Box, Container, ThemeProvider, CssBaseline } from '@mui/material';
 import WelcomePage from './pages/WelcomePage';
 import AuthenticationPage from './pages/AuthenticationPage';
 import ConfigurationPage from './pages/ConfigurationPage';
 import DeploymentPage from './pages/DeploymentPage';
 import CompletionPage from './pages/CompletionPage';
+import { anavaTheme } from './theme/anavaTheme';
+import AppFooter from './components/AppFooter';
+import RetroEasterEgg from './components/RetroEasterEgg';
 import { DeploymentState, DeploymentConfig, GCPProject } from '../types';
-
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-  },
-});
 
 type Page = 'welcome' | 'auth' | 'config' | 'deployment' | 'completion';
 
@@ -81,7 +72,7 @@ function App() {
   };
 
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={anavaTheme}>
       <CssBaseline />
       <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
         <Container maxWidth="md" sx={{ py: 4 }}>
@@ -124,7 +115,9 @@ function App() {
             />
           )}
         </Container>
+        <AppFooter />
       </Box>
+      <RetroEasterEgg trigger="konami" />
     </ThemeProvider>
   );
 }

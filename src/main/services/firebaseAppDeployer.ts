@@ -162,23 +162,33 @@ export class FirebaseAppDeployer {
       throw new Error('No config data returned');
     }
     
-    // Extract project ID from web app name if not in config
-    const projectIdFromName = webAppName.split('/')[1];
+    // Extract project ID from web app name (format: projects/{projectId}/webApps/{appId})
+    const parts = webAppName.split('/');
+    const projectId = parts[1];
+    const appIdFull = parts[3];
     
-    // Firebase returns the config directly at the top level
-    // Construct auth domain if not provided
-    const authDomain = configData.authDomain || `${projectIdFromName}.firebaseapp.com`;
-    const storageBucket = configData.storageBucket || `${projectIdFromName}.appspot.com`;
+    // Extract sender ID from app ID (format: 1:{senderId}:web:{hash})
+    const appIdParts = appIdFull?.split(':') || [];
+    const messagingSenderId = appIdParts[1] || '';
     
-    return {
+    // Firebase API returns config at top level
+    // Construct missing fields based on project ID
+    const authDomain = configData.authDomain || `${projectId}.firebaseapp.com`;
+    const storageBucket = configData.storageBucket || `${projectId}.firebasestorage.app`;
+    
+    const finalConfig = {
       apiKey: configData.apiKey || '',
       authDomain: authDomain,
-      projectId: configData.projectId || projectIdFromName || '',
+      projectId: configData.projectId || projectId || '',
       storageBucket: storageBucket,
-      messagingSenderId: configData.messagingSenderId || '',
-      appId: configData.appId || '',
+      messagingSenderId: configData.messagingSenderId || messagingSenderId || '',
+      appId: configData.appId || appIdFull || '',
       measurementId: configData.measurementId
     };
+    
+    console.log('Final Firebase config:', JSON.stringify(finalConfig, null, 2));
+    
+    return finalConfig;
   }
   
   private async waitForOperation(operationName: string): Promise<any> {

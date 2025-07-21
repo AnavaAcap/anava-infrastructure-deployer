@@ -1,6 +1,6 @@
 {
   "name": "anava-infrastructure-deployer",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "Deploy Anava's camera authentication infrastructure to customer GCP projects",
   "main": "dist/main/index.js",
   "scripts": {

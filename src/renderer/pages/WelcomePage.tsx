@@ -1,6 +1,25 @@
 import React from 'react';
-import { Box, Button, Typography, Paper, Stack } from '@mui/material';
-import { Add, RestoreOutlined } from '@mui/icons-material';
+import { Box, Button, Typography, Paper, Stack, Chip } from '@mui/material';
+import { Add, RestoreOutlined, Security, Cloud, CameraAlt } from '@mui/icons-material';
+import { styled } from '@mui/material/styles';
+
+const GradientPaper = styled(Paper)(({ theme }) => ({
+  background: 'linear-gradient(135deg, #FFFFFF 0%, #F5F5F5 100%)',
+  borderTop: `4px solid ${theme.palette.primary.main}`,
+}));
+
+const LogoSection = styled(Box)(({ theme }) => ({
+  width: 120,
+  height: 120,
+  margin: '0 auto',
+  marginBottom: theme.spacing(3),
+  background: `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.primary.light} 90%)`,
+  borderRadius: '50%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  boxShadow: '0 4px 20px rgba(25, 118, 210, 0.3)',
+}));
 
 interface WelcomePageProps {
   onNewDeployment: () => void;
@@ -9,18 +28,24 @@ interface WelcomePageProps {
 
 const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExisting }) => {
   return (
-    <Paper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
-      <Typography variant="h3" component="h1" gutterBottom>
+    <GradientPaper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
+      <LogoSection>
+        <CameraAlt sx={{ fontSize: 60, color: 'white' }} />
+      </LogoSection>
+      
+      <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 700 }}>
         Anava Infrastructure Deployer
       </Typography>
       
-      <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
-        Deploy camera authentication infrastructure to your GCP project in minutes.
+      <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
+        Enterprise-grade camera authentication infrastructure for Google Cloud Platform
       </Typography>
       
-      <Typography variant="caption" color="text.secondary" sx={{ mb: 4, display: 'block' }}>
-        Version 0.3.1
-      </Typography>
+      <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 4 }}>
+        <Chip icon={<Security />} label="Secure" size="small" />
+        <Chip icon={<Cloud />} label="Cloud-Native" size="small" />
+        <Chip label="v0.5.3" size="small" color="primary" />
+      </Stack>
       
       <Stack direction="row" spacing={3} justifyContent="center">
         <Button
