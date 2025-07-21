@@ -108,6 +108,7 @@ export class DeploymentEngine extends EventEmitter {
   }
 
   private async executeStep(stepName: string): Promise<void> {
+    console.log(`\n======== EXECUTING STEP: ${stepName} ========`);
     try {
       this.stateManager.updateStep(stepName, { status: 'in_progress' });
       
@@ -141,7 +142,9 @@ export class DeploymentEngine extends EventEmitter {
       }
       
       this.stateManager.updateStep(stepName, { status: 'completed' });
+      console.log(`✓ Step ${stepName} completed successfully`);
     } catch (error) {
+      console.error(`✗ Step ${stepName} failed:`, error);
       this.stateManager.updateStep(stepName, { 
         status: 'failed',
         error: (error as Error).message 
@@ -253,8 +256,11 @@ export class DeploymentEngine extends EventEmitter {
   }
 
   private async stepAssignIamRoles(): Promise<void> {
+    console.log('Starting IAM role assignments...');
     const state = this.stateManager.getState()!;
     const accounts = this.getResourceValue('createServiceAccounts', 'accounts');
+    
+    console.log('Service accounts found:', accounts);
     
     if (!accounts) {
       throw new Error('No service accounts found. The createServiceAccounts step may have failed or been skipped.');
@@ -383,8 +389,11 @@ export class DeploymentEngine extends EventEmitter {
   }
 
   private async stepDeployCloudFunctions(): Promise<void> {
+    console.log('Starting Cloud Functions deployment...');
     const state = this.stateManager.getState()!;
     const accounts = this.getResourceValue('createServiceAccounts', 'accounts');
+    
+    console.log('Service accounts for functions:', accounts);
     
     if (!this.cloudFunctionsDeployer) {
       throw new Error('Cloud Functions deployer not initialized');
@@ -473,6 +482,10 @@ export class DeploymentEngine extends EventEmitter {
     const accounts = this.getResourceValue('createServiceAccounts', 'accounts');
     const functions = this.getResourceValue('deployCloudFunctions', 'functions');
     
+    console.log('Starting API Gateway deployment step...');
+    console.log('Service accounts:', accounts);
+    console.log('Cloud Functions URLs:', functions);
+    
     if (!this.apiGatewayDeployer) {
       throw new Error('API Gateway deployer not initialized');
     }
@@ -512,8 +525,11 @@ export class DeploymentEngine extends EventEmitter {
   }
 
   private async stepConfigureWorkloadIdentity(): Promise<void> {
+    console.log('Starting Workload Identity configuration...');
     const state = this.stateManager.getState()!;
     const accounts = this.getResourceValue('createServiceAccounts', 'accounts');
+    
+    console.log('Target service account:', accounts['vertex-ai-sa']);
     
     if (!this.workloadIdentityDeployer) {
       throw new Error('Workload Identity deployer not initialized');
@@ -550,6 +566,7 @@ export class DeploymentEngine extends EventEmitter {
   }
 
   private async stepSetupFirestore(): Promise<void> {
+    console.log('Starting Firestore setup...');
     const state = this.stateManager.getState()!;
     
     if (!this.firestoreDeployer) {

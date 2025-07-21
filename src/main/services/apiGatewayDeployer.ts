@@ -19,10 +19,19 @@ export class ApiGatewayDeployer {
     tvmUrl: string,
     corsOrigins: string[]
   ): Promise<{ gatewayUrl: string; apiKey: string }> {
+    console.log('=== Starting API Gateway deployment ===');
+    console.log(`Project: ${projectId}, API ID: ${apiId}, Region: ${region}`);
+    console.log(`Config path: ${configPath}`);
+    console.log(`Device Auth URL: ${deviceAuthUrl}`);
+    console.log(`TVM URL: ${tvmUrl}`);
+    
     // Step 1: Create managed service
+    console.log('\n--- Step 1: Creating managed service ---');
     const serviceName = await this.createManagedService(projectId, apiId);
+    console.log(`Managed service name: ${serviceName}`);
 
     // Step 2: Process and upload API config
+    console.log('\n--- Step 2: Creating API config ---');
     const configId = await this.createApiConfig(
       projectId,
       apiId,
@@ -31,8 +40,10 @@ export class ApiGatewayDeployer {
       deviceAuthUrl,
       tvmUrl
     );
+    console.log(`API config ID: ${configId}`);
 
     // Step 3: Create API Gateway
+    console.log('\n--- Step 3: Creating API Gateway ---');
     const gatewayUrl = await this.createGateway(
       projectId,
       apiId,
@@ -40,15 +51,19 @@ export class ApiGatewayDeployer {
       serviceAccount,
       region
     );
+    console.log(`Gateway URL: ${gatewayUrl}`);
 
     // Step 4: Create API key
+    console.log('\n--- Step 4: Creating API key ---');
     const apiKey = await this.createApiKey(
       projectId,
       apiId,
       serviceName,
       corsOrigins
     );
+    console.log(`API key created successfully`);
 
+    console.log('\n=== API Gateway deployment completed successfully ===');
     return { gatewayUrl, apiKey };
   }
 
@@ -102,7 +117,15 @@ export class ApiGatewayDeployer {
     tvmUrl: string
   ): Promise<string> {
     // Read and process the API config template
-    let configContent = fs.readFileSync(configPath, 'utf8');
+    console.log(`Reading API config from ${configPath}...`);
+    let configContent: string;
+    try {
+      configContent = fs.readFileSync(configPath, 'utf8');
+      console.log(`Successfully read API config (${configContent.length} characters)`);
+    } catch (error: any) {
+      console.error(`Failed to read API config file: ${error.message}`);
+      throw new Error(`Cannot read API config file at ${configPath}: ${error.message}`);
+    }
     
     // Replace placeholders
     configContent = configContent
@@ -348,6 +371,7 @@ export class ApiGatewayDeployer {
   }
 
   private async waitForServiceManagementOperation(operationName: string): Promise<void> {
+    console.log(`Waiting for service management operation: ${operationName}`);
     let done = false;
     let retries = 0;
     const maxRetries = 60;
@@ -364,6 +388,9 @@ export class ApiGatewayDeployer {
           throw new Error(`Operation failed: ${JSON.stringify(operation.error)}`);
         }
       } else {
+        if (retries % 3 === 0) { // Log every 15 seconds
+          console.log(`Still waiting for service management operation... (${retries * 5}s elapsed)`);
+        }
         await new Promise(resolve => setTimeout(resolve, 5000));
         retries++;
       }
@@ -405,6 +432,7 @@ export class ApiGatewayDeployer {
   }
 
   private async waitForApiKeysOperation(operationName: string): Promise<void> {
+    console.log(`Waiting for API keys operation: ${operationName}`);
     let done = false;
     let retries = 0;
     const maxRetries = 60;
@@ -421,6 +449,9 @@ export class ApiGatewayDeployer {
           throw new Error(`Operation failed: ${JSON.stringify(operation.error)}`);
         }
       } else {
+        if (retries % 3 === 0) { // Log every 15 seconds
+          console.log(`Still waiting for API keys operation... (${retries * 5}s elapsed)`);
+        }
         await new Promise(resolve => setTimeout(resolve, 5000));
         retries++;
       }
