@@ -213,6 +213,10 @@ export class ApiGatewayDeployer {
         }
       }
 
+      if (!response) {
+        throw new Error('No response received from API config creation');
+      }
+
       const operation = response.data;
       if (!operation.name) {
         throw new Error('Failed to create API config');
@@ -289,6 +293,10 @@ export class ApiGatewayDeployer {
         // For other errors or max retries exceeded, throw the error
         throw error;
       }
+    }
+
+    if (!response) {
+      throw new Error('No response received from gateway creation');
     }
 
     const operation = response.data;

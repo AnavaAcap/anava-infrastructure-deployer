@@ -6,6 +6,7 @@ import { CloudFunctionsDeployerV1 } from './cloudFunctionsDeployerV1';
 import { ApiGatewayDeployer } from './apiGatewayDeployer';
 import { FirestoreDeployer } from './firestoreDeployer';
 import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
+import { FirebaseAppDeployer, FirebaseConfig } from './firebaseAppDeployer';
 import { DeploymentConfig, DeploymentProgress, DeploymentResult } from '../../types';
 import path from 'path';
 import { app } from 'electron';
@@ -18,6 +19,7 @@ export class DeploymentEngine extends EventEmitter {
   private apiGatewayDeployer?: ApiGatewayDeployer;
   private firestoreDeployer?: FirestoreDeployer;
   private workloadIdentityDeployer?: WorkloadIdentityDeployer;
+  private firebaseAppDeployer?: FirebaseAppDeployer;
   private isPaused = false;
 
   constructor(stateManager: StateManager, gcpAuth: GCPOAuthService) {
@@ -89,10 +91,25 @@ export class DeploymentEngine extends EventEmitter {
             typeof url === 'string' && url.includes('placeholder')
           );
           
+          console.log('\n🎉 ========================================= 🎉');
+          console.log('🚀 DEPLOYMENT COMPLETED SUCCESSFULLY! 🚀');
+          console.log('🎉 ========================================= 🎉\n');
+          
+          const gatewayUrl = this.getResourceValue('createApiGateway', 'gatewayUrl');
+          const apiKey = this.getResourceValue('createApiGateway', 'apiKey');
+          
+          console.log('📋 Deployment Summary:');
+          console.log(`✅ API Gateway URL: ${gatewayUrl}`);
+          console.log(`✅ API Key: ${apiKey}`);
+          console.log(`✅ Project: ${this.stateManager.getState()?.projectId}`);
+          console.log(`✅ Region: ${this.stateManager.getState()?.region}`);
+          console.log('\n🔐 All authentication infrastructure deployed!');
+          console.log('📱 Ready for camera authentication!\n');
+          
           this.emitComplete({
             success: true,
-            apiGatewayUrl: this.getResourceValue('createApiGateway', 'gatewayUrl'),
-            apiKey: this.getResourceValue('createApiGateway', 'apiKey'),
+            apiGatewayUrl: gatewayUrl,
+            apiKey: apiKey,
             resources: this.getAllResources(),
             warning: hasPlaceholderFunctions ? 'Cloud Functions build failed - you may need to deploy them manually' : undefined
           });
