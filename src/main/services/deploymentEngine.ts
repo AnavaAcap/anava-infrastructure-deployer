@@ -38,6 +38,7 @@ export class DeploymentEngine extends EventEmitter {
       this.apiGatewayDeployer = new ApiGatewayDeployer(this.gcpAuth.oauth2Client);
       this.firestoreDeployer = new FirestoreDeployer(this.gcpAuth.oauth2Client);
       this.workloadIdentityDeployer = new WorkloadIdentityDeployer(this.gcpAuth.oauth2Client);
+      this.firebaseAppDeployer = new FirebaseAppDeployer(this.gcpAuth.oauth2Client);
     }
   }
 
@@ -97,12 +98,20 @@ export class DeploymentEngine extends EventEmitter {
           
           const gatewayUrl = this.getResourceValue('createApiGateway', 'gatewayUrl');
           const apiKey = this.getResourceValue('createApiGateway', 'apiKey');
+          const firebaseConfig = this.getResourceValue('createFirebaseWebApp', 'config');
           
           console.log('📋 Deployment Summary:');
           console.log(`✅ API Gateway URL: ${gatewayUrl}`);
           console.log(`✅ API Key: ${apiKey}`);
           console.log(`✅ Project: ${this.stateManager.getState()?.projectId}`);
           console.log(`✅ Region: ${this.stateManager.getState()?.region}`);
+          
+          if (firebaseConfig) {
+            console.log('\n🔥 Firebase Configuration:');
+            console.log(`✅ Auth Domain: ${firebaseConfig.authDomain}`);
+            console.log(`✅ App ID: ${firebaseConfig.appId}`);
+          }
+          
           console.log('\n🔐 All authentication infrastructure deployed!');
           console.log('📱 Ready for camera authentication!\n');
           
@@ -110,6 +119,7 @@ export class DeploymentEngine extends EventEmitter {
             success: true,
             apiGatewayUrl: gatewayUrl,
             apiKey: apiKey,
+            firebaseConfig: firebaseConfig,
             resources: this.getAllResources(),
             warning: hasPlaceholderFunctions ? 'Cloud Functions build failed - you may need to deploy them manually' : undefined
           });
@@ -153,6 +163,9 @@ export class DeploymentEngine extends EventEmitter {
           break;
         case 'setupFirestore':
           await this.stepSetupFirestore();
+          break;
+        case 'createFirebaseWebApp':
+          await this.stepCreateFirebaseWebApp();
           break;
         default:
           throw new Error(`Unknown step: ${stepName}`);
@@ -604,8 +617,43 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 100,
-      totalProgress: 100,
+      totalProgress: 87.5,
       message: 'Firestore setup complete',
+    });
+  }
+
+  private async stepCreateFirebaseWebApp(): Promise<void> {
+    console.log('Starting Firebase Web App creation...');
+    const state = this.stateManager.getState()!;
+    
+    if (!this.firebaseAppDeployer) {
+      throw new Error('Firebase app deployer not initialized');
+    }
+
+    this.emitProgress({
+      currentStep: 'createFirebaseWebApp',
+      stepProgress: 0,
+      totalProgress: 87.5,
+      message: 'Creating Firebase web app...',
+    });
+
+    const appName = `anava-${state.configuration.namePrefix}`;
+    const displayName = `Anava Camera Auth - ${state.configuration.namePrefix}`;
+    
+    const firebaseConfig = await this.firebaseAppDeployer.createFirebaseWebApp(
+      state.projectId,
+      appName,
+      displayName
+    );
+
+    this.stateManager.updateStepResource('createFirebaseWebApp', 'config', firebaseConfig);
+    this.stateManager.updateStepResource('createFirebaseWebApp', 'appName', appName);
+
+    this.emitProgress({
+      currentStep: 'createFirebaseWebApp',
+      stepProgress: 100,
+      totalProgress: 100,
+      message: 'Firebase web app created',
     });
   }
 

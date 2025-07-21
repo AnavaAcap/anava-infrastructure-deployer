@@ -66,6 +66,7 @@ export class StateManager {
         createApiGateway: { status: 'pending' },
         configureWorkloadIdentity: { status: 'pending' },
         setupFirestore: { status: 'pending' },
+        createFirebaseWebApp: { status: 'pending' },
       },
     };
     
