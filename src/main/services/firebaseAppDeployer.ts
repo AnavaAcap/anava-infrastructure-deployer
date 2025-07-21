@@ -48,6 +48,10 @@ export class FirebaseAppDeployer {
       const webApp = await this.createWebApp(projectId, displayName);
       console.log(`Web app created: ${webApp.appId}`);
       
+      // Wait a bit for Firebase to fully configure the app
+      console.log('Waiting for Firebase to configure the web app...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
       // Get the config
       const config = await this.getWebAppConfig(webApp.name!);
       console.log('Firebase config retrieved successfully');
@@ -145,31 +149,35 @@ export class FirebaseAppDeployer {
   }
   
   private async getWebAppConfig(webAppName: string): Promise<FirebaseConfig> {
+    console.log(`Getting config for web app: ${webAppName}`);
     const { data: configData } = await this.firebasemanagement.projects.webApps.getConfig({
       name: webAppName,
       auth: this.auth
     });
+    
+    console.log('Raw Firebase config response:', JSON.stringify(configData, null, 2));
     
     // The config data is returned directly in the response
     if (!configData) {
       throw new Error('No config data returned');
     }
     
-    // The Firebase config is returned directly in the response
-    const config = configData as any;
+    // Extract project ID from web app name if not in config
+    const projectIdFromName = webAppName.split('/')[1];
     
-    // Check different possible property names
-    const firebaseConfig = config.firebaseConfig || config;
+    // Firebase returns the config directly at the top level
+    // Construct auth domain if not provided
+    const authDomain = configData.authDomain || `${projectIdFromName}.firebaseapp.com`;
+    const storageBucket = configData.storageBucket || `${projectIdFromName}.appspot.com`;
     
-    // Return the config in our format
     return {
-      apiKey: firebaseConfig.apiKey || config.apiKey,
-      authDomain: firebaseConfig.authDomain || config.authDomain,
-      projectId: firebaseConfig.projectId || config.projectId,
-      storageBucket: firebaseConfig.storageBucket || config.storageBucket,
-      messagingSenderId: firebaseConfig.messagingSenderId || config.messagingSenderId,
-      appId: firebaseConfig.appId || config.appId,
-      measurementId: firebaseConfig.measurementId || config.measurementId
+      apiKey: configData.apiKey || '',
+      authDomain: authDomain,
+      projectId: configData.projectId || projectIdFromName || '',
+      storageBucket: storageBucket,
+      messagingSenderId: configData.messagingSenderId || '',
+      appId: configData.appId || '',
+      measurementId: configData.measurementId
     };
   }
   
