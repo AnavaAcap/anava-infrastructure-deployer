@@ -10,7 +10,10 @@ export interface DeploymentState {
 }
 
 export interface DeploymentConfig {
+  projectId: string;
+  region: string;
   namePrefix: string;
+  firebaseProjectId?: string;
   firebaseWebAppId?: string;
   firebaseApiKey?: string;
   apiKeyRestrictions: string[];
@@ -56,6 +59,7 @@ export interface DeploymentResult {
   apiKey?: string;
   resources?: Record<string, any>;
   error?: string;
+  warning?: string;
 }
 
 export interface AuthStatus {
@@ -69,6 +73,8 @@ declare global {
     electronAPI: {
       auth: {
         check: () => Promise<AuthStatus>;
+        login: () => Promise<any>;
+        logout: () => Promise<{ success: boolean }>;
         getProjects: () => Promise<GCPProject[]>;
       };
       state: {

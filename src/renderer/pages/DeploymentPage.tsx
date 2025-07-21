@@ -12,6 +12,7 @@ import {
   ListItemIcon,
   ListItemText,
   Collapse,
+  keyframes,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -22,6 +23,15 @@ import {
   ViewInAr,
 } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig, DeploymentState, DeploymentProgress } from '../../types';
+
+const rotate = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+`;
 
 interface DeploymentPageProps {
   project: GCPProject;
@@ -123,7 +133,7 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
       case 'completed':
         return <CheckCircle color="success" />;
       case 'in_progress':
-        return <RotateRight className="rotating" color="primary" />;
+        return <RotateRight sx={{ animation: `${rotate} 1s linear infinite` }} color="primary" />;
       case 'failed':
         return <Error color="error" />;
       default:
@@ -225,15 +235,6 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
         </Button>
       </Stack>
       
-      <style jsx global>{`
-        @keyframes rotate {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .rotating {
-          animation: rotate 1s linear infinite;
-        }
-      `}</style>
     </Paper>
   );
 };

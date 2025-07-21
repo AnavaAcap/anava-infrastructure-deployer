@@ -112,9 +112,32 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
           )}
         </>
       ) : (
-        <Alert severity="error" sx={{ mb: 4 }}>
-          {authStatus?.error || 'Not authenticated'}
-        </Alert>
+        <>
+          <Alert severity="info" sx={{ mb: 4 }}>
+            {authStatus?.error || 'Not authenticated'}
+          </Alert>
+          
+          <Box sx={{ textAlign: 'center', mb: 4 }}>
+            <Button
+              variant="contained"
+              size="large"
+              onClick={async () => {
+                try {
+                  setLoading(true);
+                  await window.electronAPI.auth.login();
+                  await checkAuthentication();
+                } catch (error) {
+                  setError((error as Error).message);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              sx={{ px: 4, py: 1.5 }}
+            >
+              Login with Google
+            </Button>
+          </Box>
+        </>
       )}
       
       <Stack direction="row" spacing={2} justifyContent="space-between">

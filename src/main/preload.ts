@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('electronAPI', {
   auth: {
     check: () => ipcRenderer.invoke('auth:check'),
+    login: () => ipcRenderer.invoke('auth:login'),
+    logout: () => ipcRenderer.invoke('auth:logout'),
     getProjects: () => ipcRenderer.invoke('auth:get-projects'),
   },
   state: {

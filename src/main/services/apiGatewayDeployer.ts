@@ -1,0 +1,357 @@
+import { google } from 'googleapis';
+import { OAuth2Client } from 'google-auth-library';
+import fs from 'fs';
+
+export class ApiGatewayDeployer {
+  private apigateway = google.apigateway('v1');
+  private servicemanagement = google.servicemanagement('v1');
+  private apikeys = google.apikeys('v2');
+
+  constructor(private auth: OAuth2Client) {}
+
+  async deployApiGateway(
+    projectId: string,
+    apiId: string,
+    configPath: string,
+    serviceAccount: string,
+    region: string,
+    deviceAuthUrl: string,
+    tvmUrl: string,
+    corsOrigins: string[]
+  ): Promise<{ gatewayUrl: string; apiKey: string }> {
+    // Step 1: Create managed service
+    const serviceName = await this.createManagedService(projectId, apiId);
+
+    // Step 2: Process and upload API config
+    const configId = await this.createApiConfig(
+      projectId,
+      apiId,
+      configPath,
+      serviceName,
+      deviceAuthUrl,
+      tvmUrl
+    );
+
+    // Step 3: Create API Gateway
+    const gatewayUrl = await this.createGateway(
+      projectId,
+      apiId,
+      configId,
+      serviceAccount,
+      region
+    );
+
+    // Step 4: Create API key
+    const apiKey = await this.createApiKey(
+      projectId,
+      apiId,
+      serviceName,
+      corsOrigins
+    );
+
+    return { gatewayUrl, apiKey };
+  }
+
+  private async createManagedService(projectId: string, apiId: string): Promise<string> {
+    const serviceName = `${apiId}-${projectId}.apigateway.${projectId}.cloud.goog`;
+
+    try {
+      // Check if service already exists
+      await this.servicemanagement.services.get({
+        serviceName: serviceName,
+        auth: this.auth
+      });
+      
+      console.log(`Managed service ${serviceName} already exists`);
+      return serviceName;
+    } catch (error: any) {
+      if (error.code !== 404) throw error;
+    }
+
+    // Create the managed service
+    const response = await this.servicemanagement.services.create({
+      auth: this.auth,
+      requestBody: {
+        serviceName: serviceName,
+        producerProjectId: projectId
+      }
+    });
+
+    const operation = response.data;
+    if (!operation.name) {
+      throw new Error('Failed to create managed service');
+    }
+
+    // Wait for operation to complete
+    await this.waitForServiceManagementOperation(operation.name);
+
+    return serviceName;
+  }
+
+  private async createApiConfig(
+    projectId: string,
+    apiId: string,
+    configPath: string,
+    serviceName: string,
+    deviceAuthUrl: string,
+    tvmUrl: string
+  ): Promise<string> {
+    // Read and process the API config template
+    let configContent = fs.readFileSync(configPath, 'utf8');
+    
+    // Replace placeholders
+    configContent = configContent
+      .replace(/\${DEVICE_AUTH_URL}/g, deviceAuthUrl)
+      .replace(/\${TVM_URL}/g, tvmUrl)
+      .replace(/\${SERVICE_NAME}/g, serviceName);
+
+    // Generate a config ID
+    const configId = `config-${Date.now()}`;
+    const parent = `projects/${projectId}/locations/global/apis/${apiId}`;
+
+    try {
+      // Create or get the API
+      try {
+        await this.apigateway.projects.locations.apis.get({
+          name: parent,
+          auth: this.auth
+        });
+      } catch (error: any) {
+        if (error.code === 404) {
+          // Create the API
+          await this.apigateway.projects.locations.apis.create({
+            parent: `projects/${projectId}/locations/global`,
+            apiId: apiId,
+            auth: this.auth,
+            requestBody: {
+              name: parent,
+              displayName: `Anava API - ${apiId}`,
+              managedService: serviceName
+            }
+          });
+        } else {
+          throw error;
+        }
+      }
+
+      // Create the API config
+      const response = await this.apigateway.projects.locations.apis.configs.create({
+        parent: parent,
+        apiConfigId: configId,
+        auth: this.auth,
+        requestBody: {
+          name: `${parent}/configs/${configId}`,
+          displayName: `Config ${configId}`,
+          openapiDocuments: [{
+            document: {
+              path: 'openapi.yaml',
+              contents: Buffer.from(configContent).toString('base64')
+            }
+          }]
+        }
+      });
+
+      const operation = response.data;
+      if (!operation.name) {
+        throw new Error('Failed to create API config');
+      }
+
+      await this.waitForApiGatewayOperation(operation.name);
+
+      return configId;
+    } catch (error: any) {
+      console.error('Failed to create API config:', error);
+      throw error;
+    }
+  }
+
+  private async createGateway(
+    projectId: string,
+    apiId: string,
+    configId: string,
+    _serviceAccount: string,
+    region: string
+  ): Promise<string> {
+    const gatewayId = `${apiId}-gateway`;
+    const parent = `projects/${projectId}/locations/${region}`;
+    const gatewayName = `${parent}/gateways/${gatewayId}`;
+
+    try {
+      // Check if gateway exists
+      const { data: existingGateway } = await this.apigateway.projects.locations.gateways.get({
+        name: gatewayName,
+        auth: this.auth
+      });
+
+      console.log(`Gateway ${gatewayId} already exists`);
+      return existingGateway.defaultHostname || '';
+    } catch (error: any) {
+      if (error.code !== 404) throw error;
+    }
+
+    // Create the gateway
+    const response = await this.apigateway.projects.locations.gateways.create({
+      parent: parent,
+      gatewayId: gatewayId,
+      auth: this.auth,
+      requestBody: {
+        name: gatewayName,
+        displayName: `Anava Gateway - ${apiId}`,
+        apiConfig: `projects/${projectId}/locations/global/apis/${apiId}/configs/${configId}`
+      }
+    });
+
+    const operation = response.data;
+    if (!operation.name) {
+      throw new Error('Failed to create gateway');
+    }
+
+    await this.waitForApiGatewayOperation(operation.name);
+
+    // Get the gateway to retrieve its URL
+    const { data: gateway } = await this.apigateway.projects.locations.gateways.get({
+      name: gatewayName,
+      auth: this.auth
+    });
+
+    return `https://${gateway.defaultHostname}`;
+  }
+
+  private async createApiKey(
+    projectId: string,
+    apiId: string,
+    serviceName: string,
+    corsOrigins: string[]
+  ): Promise<string> {
+    const keyId = `${apiId}-key-${Date.now()}`;
+    const parent = `projects/${projectId}/locations/global`;
+
+    // Create restrictions for the API key
+    const restrictions: any = {
+      apiTargets: [{
+        service: serviceName
+      }]
+    };
+
+    // Add browser restrictions if CORS origins are specified
+    if (corsOrigins && corsOrigins.length > 0) {
+      restrictions.browserKeyRestrictions = {
+        allowedReferrers: corsOrigins.map(origin => `${origin}/*`)
+      };
+    }
+
+    const response = await this.apikeys.projects.locations.keys.create({
+      parent: parent,
+      keyId: keyId,
+      auth: this.auth,
+      requestBody: {
+        displayName: `Anava API Key - ${apiId}`,
+        restrictions: restrictions
+      }
+    });
+
+    const operation = response.data;
+    if (!operation.name) {
+      throw new Error('Failed to create API key');
+    }
+
+    // Wait for operation to complete
+    await this.waitForApiKeysOperation(operation.name);
+
+    // Get the created key
+    const keyName = `${parent}/keys/${keyId}`;
+    await this.apikeys.projects.locations.keys.get({
+      name: keyName,
+      auth: this.auth
+    });
+
+    // Get the key string
+    const { data: keyString } = await this.apikeys.projects.locations.keys.getKeyString({
+      name: keyName,
+      auth: this.auth
+    });
+
+    return keyString.keyString || '';
+  }
+
+  private async waitForServiceManagementOperation(operationName: string): Promise<void> {
+    let done = false;
+    let retries = 0;
+    const maxRetries = 60;
+
+    while (!done && retries < maxRetries) {
+      const { data: operation } = await this.servicemanagement.operations.get({
+        name: operationName,
+        auth: this.auth
+      });
+
+      if (operation.done) {
+        done = true;
+        if (operation.error) {
+          throw new Error(`Operation failed: ${JSON.stringify(operation.error)}`);
+        }
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        retries++;
+      }
+    }
+
+    if (!done) {
+      throw new Error('Operation timed out');
+    }
+  }
+
+  private async waitForApiGatewayOperation(operationName: string): Promise<void> {
+    let done = false;
+    let retries = 0;
+    const maxRetries = 60;
+
+    while (!done && retries < maxRetries) {
+      const { data: operation } = await this.apigateway.projects.locations.operations.get({
+        name: operationName,
+        auth: this.auth
+      });
+
+      if (operation.done) {
+        done = true;
+        if (operation.error) {
+          throw new Error(`Operation failed: ${JSON.stringify(operation.error)}`);
+        }
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        retries++;
+      }
+    }
+
+    if (!done) {
+      throw new Error('Operation timed out');
+    }
+  }
+
+  private async waitForApiKeysOperation(operationName: string): Promise<void> {
+    let done = false;
+    let retries = 0;
+    const maxRetries = 60;
+
+    while (!done && retries < maxRetries) {
+      const { data: operation } = await this.apikeys.operations.get({
+        name: operationName,
+        auth: this.auth
+      });
+
+      if (operation.done) {
+        done = true;
+        if (operation.error) {
+          throw new Error(`Operation failed: ${JSON.stringify(operation.error)}`);
+        }
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        retries++;
+      }
+    }
+
+    if (!done) {
+      throw new Error('Operation timed out');
+    }
+  }
+}

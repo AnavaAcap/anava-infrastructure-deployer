@@ -1,11 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container } from '@mui/material';
+import { Box, Container, ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import WelcomePage from './pages/WelcomePage';
 import AuthenticationPage from './pages/AuthenticationPage';
 import ConfigurationPage from './pages/ConfigurationPage';
 import DeploymentPage from './pages/DeploymentPage';
 import CompletionPage from './pages/CompletionPage';
 import { DeploymentState, DeploymentConfig, GCPProject } from '../types';
+
+const theme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#dc004e',
+    },
+  },
+});
 
 type Page = 'welcome' | 'auth' | 'config' | 'deployment' | 'completion';
 
@@ -69,48 +81,51 @@ function App() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        {currentPage === 'welcome' && (
-          <WelcomePage
-            onNewDeployment={handleNewDeployment}
-            onCheckExisting={handleCheckExisting}
-          />
-        )}
-        
-        {currentPage === 'auth' && (
-          <AuthenticationPage
-            onProjectSelected={handleProjectSelected}
-            onBack={handleBack}
-          />
-        )}
-        
-        {currentPage === 'config' && selectedProject && (
-          <ConfigurationPage
-            project={selectedProject}
-            onComplete={handleConfigComplete}
-            onBack={handleBack}
-          />
-        )}
-        
-        {currentPage === 'deployment' && (
-          <DeploymentPage
-            project={selectedProject!}
-            config={deploymentConfig}
-            existingDeployment={existingDeployment}
-            onComplete={handleDeploymentComplete}
-            onBack={handleBack}
-          />
-        )}
-        
-        {currentPage === 'completion' && (
-          <CompletionPage
-            result={deploymentResult}
-            onNewDeployment={handleNewDeployment}
-          />
-        )}
-      </Container>
-    </Box>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+        <Container maxWidth="md" sx={{ py: 4 }}>
+          {currentPage === 'welcome' && (
+            <WelcomePage
+              onNewDeployment={handleNewDeployment}
+              onCheckExisting={handleCheckExisting}
+            />
+          )}
+          
+          {currentPage === 'auth' && (
+            <AuthenticationPage
+              onProjectSelected={handleProjectSelected}
+              onBack={handleBack}
+            />
+          )}
+          
+          {currentPage === 'config' && selectedProject && (
+            <ConfigurationPage
+              project={selectedProject}
+              onComplete={handleConfigComplete}
+              onBack={handleBack}
+            />
+          )}
+          
+          {currentPage === 'deployment' && (
+            <DeploymentPage
+              project={selectedProject!}
+              config={deploymentConfig}
+              existingDeployment={existingDeployment}
+              onComplete={handleDeploymentComplete}
+              onBack={handleBack}
+            />
+          )}
+          
+          {currentPage === 'completion' && (
+            <CompletionPage
+              result={deploymentResult}
+              onNewDeployment={handleNewDeployment}
+            />
+          )}
+        </Container>
+      </Box>
+    </ThemeProvider>
   );
 }
 

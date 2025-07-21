@@ -33,6 +33,8 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
 
   const handleDeploy = () => {
     const config: DeploymentConfig = {
+      projectId: project.projectId,
+      region: region,
       namePrefix,
       corsOrigins: corsOrigins.split('\n').filter(origin => origin.trim()),
       apiKeyRestrictions: corsOrigins.split('\n').filter(origin => origin.trim()),

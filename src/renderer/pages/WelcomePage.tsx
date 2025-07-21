@@ -14,8 +14,12 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
         Anava Infrastructure Deployer
       </Typography>
       
-      <Typography variant="h6" color="text.secondary" sx={{ mb: 6 }}>
+      <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
         Deploy camera authentication infrastructure to your GCP project in minutes.
+      </Typography>
+      
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 4, display: 'block' }}>
+        Version 0.3.1
       </Typography>
       
       <Stack direction="row" spacing={3} justifyContent="center">

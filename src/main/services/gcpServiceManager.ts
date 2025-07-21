@@ -5,10 +5,8 @@ import { GCPAuthService } from './gcpAuthService';
 const execAsync = promisify(exec);
 
 export class GCPServiceManager {
-  private gcpAuth: GCPAuthService;
-
-  constructor(gcpAuth: GCPAuthService) {
-    this.gcpAuth = gcpAuth;
+  constructor(_gcpAuth: GCPAuthService) {
+    // Auth service is available for future use
   }
 
   async enableApi(projectId: string, apiName: string): Promise<void> {
@@ -124,11 +122,12 @@ export class GCPServiceManager {
     envVars: Record<string, string>,
     region: string
   ): Promise<string> {
+    // Build environment variables string
+    const envVarsStr = Object.entries(envVars)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(',');
+      
     try {
-      // Build environment variables string
-      const envVarsStr = Object.entries(envVars)
-        .map(([key, value]) => `${key}=${value}`)
-        .join(',');
 
       // Deploy function
       const deployCmd = `gcloud functions deploy ${functionName} \

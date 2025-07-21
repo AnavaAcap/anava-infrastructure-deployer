@@ -2,16 +2,14 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { DeploymentEngine } from './services/deploymentEngine';
 import { StateManager } from './services/stateManager';
-import { GCPAuthService } from './services/gcpAuthService';
-import Store from 'electron-store';
+import { GCPOAuthService } from './services/gcpOAuthService';
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
-const store = new Store();
 
 let mainWindow: BrowserWindow | null = null;
 let deploymentEngine: DeploymentEngine;
 let stateManager: StateManager;
-let gcpAuthService: GCPAuthService;
+let gcpOAuthService: GCPOAuthService;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -27,7 +25,14 @@ function createWindow() {
   });
 
   if (isDevelopment) {
-    mainWindow.loadURL('http://localhost:5173');
+    // In development, try to connect to Vite dev server
+    mainWindow.loadURL('http://localhost:5173').catch(() => {
+      // If Vite isn't running, load the built files
+      console.log('Vite dev server not running, loading built files...');
+      if (mainWindow) {
+        mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+      }
+    });
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
@@ -41,8 +46,8 @@ function createWindow() {
 app.whenReady().then(() => {
   // Initialize services
   stateManager = new StateManager();
-  gcpAuthService = new GCPAuthService();
-  deploymentEngine = new DeploymentEngine(stateManager, gcpAuthService);
+  gcpOAuthService = new GCPOAuthService();
+  deploymentEngine = new DeploymentEngine(stateManager, gcpOAuthService);
 
   createWindow();
 
@@ -61,11 +66,31 @@ app.on('window-all-closed', () => {
 
 // IPC Handlers
 ipcMain.handle('auth:check', async () => {
-  return gcpAuthService.checkAuthentication();
+  const isAuthenticated = gcpOAuthService.isAuthenticated();
+  const user = isAuthenticated ? await gcpOAuthService.getCurrentUser() : null;
+  return {
+    authenticated: isAuthenticated,
+    user: user?.email,
+    error: isAuthenticated ? null : 'Not authenticated. Please click "Login with Google".'
+  };
+});
+
+ipcMain.handle('auth:login', async () => {
+  try {
+    const result = await gcpOAuthService.authenticate();
+    return result;
+  } catch (error) {
+    throw error;
+  }
+});
+
+ipcMain.handle('auth:logout', async () => {
+  await gcpOAuthService.logout();
+  return { success: true };
 });
 
 ipcMain.handle('auth:get-projects', async () => {
-  return gcpAuthService.getProjects();
+  return gcpOAuthService.listProjects();
 });
 
 ipcMain.handle('state:get', async () => {
@@ -76,7 +101,14 @@ ipcMain.handle('state:check-existing', async (_, projectId: string) => {
   return stateManager.checkExistingDeployment(projectId);
 });
 
+ipcMain.handle('state:clear', async () => {
+  stateManager.clearState();
+  return { success: true };
+});
+
 ipcMain.handle('deployment:start', async (_, config: any) => {
+  // Always clear state before starting a new deployment
+  stateManager.clearState();
   return deploymentEngine.startDeployment(config);
 });
 
