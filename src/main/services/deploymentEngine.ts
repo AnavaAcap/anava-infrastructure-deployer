@@ -6,7 +6,7 @@ import { CloudFunctionsDeployerV1 } from './cloudFunctionsDeployerV1';
 import { ApiGatewayDeployer } from './apiGatewayDeployer';
 import { FirestoreDeployer } from './firestoreDeployer';
 import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
-import { FirebaseAppDeployer, FirebaseConfig } from './firebaseAppDeployer';
+import { FirebaseAppDeployer } from './firebaseAppDeployer';
 import { DeploymentConfig, DeploymentProgress, DeploymentResult } from '../../types';
 import path from 'path';
 import { app } from 'electron';

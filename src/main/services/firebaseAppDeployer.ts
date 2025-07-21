@@ -148,31 +148,27 @@ export class FirebaseAppDeployer {
       auth: this.auth
     });
     
-    if (!configData.configFileContents) {
-      throw new Error('No config file contents returned');
+    // The config data is returned directly in the response
+    if (!configData) {
+      throw new Error('No config data returned');
     }
     
-    // Parse the config file contents (it's a JSON string)
-    try {
-      const configString = Buffer.from(configData.configFileContents, 'base64').toString();
-      const configJson = JSON.parse(configString);
-      
-      // Extract the Firebase config
-      const firebaseConfig = configJson.firebaseConfig || configJson;
-      
-      return {
-        apiKey: firebaseConfig.apiKey,
-        authDomain: firebaseConfig.authDomain,
-        projectId: firebaseConfig.projectId,
-        storageBucket: firebaseConfig.storageBucket,
-        messagingSenderId: firebaseConfig.messagingSenderId,
-        appId: firebaseConfig.appId,
-        measurementId: firebaseConfig.measurementId
-      };
-    } catch (error) {
-      console.error('Failed to parse Firebase config:', error);
-      throw new Error('Invalid Firebase config format');
-    }
+    // The Firebase config is returned directly in the response
+    const config = configData as any;
+    
+    // Check different possible property names
+    const firebaseConfig = config.firebaseConfig || config;
+    
+    // Return the config in our format
+    return {
+      apiKey: firebaseConfig.apiKey || config.apiKey,
+      authDomain: firebaseConfig.authDomain || config.authDomain,
+      projectId: firebaseConfig.projectId || config.projectId,
+      storageBucket: firebaseConfig.storageBucket || config.storageBucket,
+      messagingSenderId: firebaseConfig.messagingSenderId || config.messagingSenderId,
+      appId: firebaseConfig.appId || config.appId,
+      measurementId: firebaseConfig.measurementId || config.measurementId
+    };
   }
   
   private async waitForOperation(operationName: string): Promise<any> {
