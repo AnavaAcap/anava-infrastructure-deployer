@@ -53,7 +53,7 @@ export class ApiGatewayDeployer {
   }
 
   private async createManagedService(projectId: string, apiId: string): Promise<string> {
-    const serviceName = `${apiId}-${projectId}.apigateway.${projectId}.cloud.goog`;
+    const serviceName = `${apiId}.apigateway.${projectId}.cloud.goog`;
 
     try {
       // Check if service already exists
@@ -65,7 +65,12 @@ export class ApiGatewayDeployer {
       console.log(`Managed service ${serviceName} already exists`);
       return serviceName;
     } catch (error: any) {
-      if (error.code !== 404) throw error;
+      // 404 means service doesn't exist, which is expected
+      // 403 can also mean the service doesn't exist (permission denied on non-existent resource)
+      if (error.code !== 404 && error.code !== 403) {
+        throw error;
+      }
+      console.log(`Managed service ${serviceName} does not exist, creating it...`);
     }
 
     // Create the managed service
@@ -119,7 +124,7 @@ export class ApiGatewayDeployer {
       } catch (error: any) {
         if (error.code === 404) {
           // Create the API
-          await this.apigateway.projects.locations.apis.create({
+          const createResponse = await this.apigateway.projects.locations.apis.create({
             parent: `projects/${projectId}/locations/global`,
             apiId: apiId,
             auth: this.auth,
@@ -129,6 +134,16 @@ export class ApiGatewayDeployer {
               managedService: serviceName
             }
           });
+          
+          // Wait for API creation to complete
+          if (createResponse.data.name) {
+            console.log('Waiting for API creation to complete...');
+            await this.waitForApiGatewayOperation(createResponse.data.name);
+            console.log('API created successfully');
+            
+            // Add a small delay to ensure API is fully ready
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          }
         } else {
           throw error;
         }
