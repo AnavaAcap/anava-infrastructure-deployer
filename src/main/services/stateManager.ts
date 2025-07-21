@@ -141,6 +141,7 @@ export class StateManager {
       'createApiGateway',
       'configureWorkloadIdentity',
       'setupFirestore',
+      'createFirebaseWebApp',
     ];
 
     for (const stepName of stepOrder) {

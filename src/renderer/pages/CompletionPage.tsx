@@ -42,6 +42,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     const config = {
       apiGatewayUrl: result.apiGatewayUrl,
       apiKey: result.apiKey,
+      firebaseConfig: result.firebaseConfig,
       resources: result.resources,
       timestamp: new Date().toISOString(),
     };
@@ -138,6 +139,52 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             }
           />
         </ListItem>
+        
+        {result.firebaseConfig && (
+          <>
+            <Divider sx={{ my: 2 }} />
+            <ListItem>
+              <ListItemText
+                primary="Firebase Auth Domain"
+                secondary={
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography variant="mono" sx={{ fontFamily: 'monospace' }}>
+                      {result.firebaseConfig.authDomain}
+                    </Typography>
+                    <Tooltip title={copied === 'authDomain' ? 'Copied!' : 'Copy'}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleCopy(result.firebaseConfig!.authDomain, 'authDomain')}
+                      >
+                        <ContentCopy fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                }
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText
+                primary="Firebase App ID"
+                secondary={
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography variant="mono" sx={{ fontFamily: 'monospace' }}>
+                      {result.firebaseConfig.appId}
+                    </Typography>
+                    <Tooltip title={copied === 'appId' ? 'Copied!' : 'Copy'}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleCopy(result.firebaseConfig!.appId, 'appId')}
+                      >
+                        <ContentCopy fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                }
+              />
+            </ListItem>
+          </>
+        )}
       </List>
       
       <Box sx={{ bgcolor: 'grey.50', p: 3, borderRadius: 2, mb: 4 }}>
