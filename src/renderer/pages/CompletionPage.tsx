@@ -12,6 +12,9 @@ import {
   ListItem,
   ListItemText,
   Divider,
+  Stepper,
+  Step,
+  StepLabel,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -20,17 +23,23 @@ import {
   VisibilityOff,
   Add,
   Download,
+  ArrowBack,
 } from '@mui/icons-material';
 import { DeploymentResult } from '../../types';
+import TopBar from '../components/TopBar';
+import PostDeploymentChecklist from '../components/PostDeploymentChecklist';
 
 interface CompletionPageProps {
   result: DeploymentResult;
   onNewDeployment: () => void;
+  onBack?: () => void;
+  onLogout?: () => void;
 }
 
-const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment }) => {
+const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment, onBack, onLogout }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [activeStep, setActiveStep] = useState(0);
 
   const handleCopy = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -42,6 +51,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     const config = {
       apiGatewayUrl: result.apiGatewayUrl,
       apiKey: result.apiKey,
+      firebaseConfig: result.firebaseConfig,
       resources: result.resources,
       timestamp: new Date().toISOString(),
     };
@@ -58,6 +68,12 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   if (!result.success) {
     return (
       <Paper elevation={3} sx={{ p: 6 }}>
+        <TopBar 
+          title="Deployment Status" 
+          showLogout={!!onLogout}
+          onLogout={onLogout}
+        />
+        
         <Alert severity="error" sx={{ mb: 4 }}>
           <Typography variant="h6" gutterBottom>
             Deployment Failed
@@ -79,14 +95,36 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     );
   }
 
+  const steps = ['Deployment Complete', 'Firebase Setup'];
+
+  const handleChecklistComplete = () => {
+    setActiveStep(2); // Move to final step
+  };
+
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
-        <CheckCircle color="success" sx={{ fontSize: 48 }} />
-        <Typography variant="h4" component="h2">
-          Deployment Complete!
-        </Typography>
-      </Stack>
+      <TopBar 
+        title="Deployment Status" 
+        showLogout={!!onLogout}
+        onLogout={onLogout}
+      />
+      
+      <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+        {steps.map((label) => (
+          <Step key={label}>
+            <StepLabel>{label}</StepLabel>
+          </Step>
+        ))}
+      </Stepper>
+
+      {activeStep === 0 && (
+        <>
+          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+            <CheckCircle color="success" sx={{ fontSize: 36 }} />
+            <Typography variant="h6" color="success.main">
+              All systems deployed successfully
+            </Typography>
+          </Stack>
       
       <List sx={{ mb: 4 }}>
         <ListItem>
@@ -138,6 +176,70 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             }
           />
         </ListItem>
+        
+        {result.firebaseConfig && (
+          <>
+            <Divider sx={{ my: 2 }} />
+            {!result.firebaseConfig.apiKey && (
+              <ListItem>
+                <Alert severity="warning" sx={{ width: '100%' }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Firebase API Key Not Retrieved
+                  </Typography>
+                  <Typography variant="body2">
+                    The Firebase API key could not be automatically retrieved. You'll need to:
+                  </Typography>
+                  <List dense sx={{ mt: 1 }}>
+                    <ListItem>1. Go to the Firebase Console</ListItem>
+                    <ListItem>2. Select your project</ListItem>
+                    <ListItem>3. Go to Project Settings → General</ListItem>
+                    <ListItem>4. Copy the Web API Key</ListItem>
+                  </List>
+                </Alert>
+              </ListItem>
+            )}
+            <ListItem>
+              <ListItemText
+                primary="Firebase Auth Domain"
+                secondary={
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography variant="mono" sx={{ fontFamily: 'monospace' }}>
+                      {result.firebaseConfig.authDomain}
+                    </Typography>
+                    <Tooltip title={copied === 'authDomain' ? 'Copied!' : 'Copy'}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleCopy(result.firebaseConfig!.authDomain, 'authDomain')}
+                      >
+                        <ContentCopy fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                }
+              />
+            </ListItem>
+            <ListItem>
+              <ListItemText
+                primary="Firebase App ID"
+                secondary={
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography variant="mono" sx={{ fontFamily: 'monospace' }}>
+                      {result.firebaseConfig.appId}
+                    </Typography>
+                    <Tooltip title={copied === 'appId' ? 'Copied!' : 'Copy'}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleCopy(result.firebaseConfig!.appId, 'appId')}
+                      >
+                        <ContentCopy fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                }
+              />
+            </ListItem>
+          </>
+        )}
       </List>
       
       <Box sx={{ bgcolor: 'grey.50', p: 3, borderRadius: 2, mb: 4 }}>
@@ -157,23 +259,82 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
         </List>
       </Box>
       
-      <Stack direction="row" spacing={2} justifyContent="center">
-        <Button
-          variant="outlined"
-          startIcon={<Download />}
-          onClick={handleExportConfig}
-        >
-          Export Config
-        </Button>
-        
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={onNewDeployment}
-        >
-          New Deployment
-        </Button>
-      </Stack>
+          <Stack direction="row" spacing={2} justifyContent="center">
+            <Button
+              variant="outlined"
+              startIcon={<Download />}
+              onClick={handleExportConfig}
+            >
+              Export Config
+            </Button>
+            
+            <Button
+              variant="contained"
+              onClick={() => setActiveStep(1)}
+            >
+              Continue to Firebase Setup
+            </Button>
+          </Stack>
+        </>
+      )}
+
+      {activeStep === 1 && (
+        <>
+          <PostDeploymentChecklist
+            projectId={result.resources?.createServiceAccounts?.accounts ? 
+              result.resources.createServiceAccounts.accounts['device-auth-sa']?.split('@')[1]?.split('.')[0] : 
+              'unknown'
+            }
+            firebaseConfig={result.firebaseConfig}
+            onComplete={handleChecklistComplete}
+          />
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBack />}
+              onClick={() => setActiveStep(0)}
+            >
+              Back to Summary
+            </Button>
+          </Box>
+        </>
+      )}
+
+      {activeStep === 2 && (
+        <Box textAlign="center">
+          <CheckCircle color="success" sx={{ fontSize: 64, mb: 2 }} />
+          <Typography variant="h5" gutterBottom>
+            Setup Complete!
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+            Your Anava Vision authentication infrastructure is fully configured and ready to use.
+          </Typography>
+          <Stack direction="row" spacing={2} justifyContent="center">
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBack />}
+              onClick={() => setActiveStep(0)}
+            >
+              Back to Summary
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<Download />}
+              onClick={handleExportConfig}
+            >
+              Export Config
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={onNewDeployment}
+              size="large"
+            >
+              New Deployment
+            </Button>
+          </Stack>
+        </Box>
+      )}
     </Paper>
   );
 };

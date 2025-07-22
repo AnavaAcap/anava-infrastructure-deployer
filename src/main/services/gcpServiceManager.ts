@@ -1,21 +1,20 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { GCPAuthService } from './gcpAuthService';
+import { getGcloudCommand } from '../utils/gcloudPath';
 
 const execAsync = promisify(exec);
 
 export class GCPServiceManager {
-  private gcpAuth: GCPAuthService;
-
-  constructor(gcpAuth: GCPAuthService) {
-    this.gcpAuth = gcpAuth;
+  constructor(_gcpAuth: GCPAuthService) {
+    // Auth service is available for future use
   }
 
   async enableApi(projectId: string, apiName: string): Promise<void> {
     try {
       // Check if API is already enabled
       const { stdout } = await execAsync(
-        `gcloud services list --project=${projectId} --filter="config.name:${apiName}" --format=json`
+        getGcloudCommand(`gcloud services list --project=${projectId} --filter="config.name:${apiName}" --format=json`)
       );
       
       const services = JSON.parse(stdout);
@@ -26,7 +25,7 @@ export class GCPServiceManager {
 
       // Enable the API
       await execAsync(
-        `gcloud services enable ${apiName} --project=${projectId} --quiet`
+        getGcloudCommand(`gcloud services enable ${apiName} --project=${projectId} --quiet`)
       );
       
       // Wait a bit for the API to be fully enabled
@@ -124,11 +123,12 @@ export class GCPServiceManager {
     envVars: Record<string, string>,
     region: string
   ): Promise<string> {
+    // Build environment variables string
+    const envVarsStr = Object.entries(envVars)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(',');
+      
     try {
-      // Build environment variables string
-      const envVarsStr = Object.entries(envVars)
-        .map(([key, value]) => `${key}=${value}`)
-        .join(',');
 
       // Deploy function
       const deployCmd = `gcloud functions deploy ${functionName} \
