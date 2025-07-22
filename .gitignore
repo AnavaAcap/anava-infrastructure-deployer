@@ -46,3 +46,6 @@ coverage/
 # Electron
 electron-builder.yml
 !electron-builder.yml
+
+# OAuth configuration (contains secrets)
+oauth-config.json
