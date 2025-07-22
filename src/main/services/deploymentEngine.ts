@@ -227,6 +227,7 @@ export class DeploymentEngine extends EventEmitter {
       'iamcredentials.googleapis.com',
       'sts.googleapis.com',
       'apikeys.googleapis.com',
+      'identitytoolkit.googleapis.com', // Firebase Auth API
     ];
 
     const state = this.stateManager.getState()!;

@@ -180,6 +180,24 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
         {result.firebaseConfig && (
           <>
             <Divider sx={{ my: 2 }} />
+            {!result.firebaseConfig.apiKey && (
+              <ListItem>
+                <Alert severity="warning" sx={{ width: '100%' }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Firebase API Key Not Retrieved
+                  </Typography>
+                  <Typography variant="body2">
+                    The Firebase API key could not be automatically retrieved. You'll need to:
+                  </Typography>
+                  <List dense sx={{ mt: 1 }}>
+                    <ListItem>1. Go to the Firebase Console</ListItem>
+                    <ListItem>2. Select your project</ListItem>
+                    <ListItem>3. Go to Project Settings → General</ListItem>
+                    <ListItem>4. Copy the Web API Key</ListItem>
+                  </List>
+                </Alert>
+              </ListItem>
+            )}
             <ListItem>
               <ListItemText
                 primary="Firebase Auth Domain"
