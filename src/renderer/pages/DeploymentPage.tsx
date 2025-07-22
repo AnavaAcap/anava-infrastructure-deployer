@@ -12,6 +12,7 @@ import {
   ListItemIcon,
   ListItemText,
   Collapse,
+  keyframes,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -22,6 +23,16 @@ import {
   ViewInAr,
 } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig, DeploymentState, DeploymentProgress } from '../../types';
+import TopBar from '../components/TopBar';
+
+const rotate = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+`;
 
 interface DeploymentPageProps {
   project: GCPProject;
@@ -29,6 +40,7 @@ interface DeploymentPageProps {
   existingDeployment: DeploymentState | null;
   onComplete: (result: any) => void;
   onBack: () => void;
+  onLogout?: () => void;
 }
 
 const deploymentSteps = [
@@ -40,6 +52,7 @@ const deploymentSteps = [
   { key: 'createApiGateway', label: 'Create API Gateway' },
   { key: 'configureWorkloadIdentity', label: 'Configure Identity Federation' },
   { key: 'setupFirestore', label: 'Setup Firestore' },
+  { key: 'createFirebaseWebApp', label: 'Create Firebase Web App' },
 ];
 
 const DeploymentPage: React.FC<DeploymentPageProps> = ({
@@ -48,6 +61,7 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
   existingDeployment,
   onComplete,
   onBack,
+  onLogout,
 }) => {
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState<DeploymentProgress | null>(null);
@@ -81,7 +95,6 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
       window.electronAPI.deployment.start({
         ...config,
         projectId: project.projectId,
-        region: 'us-central1',
       });
     }
 
@@ -123,7 +136,7 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
       case 'completed':
         return <CheckCircle color="success" />;
       case 'in_progress':
-        return <RotateRight className="rotating" color="primary" />;
+        return <RotateRight sx={{ animation: `${rotate} 1s linear infinite` }} color="primary" />;
       case 'failed':
         return <Error color="error" />;
       default:
@@ -133,9 +146,11 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
 
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
-      <Typography variant="h4" component="h2" gutterBottom>
-        Deployment Progress
-      </Typography>
+      <TopBar 
+        title="Deployment Progress" 
+        showLogout={!!onLogout}
+        onLogout={onLogout}
+      />
       
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
@@ -225,15 +240,6 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
         </Button>
       </Stack>
       
-      <style jsx global>{`
-        @keyframes rotate {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .rotating {
-          animation: rotate 1s linear infinite;
-        }
-      `}</style>
     </Paper>
   );
 };

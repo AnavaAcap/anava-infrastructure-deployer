@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container } from '@mui/material';
+import { Box, Container, ThemeProvider, CssBaseline } from '@mui/material';
 import WelcomePage from './pages/WelcomePage';
 import AuthenticationPage from './pages/AuthenticationPage';
 import ConfigurationPage from './pages/ConfigurationPage';
 import DeploymentPage from './pages/DeploymentPage';
 import CompletionPage from './pages/CompletionPage';
+import { anavaTheme } from './theme/anavaTheme';
+import AppFooter from './components/AppFooter';
+import RetroEasterEgg from './components/RetroEasterEgg';
 import { DeploymentState, DeploymentConfig, GCPProject } from '../types';
 
 type Page = 'welcome' | 'auth' | 'config' | 'deployment' | 'completion';
@@ -26,15 +29,10 @@ function App() {
     setCurrentPage('auth');
   };
 
-  const handleCheckExisting = async () => {
-    // This would be triggered from the auth page after project selection
-    if (selectedProject) {
-      const existing = await window.electronAPI.state.checkExisting(selectedProject.projectId);
-      if (existing) {
-        setExistingDeployment(existing);
-        setCurrentPage('deployment');
-      }
-    }
+  const handleCheckExisting = () => {
+    // Go to auth page to select project and check for existing deployment
+    setExistingDeployment(null);
+    setCurrentPage('auth');
   };
 
   const handleProjectSelected = (project: GCPProject) => {
@@ -68,49 +66,68 @@ function App() {
     }
   };
 
+  const handleLogout = () => {
+    // Reset all state
+    setExistingDeployment(null);
+    setSelectedProject(null);
+    setDeploymentConfig(null);
+    setDeploymentResult(null);
+    setCurrentPage('welcome');
+  };
+
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        {currentPage === 'welcome' && (
-          <WelcomePage
-            onNewDeployment={handleNewDeployment}
-            onCheckExisting={handleCheckExisting}
-          />
-        )}
-        
-        {currentPage === 'auth' && (
-          <AuthenticationPage
-            onProjectSelected={handleProjectSelected}
-            onBack={handleBack}
-          />
-        )}
-        
-        {currentPage === 'config' && selectedProject && (
-          <ConfigurationPage
-            project={selectedProject}
-            onComplete={handleConfigComplete}
-            onBack={handleBack}
-          />
-        )}
-        
-        {currentPage === 'deployment' && (
-          <DeploymentPage
-            project={selectedProject!}
-            config={deploymentConfig}
-            existingDeployment={existingDeployment}
-            onComplete={handleDeploymentComplete}
-            onBack={handleBack}
-          />
-        )}
-        
-        {currentPage === 'completion' && (
-          <CompletionPage
-            result={deploymentResult}
-            onNewDeployment={handleNewDeployment}
-          />
-        )}
-      </Container>
-    </Box>
+    <ThemeProvider theme={anavaTheme}>
+      <CssBaseline />
+      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+        <Container maxWidth="md" sx={{ py: 4 }}>
+          {currentPage === 'welcome' && (
+            <WelcomePage
+              onNewDeployment={handleNewDeployment}
+              onCheckExisting={handleCheckExisting}
+            />
+          )}
+          
+          {currentPage === 'auth' && (
+            <AuthenticationPage
+              onProjectSelected={handleProjectSelected}
+              onBack={handleBack}
+              onLogout={handleLogout}
+            />
+          )}
+          
+          {currentPage === 'config' && selectedProject && (
+            <ConfigurationPage
+              project={selectedProject}
+              onComplete={handleConfigComplete}
+              onBack={handleBack}
+              onLogout={handleLogout}
+            />
+          )}
+          
+          {currentPage === 'deployment' && (
+            <DeploymentPage
+              project={selectedProject!}
+              config={deploymentConfig}
+              existingDeployment={existingDeployment}
+              onComplete={handleDeploymentComplete}
+              onBack={handleBack}
+              onLogout={handleLogout}
+            />
+          )}
+          
+          {currentPage === 'completion' && (
+            <CompletionPage
+              result={deploymentResult}
+              onNewDeployment={handleNewDeployment}
+              onBack={() => setCurrentPage('deployment')}
+              onLogout={handleLogout}
+            />
+          )}
+        </Container>
+        <AppFooter />
+      </Box>
+      <RetroEasterEgg trigger="konami" />
+    </ThemeProvider>
   );
 }
 

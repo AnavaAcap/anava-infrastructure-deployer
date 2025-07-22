@@ -17,14 +17,16 @@ import {
 } from '@mui/material';
 import { ArrowBack, RocketLaunch } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig } from '../../types';
+import TopBar from '../components/TopBar';
 
 interface ConfigurationPageProps {
   project: GCPProject;
   onComplete: (config: DeploymentConfig) => void;
   onBack: () => void;
+  onLogout?: () => void;
 }
 
-const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComplete, onBack }) => {
+const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComplete, onBack, onLogout }) => {
   const [namePrefix, setNamePrefix] = useState('anava-iot');
   const [region, setRegion] = useState('us-central1');
   const [firebaseSetup, setFirebaseSetup] = useState<'new' | 'existing'>('new');
@@ -33,6 +35,8 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
 
   const handleDeploy = () => {
     const config: DeploymentConfig = {
+      projectId: project.projectId,
+      region: region,
       namePrefix,
       corsOrigins: corsOrigins.split('\n').filter(origin => origin.trim()),
       apiKeyRestrictions: corsOrigins.split('\n').filter(origin => origin.trim()),
@@ -47,9 +51,11 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
 
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
-      <Typography variant="h4" component="h2" gutterBottom>
-        Deployment Configuration
-      </Typography>
+      <TopBar 
+        title="Deployment Configuration" 
+        showLogout={!!onLogout}
+        onLogout={onLogout}
+      />
       
       <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
         Project: <strong>{project.displayName}</strong> ({project.projectId})
@@ -64,19 +70,64 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
           helperText="Prefix for all created resources"
         />
         
-        <FormControl fullWidth>
-          <InputLabel>Region</InputLabel>
+        <FormControl fullWidth variant="outlined">
+          <InputLabel id="region-select-label">Deployment Region</InputLabel>
           <Select
+            labelId="region-select-label"
             value={region}
             onChange={(e) => setRegion(e.target.value)}
-            label="Region"
+            label="Deployment Region"
+            MenuProps={{
+              PaperProps: {
+                style: {
+                  maxHeight: 400,
+                },
+              },
+            }}
           >
-            <MenuItem value="us-central1">us-central1</MenuItem>
-            <MenuItem value="us-east1">us-east1</MenuItem>
-            <MenuItem value="us-west1">us-west1</MenuItem>
-            <MenuItem value="europe-west1">europe-west1</MenuItem>
-            <MenuItem value="asia-northeast1">asia-northeast1</MenuItem>
+            <MenuItem value="us-central1">us-central1 (Iowa)</MenuItem>
+            <MenuItem value="us-east1">us-east1 (South Carolina)</MenuItem>
+            <MenuItem value="us-east4">us-east4 (Northern Virginia)</MenuItem>
+            <MenuItem value="us-east5">us-east5 (Columbus)</MenuItem>
+            <MenuItem value="us-south1">us-south1 (Dallas)</MenuItem>
+            <MenuItem value="us-west1">us-west1 (Oregon)</MenuItem>
+            <MenuItem value="us-west2">us-west2 (Los Angeles)</MenuItem>
+            <MenuItem value="us-west3">us-west3 (Salt Lake City)</MenuItem>
+            <MenuItem value="us-west4">us-west4 (Las Vegas)</MenuItem>
+            <MenuItem value="northamerica-northeast1">northamerica-northeast1 (Montreal)</MenuItem>
+            <MenuItem value="northamerica-northeast2">northamerica-northeast2 (Toronto)</MenuItem>
+            <MenuItem value="southamerica-east1">southamerica-east1 (São Paulo)</MenuItem>
+            <MenuItem value="southamerica-west1">southamerica-west1 (Santiago)</MenuItem>
+            <MenuItem value="europe-central2">europe-central2 (Warsaw)</MenuItem>
+            <MenuItem value="europe-north1">europe-north1 (Finland)</MenuItem>
+            <MenuItem value="europe-southwest1">europe-southwest1 (Madrid)</MenuItem>
+            <MenuItem value="europe-west1">europe-west1 (Belgium)</MenuItem>
+            <MenuItem value="europe-west2">europe-west2 (London)</MenuItem>
+            <MenuItem value="europe-west3">europe-west3 (Frankfurt)</MenuItem>
+            <MenuItem value="europe-west4">europe-west4 (Netherlands)</MenuItem>
+            <MenuItem value="europe-west6">europe-west6 (Zurich)</MenuItem>
+            <MenuItem value="europe-west8">europe-west8 (Milan)</MenuItem>
+            <MenuItem value="europe-west9">europe-west9 (Paris)</MenuItem>
+            <MenuItem value="europe-west10">europe-west10 (Berlin)</MenuItem>
+            <MenuItem value="europe-west12">europe-west12 (Turin)</MenuItem>
+            <MenuItem value="asia-east1">asia-east1 (Taiwan)</MenuItem>
+            <MenuItem value="asia-east2">asia-east2 (Hong Kong)</MenuItem>
+            <MenuItem value="asia-northeast1">asia-northeast1 (Tokyo)</MenuItem>
+            <MenuItem value="asia-northeast2">asia-northeast2 (Osaka)</MenuItem>
+            <MenuItem value="asia-northeast3">asia-northeast3 (Seoul)</MenuItem>
+            <MenuItem value="asia-south1">asia-south1 (Mumbai)</MenuItem>
+            <MenuItem value="asia-south2">asia-south2 (Delhi)</MenuItem>
+            <MenuItem value="asia-southeast1">asia-southeast1 (Singapore)</MenuItem>
+            <MenuItem value="asia-southeast2">asia-southeast2 (Jakarta)</MenuItem>
+            <MenuItem value="australia-southeast1">australia-southeast1 (Sydney)</MenuItem>
+            <MenuItem value="australia-southeast2">australia-southeast2 (Melbourne)</MenuItem>
+            <MenuItem value="me-central1">me-central1 (Doha)</MenuItem>
+            <MenuItem value="me-central2">me-central2 (Dammam)</MenuItem>
+            <MenuItem value="me-west1">me-west1 (Tel Aviv)</MenuItem>
           </Select>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+            Select the Google Cloud region where your resources will be deployed
+          </Typography>
         </FormControl>
         
         <Divider />

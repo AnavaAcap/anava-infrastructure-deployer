@@ -1,33 +1,51 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import path from 'path';
 import { DeploymentEngine } from './services/deploymentEngine';
 import { StateManager } from './services/stateManager';
-import { GCPAuthService } from './services/gcpAuthService';
-import Store from 'electron-store';
+import { GCPOAuthService } from './services/gcpOAuthService';
+import { getLogger } from './utils/logger';
 
-const isDevelopment = process.env.NODE_ENV !== 'production';
-const store = new Store();
+const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
+const logger = getLogger();
 
 let mainWindow: BrowserWindow | null = null;
 let deploymentEngine: DeploymentEngine;
 let stateManager: StateManager;
-let gcpAuthService: GCPAuthService;
+let gcpOAuthService: GCPOAuthService;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    minWidth: 900,
+    minHeight: 600,
+    title: 'Anava Vision',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
-    titleBarStyle: 'hiddenInset',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     icon: path.join(__dirname, '../../assets/icon.png'),
+    backgroundColor: '#FAFAFA',
+    show: false, // Don't show until ready
+  });
+
+  // Show window when ready to prevent visual flash
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
   });
 
   if (isDevelopment) {
-    mainWindow.loadURL('http://localhost:5173');
+    // In development, try to connect to Vite dev server
+    mainWindow.loadURL('http://localhost:5173').catch(() => {
+      // If Vite isn't running, load the built files
+      console.log('Vite dev server not running, loading built files...');
+      if (mainWindow) {
+        mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+      }
+    });
+    // Open dev tools in development
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
@@ -39,12 +57,70 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  logger.info('App ready, initializing services...');
+  
   // Initialize services
   stateManager = new StateManager();
-  gcpAuthService = new GCPAuthService();
-  deploymentEngine = new DeploymentEngine(stateManager, gcpAuthService);
+  gcpOAuthService = new GCPOAuthService();
+  deploymentEngine = new DeploymentEngine(stateManager, gcpOAuthService);
+
+  // Create application menu with standard shortcuts
+  const template: any[] = [
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+  ];
+
+  // Add macOS-specific menu
+  if (process.platform === 'darwin') {
+    template.unshift({
+      label: app.getName(),
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services', submenu: [] },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    });
+  }
+
+  // Add developer tools in development
+  if (isDevelopment) {
+    template.push({
+      label: 'Developer',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+      ],
+    });
+  }
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 
   createWindow();
+  
+  // Disable right-click context menu in production
+  if (!isDevelopment) {
+    mainWindow?.webContents.on('context-menu', (e) => {
+      e.preventDefault();
+    });
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -61,11 +137,49 @@ app.on('window-all-closed', () => {
 
 // IPC Handlers
 ipcMain.handle('auth:check', async () => {
-  return gcpAuthService.checkAuthentication();
+  const isAuthenticated = gcpOAuthService.isAuthenticated();
+  const user = isAuthenticated ? await gcpOAuthService.getCurrentUser() : null;
+  return {
+    authenticated: isAuthenticated,
+    user: user?.email,
+    error: isAuthenticated ? null : 'Not authenticated. Please click "Login with Google".'
+  };
+});
+
+ipcMain.handle('auth:login', async () => {
+  console.log('=== AUTH LOGIN CALLED ===');
+  console.log('App version:', app.getVersion());
+  console.log('Electron version:', process.versions.electron);
+  console.log('Platform:', process.platform);
+  console.log('User data path:', app.getPath('userData'));
+  
+  try {
+    console.log('Starting authentication...');
+    const result = await gcpOAuthService.authenticate();
+    console.log('Authentication result:', result ? 'Success' : 'Failed');
+    return result;
+  } catch (error: any) {
+    console.error('Authentication error:', error);
+    console.error('Error stack:', error.stack);
+    throw error;
+  }
+});
+
+ipcMain.handle('auth:logout', async () => {
+  await gcpOAuthService.logout();
+  return { success: true };
+});
+
+ipcMain.handle('app:get-log-path', () => {
+  return logger.getLogFilePath();
+});
+
+ipcMain.handle('app:get-version', () => {
+  return app.getVersion();
 });
 
 ipcMain.handle('auth:get-projects', async () => {
-  return gcpAuthService.getProjects();
+  return gcpOAuthService.listProjects();
 });
 
 ipcMain.handle('state:get', async () => {
@@ -76,7 +190,14 @@ ipcMain.handle('state:check-existing', async (_, projectId: string) => {
   return stateManager.checkExistingDeployment(projectId);
 });
 
+ipcMain.handle('state:clear', async () => {
+  stateManager.clearState();
+  return { success: true };
+});
+
 ipcMain.handle('deployment:start', async (_, config: any) => {
+  // Always clear state before starting a new deployment
+  stateManager.clearState();
   return deploymentEngine.startDeployment(config);
 });
 
