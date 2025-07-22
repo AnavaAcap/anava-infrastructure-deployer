@@ -78,7 +78,7 @@ export class CloudFunctionsAPIDeployer {
           environmentVariables: config.environmentVariables || {},
           ingressSettings: 'ALLOW_ALL',
           allTrafficOnLatestRevision: true,
-          availableMemory: '256Mi',
+          availableMemory: '256M',
           timeoutSeconds: 60
         }
       };
