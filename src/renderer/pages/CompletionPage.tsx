@@ -23,6 +23,7 @@ import {
   VisibilityOff,
   Add,
   Download,
+  ArrowBack,
 } from '@mui/icons-material';
 import { DeploymentResult } from '../../types';
 import TopBar from '../components/TopBar';
@@ -31,10 +32,11 @@ import PostDeploymentChecklist from '../components/PostDeploymentChecklist';
 interface CompletionPageProps {
   result: DeploymentResult;
   onNewDeployment: () => void;
+  onBack?: () => void;
   onLogout?: () => void;
 }
 
-const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment, onLogout }) => {
+const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment, onBack, onLogout }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
@@ -259,14 +261,25 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
       )}
 
       {activeStep === 1 && (
-        <PostDeploymentChecklist
-          projectId={result.resources?.createServiceAccounts?.accounts ? 
-            result.resources.createServiceAccounts.accounts['device-auth-sa']?.split('@')[1]?.split('.')[0] : 
-            'unknown'
-          }
-          firebaseConfig={result.firebaseConfig}
-          onComplete={handleChecklistComplete}
-        />
+        <>
+          <PostDeploymentChecklist
+            projectId={result.resources?.createServiceAccounts?.accounts ? 
+              result.resources.createServiceAccounts.accounts['device-auth-sa']?.split('@')[1]?.split('.')[0] : 
+              'unknown'
+            }
+            firebaseConfig={result.firebaseConfig}
+            onComplete={handleChecklistComplete}
+          />
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBack />}
+              onClick={() => setActiveStep(0)}
+            >
+              Back to Summary
+            </Button>
+          </Box>
+        </>
       )}
 
       {activeStep === 2 && (
@@ -278,14 +291,30 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
           <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
             Your Anava Vision authentication infrastructure is fully configured and ready to use.
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={onNewDeployment}
-            size="large"
-          >
-            New Deployment
-          </Button>
+          <Stack direction="row" spacing={2} justifyContent="center">
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBack />}
+              onClick={() => setActiveStep(0)}
+            >
+              Back to Summary
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<Download />}
+              onClick={handleExportConfig}
+            >
+              Export Config
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={onNewDeployment}
+              size="large"
+            >
+              New Deployment
+            </Button>
+          </Stack>
         </Box>
       )}
     </Paper>

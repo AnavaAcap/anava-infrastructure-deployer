@@ -119,6 +119,7 @@ function App() {
             <CompletionPage
               result={deploymentResult}
               onNewDeployment={handleNewDeployment}
+              onBack={() => setCurrentPage('deployment')}
               onLogout={handleLogout}
             />
           )}
