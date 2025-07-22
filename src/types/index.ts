@@ -51,6 +51,7 @@ export interface DeploymentProgress {
   totalProgress: number;
   message: string;
   detail?: string;
+  subStep?: string;
 }
 
 export interface DeploymentResult {

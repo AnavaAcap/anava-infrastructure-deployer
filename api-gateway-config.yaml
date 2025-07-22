@@ -27,6 +27,7 @@ paths:
       operationId: deviceAuthInitiate
       x-google-backend:
         address: ${DEVICE_AUTH_URL}
+        jwt_audience: ${DEVICE_AUTH_URL}
         deadline: 30.0
       consumes:
         - application/json
@@ -73,6 +74,7 @@ paths:
       operationId: tokenExchange
       x-google-backend:
         address: ${TVM_URL}
+        jwt_audience: ${TVM_URL}
         deadline: 30.0
       consumes:
         - application/json

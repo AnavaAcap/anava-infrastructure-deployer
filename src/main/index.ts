@@ -221,4 +221,8 @@ ipcMain.on('deployment:subscribe', (event) => {
   deploymentEngine.on('complete', (result) => {
     event.sender.send('deployment:complete', result);
   });
+  
+  deploymentEngine.on('log', (message) => {
+    event.sender.send('deployment:log', message);
+  });
 });

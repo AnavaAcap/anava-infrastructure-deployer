@@ -1,0 +1,2 @@
+functions-framework>=3.1.0
+firebase-admin>=6.1.0

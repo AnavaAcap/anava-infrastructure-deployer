@@ -35,22 +35,53 @@ export class CloudFunctionsAPIDeployer {
     try {
       // Get project number for bucket name
       const projectNumber = await this.getProjectNumber(projectId);
-      // Check if function exists
+      // Check if function exists and its state
       const functionName = `projects/${projectId}/locations/${config.region}/functions/${config.name}`;
       let functionExists = false;
+      let needsRecreation = false;
 
       try {
-        await this.functions.projects.locations.functions.get({
+        const { data: existingFunction } = await this.functions.projects.locations.functions.get({
           name: functionName,
           auth: this.auth
         });
         functionExists = true;
-        console.log(`Function ${config.name} already exists, will update it`);
+        
+        // Check function state
+        const state = existingFunction.state;
+        console.log(`Function ${config.name} exists in state: ${state}`);
+        
+        if (state === 'FAILED' || state === 'DELETE_IN_PROGRESS') {
+          console.log(`Function is in ${state} state, will delete and recreate`);
+          needsRecreation = true;
+        } else if (state === 'DEPLOYING') {
+          console.log('Function is currently deploying, waiting for completion...');
+          // Wait for the current deployment to finish
+          await this.waitForFunctionReady(functionName);
+        }
       } catch (error: any) {
         if (error.code !== 404) {
           throw error;
         }
         console.log(`Function ${config.name} does not exist, will create it`);
+      }
+      
+      // Delete and recreate if needed
+      if (needsRecreation) {
+        try {
+          console.log(`Deleting failed function ${config.name}...`);
+          const { data: deleteOp } = await this.functions.projects.locations.functions.delete({
+            name: functionName,
+            auth: this.auth
+          });
+          
+          if (deleteOp.name) {
+            await this.waitForOperation(deleteOp.name);
+          }
+          functionExists = false;
+        } catch (error: any) {
+          console.log(`Warning: Failed to delete function: ${error.message}`);
+        }
       }
 
       // Upload source code to Cloud Storage
@@ -229,6 +260,46 @@ export class CloudFunctionsAPIDeployer {
     if (!done) {
       throw new Error('Operation timed out');
     }
+  }
+
+  private async waitForFunctionReady(functionName: string, maxRetries: number = 120): Promise<void> {
+    console.log('Waiting for function to be ready...');
+    let retries = 0;
+    
+    while (retries < maxRetries) {
+      try {
+        const { data: func } = await this.functions.projects.locations.functions.get({
+          name: functionName,
+          auth: this.auth
+        });
+        
+        const state = func.state;
+        console.log(`Function state: ${state}`);
+        
+        if (state === 'ACTIVE') {
+          console.log('Function is ready');
+          return;
+        } else if (state === 'FAILED') {
+          throw new Error('Function deployment failed');
+        } else if (state === 'DELETING' || state === 'DELETE_IN_PROGRESS') {
+          throw new Error('Function is being deleted');
+        }
+        
+        // Still deploying, wait and retry
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        retries++;
+      } catch (error: any) {
+        if (error.message && (error.message.includes('failed') || error.message.includes('deleted'))) {
+          throw error;
+        }
+        // Other errors might be transient, retry
+        console.log(`Error checking function state: ${error.message}, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        retries++;
+      }
+    }
+    
+    throw new Error('Timeout waiting for function to be ready');
   }
 
   private mapRegionToGCSLocation(region: string): string {

@@ -18,6 +18,7 @@ declare global {
         onProgress: (callback: (progress: any) => void) => void;
         onError: (callback: (error: any) => void) => void;
         onComplete: (callback: (result: any) => void) => void;
+        onLog: (callback: (message: string) => void) => void;
         subscribe: () => void;
       };
       app: {
