@@ -540,6 +540,44 @@ export class DeploymentEngine extends EventEmitter {
       }
       this.stateManager.updateStepResource('deployCloudFunctions', 'functions', deployedFunctions);
     }
+    
+    // Grant Cloud Run invoker permissions to API Gateway service account
+    console.log('Granting Cloud Run invoker permissions to API Gateway service account...');
+    await this.grantCloudRunInvokerPermissions(
+      state.projectId,
+      state.region,
+      deployedFunctions,
+      accounts['apigw-invoker-sa']
+    );
+  }
+  
+  private async grantCloudRunInvokerPermissions(
+    projectId: string,
+    region: string,
+    functions: Record<string, string>,
+    apiGatewayInvokerSA: string
+  ): Promise<void> {
+    const { CloudRunIAMManager } = await import('./cloudRunIAMManager');
+    const auth = await this.getAuthClient();
+    const cloudRunIAMManager = new CloudRunIAMManager(auth);
+    
+    for (const [functionName] of Object.entries(functions)) {
+      try {
+        await cloudRunIAMManager.grantInvokerPermission(
+          projectId,
+          region,
+          functionName,
+          apiGatewayInvokerSA
+        );
+      } catch (error) {
+        console.error(`Failed to grant invoker permission for ${functionName}:`, error);
+        // Continue with other functions even if one fails
+      }
+    }
+    
+    // Wait for IAM permissions to propagate
+    console.log('Waiting 30 seconds for IAM permissions to propagate...');
+    await new Promise(resolve => setTimeout(resolve, 30000));
   }
 
   private async stepCreateApiGateway(): Promise<void> {
@@ -567,6 +605,41 @@ export class DeploymentEngine extends EventEmitter {
       : path.join(app.getAppPath(), 'api-gateway-config.yaml');
     const apiId = `anava-api-${state.configuration.namePrefix}`;
 
+    // Create progress callback for sub-steps
+    const progressCallback = (subStep: string, subProgress: number, detail?: string) => {
+      let stepProgress = 0;
+      let message = 'Creating API Gateway...';
+      
+      switch (subStep) {
+        case 'managed-service':
+          stepProgress = subProgress * 0.2; // 20% of total
+          message = 'Creating managed service...';
+          break;
+        case 'api-config':
+          stepProgress = 20 + (subProgress * 0.3); // 30% of total
+          message = 'Creating API configuration...';
+          break;
+        case 'gateway':
+          stepProgress = 50 + (subProgress * 0.5); // 50% of total
+          message = 'Creating API Gateway instance...';
+          break;
+      }
+      
+      this.emitProgress({
+        currentStep: 'createApiGateway',
+        stepProgress,
+        totalProgress: 62.5 + (12.5 * (stepProgress / 100)),
+        message,
+        detail: detail || undefined,
+        subStep,
+      });
+    };
+    
+    // Create log callback to forward logs
+    const logCallback = (message: string) => {
+      this.emitLog(message);
+    };
+
     const { gatewayUrl, apiKey } = await this.apiGatewayDeployer.deployApiGateway(
       state.projectId,
       apiId,
@@ -575,7 +648,9 @@ export class DeploymentEngine extends EventEmitter {
       state.region,
       functions['device-auth'],
       functions['token-vending-machine'],
-      state.configuration.corsOrigins || []
+      state.configuration.corsOrigins || [],
+      progressCallback,
+      logCallback
     );
 
     this.stateManager.updateStepResource('createApiGateway', 'gatewayUrl', gatewayUrl);
@@ -858,6 +933,10 @@ export class DeploymentEngine extends EventEmitter {
   private emitProgress(progress: DeploymentProgress): void {
     this.emit('progress', progress);
   }
+  
+  private emitLog(message: string): void {
+    this.emit('log', message);
+  }
 
   private emitComplete(result: DeploymentResult): void {
     this.emit('complete', result);
@@ -880,123 +959,52 @@ export class DeploymentEngine extends EventEmitter {
     await fs.writeFile(path.join(tempDir, 'main.py'), pythonCode);
     
     // Create requirements.txt
-    const requirements = functionName === 'token-vending-machine' 
-      ? 'functions-framework>=3.1.0\nrequests>=2.28.0'
-      : 'functions-framework>=3.1.0';
+    const requirementsPath = path.join(
+      app.isPackaged ? process.resourcesPath : app.getAppPath(),
+      'function-templates',
+      functionName,
+      'requirements.txt'
+    );
+    
+    let requirements;
+    try {
+      requirements = require('fs').readFileSync(requirementsPath, 'utf-8');
+    } catch (error) {
+      // Fallback to default requirements
+      requirements = functionName === 'token-vending-machine' 
+        ? 'functions-framework>=3.1.0\nrequests>=2.28.0'
+        : 'functions-framework>=3.1.0\nfirebase-admin>=6.1.0';
+    }
+    
     await fs.writeFile(path.join(tempDir, 'requirements.txt'), requirements);
     
     return tempDir;
   }
 
   private generatePythonFunctionCode(functionName: string, entryPoint: string): string {
-    if (functionName === 'device-auth') {
+    // Load function code from templates
+    const templatePath = path.join(
+      app.isPackaged ? process.resourcesPath : app.getAppPath(),
+      'function-templates',
+      functionName,
+      'main.py'
+    );
+    
+    try {
+      const templateCode = require('fs').readFileSync(templatePath, 'utf-8');
+      // The templates already have the correct function names
+      return templateCode;
+    } catch (error) {
+      // Log the error
+      console.error(`Function template not found for ${functionName}:`, error);
+      
+      // Fallback to inline code if template not found
       return `import functions_framework
-import json
-from datetime import datetime
-
-@functions_framework.http
-def ${entryPoint}(request):
-    """Device authentication endpoint."""
-    return ({
-        'status': 'Device auth endpoint working',
-        'timestamp': datetime.now().isoformat(),
-        'function': '${functionName}'
-    }, 200, {'Content-Type': 'application/json'})`;
-    } else if (functionName === 'token-vending-machine') {
-      return `import functions_framework
-import requests
-import json
-import os
-from datetime import datetime
-
-@functions_framework.http
-def ${entryPoint}(request):
-    """Token vending machine for Firebase to GCP authentication."""
-    
-    # Handle CORS preflight
-    if request.method == 'OPTIONS':
-        headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Max-Age': '3600'
-        }
-        return ('', 204, headers)
-    
-    # Get environment variables
-    project_number = os.environ.get('WIF_PROJECT_NUMBER')
-    pool_id = os.environ.get('WIF_POOL_ID')
-    provider_id = os.environ.get('WIF_PROVIDER_ID')
-    target_sa = os.environ.get('TARGET_SERVICE_ACCOUNT_EMAIL')
-    
-    if not all([project_number, pool_id, provider_id, target_sa]):
-        return ({
-            'error': 'Missing required environment variables'
-        }, 500)
-    
-    try:
-        # Get Firebase ID token from request
-        auth_header = request.headers.get('Authorization', '')
-        if not auth_header.startswith('Bearer '):
-            return ({'error': 'Invalid authorization header'}, 401)
-        
-        firebase_token = auth_header.split('Bearer ')[1]
-        
-        # Exchange Firebase token for STS token
-        sts_url = 'https://sts.googleapis.com/v1/token'
-        sts_payload = {
-            'grant_type': 'urn:ietf:params:oauth:grant-type:token-exchange',
-            'subject_token_type': 'urn:ietf:params:oauth:token-type:id_token',
-            'requested_token_type': 'urn:ietf:params:oauth:token-type:access_token',
-            'subject_token': firebase_token,
-            'audience': f'//iam.googleapis.com/projects/{project_number}/locations/global/workloadIdentityPools/{pool_id}/providers/{provider_id}',
-            'scope': 'https://www.googleapis.com/auth/cloud-platform'
-        }
-        
-        sts_response = requests.post(sts_url, data=sts_payload)
-        sts_response.raise_for_status()
-        sts_token = sts_response.json()['access_token']
-        
-        # Exchange STS token for service account token
-        impersonate_url = f'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{target_sa}:generateAccessToken'
-        impersonate_payload = {
-            'scope': ['https://www.googleapis.com/auth/cloud-platform'],
-            'lifetime': '3600s'
-        }
-        impersonate_headers = {
-            'Authorization': f'Bearer {sts_token}',
-            'Content-Type': 'application/json'
-        }
-        
-        impersonate_response = requests.post(
-            impersonate_url,
-            json=impersonate_payload,
-            headers=impersonate_headers
-        )
-        impersonate_response.raise_for_status()
-        
-        # Return the service account access token
-        result = impersonate_response.json()
-        headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-        }
-        
-        return (result, 200, headers)
-        
-    except Exception as e:
-        return ({
-            'error': str(e),
-            'timestamp': datetime.now().isoformat()
-        }, 500)`;
-    }
-    
-    return `import functions_framework
 
 @functions_framework.http
 def ${entryPoint}(request):
     """Default function implementation."""
     return {'status': 'ok', 'function': '${functionName}'}`;
+    }
   }
 }

@@ -48,8 +48,17 @@ const deploymentSteps = [
   { key: 'enableApis', label: 'Enable APIs' },
   { key: 'createServiceAccounts', label: 'Create Service Accounts' },
   { key: 'assignIamRoles', label: 'Assign IAM Roles' },
-  { key: 'deployCloudFunctions', label: 'Deploy Cloud Functions' },
-  { key: 'createApiGateway', label: 'Create API Gateway' },
+  { key: 'deployCloudFunctions', label: 'Deploy Cloud Functions', note: 'This step typically takes 5-7 minutes' },
+  { 
+    key: 'createApiGateway', 
+    label: 'Create API Gateway', 
+    note: 'This step typically takes 10-15 minutes',
+    subSteps: [
+      { key: 'managed-service', label: 'Creating managed service' },
+      { key: 'api-config', label: 'Creating API configuration' },
+      { key: 'gateway', label: 'Creating API Gateway instance' }
+    ]
+  },
   { key: 'configureWorkloadIdentity', label: 'Configure Identity Federation' },
   { key: 'setupFirestore', label: 'Setup Firestore' },
   { key: 'createFirebaseWebApp', label: 'Create Firebase Web App' },
@@ -73,7 +82,11 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
     // Set up event listeners
     window.electronAPI.deployment.onProgress((prog) => {
       setProgress(prog);
-      addLog(`${new Date().toLocaleTimeString()} ${prog.message}`);
+      // Don't add progress messages to logs anymore, we'll use dedicated log messages
+    });
+    
+    window.electronAPI.deployment.onLog((message) => {
+      addLog(`${new Date().toLocaleTimeString()} ${message}`);
     });
 
     window.electronAPI.deployment.onError((err) => {
@@ -161,7 +174,7 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
       <Box sx={{ mb: 4 }}>
         <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Overall Progress: {progress?.totalProgress || 0}%
+            Overall Progress: {Math.round(progress?.totalProgress || 0)}%
           </Typography>
         </Stack>
         <LinearProgress
@@ -177,25 +190,77 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
           const isCurrentStep = progress?.currentStep === step.key;
           
           return (
-            <ListItem key={step.key}>
-              <ListItemIcon>{getStepIcon(status)}</ListItemIcon>
-              <ListItemText
-                primary={step.label}
-                secondary={isCurrentStep ? progress?.detail || progress?.message : null}
-                primaryTypographyProps={{
-                  fontWeight: isCurrentStep ? 'bold' : 'normal',
-                }}
-              />
-              {isCurrentStep && progress && (
-                <Box sx={{ minWidth: 100 }}>
-                  <LinearProgress
-                    variant="determinate"
-                    value={progress.stepProgress}
-                    sx={{ height: 4, borderRadius: 2 }}
-                  />
+            <React.Fragment key={step.key}>
+              <ListItem>
+                <ListItemIcon>{getStepIcon(status)}</ListItemIcon>
+                <ListItemText
+                  primary={step.label}
+                  secondary={
+                    <React.Fragment>
+                      {isCurrentStep && step.note && (
+                        <Typography 
+                          variant="caption" 
+                          color="info.main"
+                          sx={{ display: 'block', fontStyle: 'italic', mb: 0.5 }}
+                        >
+                          {step.note}
+                        </Typography>
+                      )}
+                      {isCurrentStep && (progress?.detail || progress?.message)}
+                    </React.Fragment>
+                  }
+                  primaryTypographyProps={{
+                    fontWeight: isCurrentStep ? 'bold' : 'normal',
+                  }}
+                />
+                {isCurrentStep && progress && (
+                  <Box sx={{ minWidth: 100 }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={progress.stepProgress}
+                      sx={{ height: 4, borderRadius: 2 }}
+                    />
+                  </Box>
+                )}
+              </ListItem>
+              
+              {/* Show sub-steps for API Gateway when it's the current step */}
+              {isCurrentStep && step.subSteps && progress?.subStep && (
+                <Box sx={{ pl: 9, pr: 2 }}>
+                  {step.subSteps.map((subStep) => {
+                    const isCurrentSubStep = progress.subStep === subStep.key;
+                    const subStepStatus = isCurrentSubStep ? 'in_progress' : 
+                      (step.subSteps.findIndex(s => s.key === progress.subStep) > 
+                       step.subSteps.findIndex(s => s.key === subStep.key) ? 'completed' : 'pending');
+                    
+                    return (
+                      <ListItem key={subStep.key} dense>
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          {getStepIcon(subStepStatus)}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={subStep.label}
+                          primaryTypographyProps={{
+                            variant: 'body2',
+                            fontWeight: isCurrentSubStep ? 'medium' : 'normal',
+                            color: isCurrentSubStep ? 'primary' : 'text.secondary',
+                          }}
+                        />
+                        {isCurrentSubStep && progress && (
+                          <Box sx={{ minWidth: 80 }}>
+                            <LinearProgress
+                              variant="determinate"
+                              value={progress.stepProgress}
+                              sx={{ height: 3, borderRadius: 2 }}
+                            />
+                          </Box>
+                        )}
+                      </ListItem>
+                    );
+                  })}
                 </Box>
               )}
-            </ListItem>
+            </React.Fragment>
           );
         })}
       </List>

@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onComplete: (callback: (result: any) => void) => {
       ipcRenderer.on('deployment:complete', (_, result) => callback(result));
     },
+    onLog: (callback: (message: string) => void) => {
+      ipcRenderer.on('deployment:log', (_, message) => callback(message));
+    },
     subscribe: () => ipcRenderer.send('deployment:subscribe'),
   },
   app: {

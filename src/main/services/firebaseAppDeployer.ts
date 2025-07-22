@@ -144,59 +144,155 @@ export class FirebaseAppDeployer {
   }
   
   private async getWebAppConfig(webAppName: string): Promise<FirebaseConfig> {
-    console.log(`Getting config for web app: ${webAppName}`);
+    console.log(`Getting SDK config for web app: ${webAppName}`);
+    
+    // Get the web app details first to ensure it exists
+    const { data: webApp } = await this.firebasemanagement.projects.webApps.get({
+      name: webAppName,
+      auth: this.auth
+    });
+    
+    console.log('Web app details:', JSON.stringify(webApp, null, 2));
+    
+    // Extract project ID and app ID from web app name (format: projects/{projectId}/webApps/{appId})
+    const parts = webAppName.split('/');
+    const projectId = parts[1];
+    const appId = webApp.appId || parts[3];
+    const apiKeyId = webApp.apiKeyId;
+    
+    // Get project number once - needed for both SDK config API and messagingSenderId
+    const projectNumber = await this.getProjectNumber(projectId);
+    
+    // First, try to get the SDK config with retries (handles eventual consistency)
+    const sdkConfig = await this.getSdkConfigWithRetries(projectId, appId);
+    
+    if (sdkConfig && sdkConfig.apiKey) {
+      console.log('Successfully retrieved SDK config with API key');
+      return sdkConfig;
+    }
+    
+    // If SDK config failed or didn't include API key, try the fallback approach
+    console.log('SDK config not available or missing API key, falling back to API Keys service...');
+    
+    if (!apiKeyId) {
+      throw new Error('No apiKeyId available to retrieve API key');
+    }
+    
+    // Use the apiKeyId to get the API key directly
+    const apiKey = await this.getApiKeyDirectly(projectId, apiKeyId);
+    
+    // Manually construct the Firebase config
+    const finalConfig: FirebaseConfig = {
+      apiKey: apiKey,
+      authDomain: `${projectId}.firebaseapp.com`,
+      projectId: projectId,
+      storageBucket: `${projectId}.firebasestorage.app`,
+      messagingSenderId: projectNumber,
+      appId: appId,
+      measurementId: undefined // This would need Analytics to be enabled
+    };
+    
+    console.log('Manually constructed Firebase config:', JSON.stringify(finalConfig, null, 2));
+    return finalConfig;
+  }
+  
+  private async getSdkConfigWithRetries(projectId: string, appId: string): Promise<FirebaseConfig | null> {
+    const maxRetries = 10;
+    const initialDelay = 2000; // 2 seconds
+    const maxDelay = 30000; // 30 seconds
+    
+    // Get project number for messagingSenderId fallback
+    const projectNumber = await this.getProjectNumber(projectId);
+    
+    for (let retry = 0; retry < maxRetries; retry++) {
+      try {
+        const encodedAppId = encodeURIComponent(appId);
+        // The correct endpoint is /config, not /sdkConfig, and it uses project ID, not project number
+        const sdkConfigUrl = `https://firebase.googleapis.com/v1beta1/projects/${projectId}/webApps/${encodedAppId}/config`;
+        
+        console.log(`Attempt ${retry + 1}/${maxRetries}: Fetching SDK config from Firebase Management API...`);
+        
+        const accessToken = await this.auth.getAccessToken();
+        const response = await fetch(sdkConfigUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken.token}`,
+            'Content-Type': 'application/json',
+            'x-goog-user-project': projectId  // Required for Firebase Management API quota
+          }
+        });
+        
+        if (response.ok) {
+          const sdkConfig = await response.json();
+          console.log('Raw Firebase SDK config response:', JSON.stringify(sdkConfig, null, 2));
+          
+          // The SDK config should have all the fields we need including apiKey
+          const finalConfig: FirebaseConfig = {
+            apiKey: sdkConfig.apiKey || '',
+            authDomain: sdkConfig.authDomain || `${projectId}.firebaseapp.com`,
+            projectId: sdkConfig.projectId || projectId,
+            storageBucket: sdkConfig.storageBucket || `${projectId}.firebasestorage.app`,
+            messagingSenderId: sdkConfig.messagingSenderId || projectNumber,
+            appId: sdkConfig.appId || appId,
+            measurementId: sdkConfig.measurementId || undefined
+          };
+          
+          return finalConfig;
+        } else if (response.status === 404 && retry < maxRetries - 1) {
+          // Expected due to eventual consistency
+          const delay = Math.min(initialDelay * Math.pow(2, retry), maxDelay);
+          console.log(`SDK config not yet available (404), waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          const errorText = await response.text();
+          console.error(`Failed to get SDK config: ${response.status} ${errorText}`);
+          if (retry === maxRetries - 1) {
+            console.log('Max retries reached for SDK config');
+          }
+        }
+      } catch (error) {
+        console.error(`Error during SDK config fetch attempt ${retry + 1}:`, error);
+        if (retry === maxRetries - 1) {
+          console.log('Max retries reached due to errors');
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  private async getApiKeyDirectly(projectId: string, apiKeyId: string): Promise<string> {
+    console.log(`Fetching API key directly using apiKeyId: ${apiKeyId}`);
     
     try {
-      // Get the web app details
-      const { data: webApp } = await this.firebasemanagement.projects.webApps.get({
-        name: webAppName,
+      const apikeys = google.apikeys('v2');
+      
+      // Get the API key details
+      const { data: keyData } = await apikeys.projects.locations.keys.get({
+        name: `projects/${projectId}/locations/global/keys/${apiKeyId}`,
         auth: this.auth
       });
       
-      console.log('Web app details:', JSON.stringify(webApp, null, 2));
-      
-      // Get the config
-      const { data: configData } = await this.firebasemanagement.projects.webApps.getConfig({
-        name: webAppName,
-        auth: this.auth
-      });
-      
-      console.log('Raw Firebase config response:', JSON.stringify(configData, null, 2));
-      
-      // Extract project ID from web app name (format: projects/{projectId}/webApps/{appId})
-      const parts = webAppName.split('/');
-      const projectId = parts[1];
-      const appIdFull = webApp.appId || parts[3];
-      
-      // Get the project number which is the messagingSenderId if not in config
-      const messagingSenderId = configData?.messagingSenderId || await this.getProjectNumber(projectId);
-      
-      // Construct the final config
-      const finalConfig: FirebaseConfig = {
-        apiKey: configData?.apiKey || '',
-        authDomain: configData?.authDomain || `${projectId}.firebaseapp.com`,
-        projectId: configData?.projectId || projectId || '',
-        storageBucket: configData?.storageBucket || `${projectId}.firebasestorage.app`,
-        messagingSenderId: messagingSenderId || '',
-        appId: configData?.appId || appIdFull || '',
-        measurementId: configData?.measurementId || undefined
-      };
-      
-      if (!finalConfig.apiKey) {
-        console.warn('WARNING: Firebase API key not retrieved from getConfig.');
-        console.warn('This may indicate an issue with the Firebase project setup.');
-        console.warn('Please check the Firebase Console for the API key.');
+      if (keyData.keyString) {
+        console.log('Successfully retrieved API key from API Keys service');
+        return keyData.keyString;
       }
       
-      console.log('Final Firebase config:', JSON.stringify(finalConfig, null, 2));
+      // If keyString is not immediately available, try getKeyString method
+      const { data: keyStringData } = await apikeys.projects.locations.keys.getKeyString({
+        name: `projects/${projectId}/locations/global/keys/${apiKeyId}`,
+        auth: this.auth
+      });
       
-      return finalConfig;
+      if (keyStringData.keyString) {
+        console.log('Successfully retrieved API key string');
+        return keyStringData.keyString;
+      }
+      
+      throw new Error('API key string not available');
     } catch (error: any) {
-      console.error('Failed to get web app config:', error);
-      if (error.response?.data?.error) {
-        console.error('Error details:', JSON.stringify(error.response.data.error, null, 2));
-      }
-      throw error;
+      console.error('Failed to get API key directly:', error);
+      throw new Error(`Could not retrieve API key: ${error.message}`);
     }
   }
   
@@ -208,12 +304,14 @@ export class FirebaseAppDeployer {
         auth: this.auth
       });
       
+      console.log(`Retrieved project number: ${project.projectNumber} for project ID: ${projectId}`);
       return project.projectNumber || '';
     } catch (error) {
       console.error('Failed to get project number:', error);
       return '';
     }
   }
+  
   
   
   private async waitForOperation(operationName: string): Promise<any> {
