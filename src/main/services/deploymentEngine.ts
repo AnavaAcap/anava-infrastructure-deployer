@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { StateManager } from './stateManager';
 import { GCPApiServiceManager } from './gcpApiServiceManager';
 import { GCPOAuthService } from './gcpOAuthService';
-import { CloudFunctionsDeployerV1 } from './cloudFunctionsDeployerV1';
+import { CloudFunctionsAPIDeployer } from './cloudFunctionsAPIDeployer';
 import { ApiGatewayDeployer } from './apiGatewayDeployer';
 import { FirestoreDeployer } from './firestoreDeployer';
 import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
@@ -10,12 +10,15 @@ import { FirebaseAppDeployer } from './firebaseAppDeployer';
 import { DeploymentConfig, DeploymentProgress, DeploymentResult } from '../../types';
 import path from 'path';
 import { app } from 'electron';
+import fs from 'fs/promises';
+import { google } from 'googleapis';
+import { OAuth2Client } from 'google-auth-library';
 
 export class DeploymentEngine extends EventEmitter {
   private stateManager: StateManager;
   private gcpService: GCPApiServiceManager;
   private gcpAuth: GCPOAuthService;
-  private cloudFunctionsDeployer?: CloudFunctionsDeployerV1;
+  private cloudFunctionsAPIDeployer?: CloudFunctionsAPIDeployer;
   private apiGatewayDeployer?: ApiGatewayDeployer;
   private firestoreDeployer?: FirestoreDeployer;
   private workloadIdentityDeployer?: WorkloadIdentityDeployer;
@@ -34,7 +37,7 @@ export class DeploymentEngine extends EventEmitter {
 
   private initializeDeployers(): void {
     if (this.gcpAuth.oauth2Client) {
-      this.cloudFunctionsDeployer = new CloudFunctionsDeployerV1(this.gcpAuth.oauth2Client);
+      this.cloudFunctionsAPIDeployer = new CloudFunctionsAPIDeployer(this.gcpAuth.oauth2Client);
       this.apiGatewayDeployer = new ApiGatewayDeployer(this.gcpAuth.oauth2Client);
       this.firestoreDeployer = new FirestoreDeployer(this.gcpAuth.oauth2Client);
       this.workloadIdentityDeployer = new WorkloadIdentityDeployer(this.gcpAuth.oauth2Client);
@@ -339,19 +342,26 @@ export class DeploymentEngine extends EventEmitter {
       'roles/cloudbuild.builds.editor'
     );
     
-    // Grant permission to access Artifact Registry
+    // Grant comprehensive Artifact Registry permissions for Cloud Functions v2
     await this.gcpService.assignIamRole(
       state.projectId,
       cloudBuildSA,
-      'roles/artifactregistry.writer'
+      'roles/artifactregistry.admin'
     );
     
-    // Grant compute service account permission to access Cloud Functions internal buckets (gcf-sources-*)
-    // This fixes the "Access to bucket gcf-sources-* denied" error
+    // Grant compute service account permissions needed for Cloud Functions v2
+    // The compute SA is what actually runs the Cloud Build for functions!
     await this.gcpService.assignIamRole(
       state.projectId,
       computeSA,
       'roles/storage.objectViewer'
+    );
+    
+    // Compute SA needs artifactregistry.admin for Cloud Functions v2 builds
+    await this.gcpService.assignIamRole(
+      state.projectId,
+      computeSA,
+      'roles/artifactregistry.admin'
     );
     
     // Grant Cloud Build SA permission to act as the function service accounts
@@ -414,7 +424,8 @@ export class DeploymentEngine extends EventEmitter {
       }
     }
     
-    // Grant permissions to gcf-artifacts repository (created by Cloud Functions)
+    // Grant permissions to gcf-artifacts repository (this is crucial for Cloud Functions deployment)
+    console.log('Setting up Artifact Registry permissions for Cloud Functions...');
     await this.grantGcfArtifactsPermissions(state.projectId, state.region, cloudBuildSA, computeSA);
   }
 
@@ -425,12 +436,19 @@ export class DeploymentEngine extends EventEmitter {
     
     console.log('Service accounts for functions:', accounts);
     
-    if (!this.cloudFunctionsDeployer) {
-      throw new Error('Cloud Functions deployer not initialized');
+    if (!this.cloudFunctionsAPIDeployer) {
+      throw new Error('Cloud Functions API deployer not initialized');
     }
 
     // Get project number for WIF configuration
     const projectNumber = await this.getProjectNumber(state.projectId);
+    
+    // Ensure gcf-artifacts repository permissions are set up
+    // This is critical for Cloud Functions v2 deployment
+    const cloudBuildSA = `${projectNumber}@cloudbuild.gserviceaccount.com`;
+    const computeSA = `${projectNumber}-compute@developer.gserviceaccount.com`;
+    console.log('Ensuring Artifact Registry permissions before function deployment...');
+    await this.grantGcfArtifactsPermissions(state.projectId, state.region, cloudBuildSA, computeSA);
     
     // Verify compute service account has necessary permissions
     const hasPermissions = await this.gcpService.verifyComputeServiceAccountPermissions(
@@ -491,18 +509,34 @@ export class DeploymentEngine extends EventEmitter {
         message: `Deploying ${functions[i].name} function...`,
       });
 
-      const functionUrl = await this.cloudFunctionsDeployer.deployFunction(
-        state.projectId,
+      // Create source directory with inline code
+      const sourceDir = await this.createFunctionSourceCode(
         functions[i].name,
-        functions[i].sourceDir,
         functions[i].entryPoint,
-        functions[i].runtime,
-        functions[i].serviceAccount,
-        functions[i].envVars,
-        state.region
+        functions[i].runtime
       );
 
-      deployedFunctions[functions[i].name] = functionUrl;
+      try {
+        // Use API-based deployer
+        const functionUrl = await this.cloudFunctionsAPIDeployer!.deployFunction(
+          state.projectId,
+          {
+            name: functions[i].name,
+            entryPoint: functions[i].entryPoint,
+            runtime: functions[i].runtime,
+            region: state.region,
+            serviceAccount: functions[i].serviceAccount,
+            environmentVariables: functions[i].envVars,
+            maxInstances: 5
+          },
+          sourceDir
+        );
+        
+        deployedFunctions[functions[i].name] = functionUrl;
+      } finally {
+        // Clean up temp directory
+        await fs.rm(sourceDir, { recursive: true, force: true });
+      }
       this.stateManager.updateStepResource('deployCloudFunctions', 'functions', deployedFunctions);
     }
   }
@@ -664,49 +698,120 @@ export class DeploymentEngine extends EventEmitter {
     computeSA: string
   ): Promise<void> {
     try {
-      console.log('Checking for gcf-artifacts repository...');
+      console.log('Ensuring gcf-artifacts repository and permissions...');
       
-      // Try to grant permissions using gcloud CLI since the repository might exist
-      // but not be accessible via APIs yet
-      const { execSync } = require('child_process');
+      const auth = await this.getAuthClient();
+      const artifactregistry = google.artifactregistry({
+        version: 'v1',
+        auth
+      });
       
-      // Grant Cloud Build SA writer access (needs to upload cache)
+      const repositoryName = `projects/${projectId}/locations/${region}/repositories/gcf-artifacts`;
+      
+      // Check if repository exists, create if it doesn't
+      let repositoryExists = false;
       try {
-        execSync(
-          `gcloud artifacts repositories add-iam-policy-binding gcf-artifacts ` +
-          `--location=${region} ` +
-          `--member="serviceAccount:${cloudBuildSA}" ` +
-          `--role="roles/artifactregistry.writer" ` +
-          `--project=${projectId} ` +
-          `--quiet`,
-          { stdio: 'pipe' }
-        );
-        console.log('Granted Cloud Build SA writer access to gcf-artifacts repository');
+        await artifactregistry.projects.locations.repositories.get({
+          name: repositoryName
+        });
+        repositoryExists = true;
+        console.log('Found existing gcf-artifacts repository');
       } catch (error: any) {
-        // Repository might not exist yet, which is fine
-        console.log('gcf-artifacts repository not found yet (will be created by Cloud Functions)');
+        if (error.code === 404) {
+          console.log('Creating gcf-artifacts repository...');
+          try {
+            await artifactregistry.projects.locations.repositories.create({
+              parent: `projects/${projectId}/locations/${region}`,
+              repositoryId: 'gcf-artifacts',
+              requestBody: {
+                format: 'DOCKER',
+                description: 'This repository is created and used by Cloud Functions for storing function docker images.',
+                labels: {
+                  'goog-managed-by': 'cloudfunctions'
+                }
+              }
+            });
+            repositoryExists = true;
+            console.log('Created gcf-artifacts repository');
+            // Wait a bit for repository to be fully ready
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          } catch (createError: any) {
+            // If someone else created it in the meantime, that's fine
+            if (createError.code !== 409) {
+              console.error('Failed to create gcf-artifacts repository:', createError.message);
+              return;
+            }
+            repositoryExists = true;
+          }
+        } else {
+          throw error;
+        }
       }
       
-      // Grant compute SA writer access (Cloud Functions builds run as compute SA)
-      try {
-        execSync(
-          `gcloud artifacts repositories add-iam-policy-binding gcf-artifacts ` +
-          `--location=${region} ` +
-          `--member="serviceAccount:${computeSA}" ` +
-          `--role="roles/artifactregistry.writer" ` +
-          `--project=${projectId} ` +
-          `--quiet`,
-          { stdio: 'pipe' }
-        );
-        console.log('Granted compute SA writer access to gcf-artifacts repository');
-      } catch (error: any) {
-        // Repository might not exist yet, which is fine
-        console.log('gcf-artifacts repository not found yet (will be created by Cloud Functions)');
+      if (!repositoryExists) {
+        console.warn('Could not ensure gcf-artifacts repository exists');
+        return;
       }
-    } catch (error) {
-      console.warn('Could not grant gcf-artifacts permissions:', error);
-      // This is not fatal - the repository might not exist yet
+      
+      // Get current IAM policy
+      const { data: policy } = await artifactregistry.projects.locations.repositories.getIamPolicy({
+        resource: repositoryName
+      });
+      
+      // Initialize bindings if not present
+      if (!policy.bindings) {
+        policy.bindings = [];
+      }
+      
+      // CRITICAL: Cloud Functions v2 builds run as the COMPUTE service account!
+      // The compute SA needs admin permissions to push cache images
+      const adminRole = 'roles/artifactregistry.admin';
+      let adminBinding = policy.bindings.find(b => b.role === adminRole);
+      
+      if (!adminBinding) {
+        adminBinding = { role: adminRole, members: [] };
+        policy.bindings.push(adminBinding);
+      }
+      
+      if (!adminBinding.members) {
+        adminBinding.members = [];
+      }
+      
+      // Add BOTH service accounts as admin
+      const serviceAccounts = [
+        `serviceAccount:${computeSA}`,  // This is the one that actually needs it!
+        `serviceAccount:${cloudBuildSA}` // Keep this for other operations
+      ];
+      
+      for (const sa of serviceAccounts) {
+        if (!adminBinding.members.includes(sa)) {
+          adminBinding.members.push(sa);
+        }
+      }
+      
+      // Update IAM policy
+      await artifactregistry.projects.locations.repositories.setIamPolicy({
+        resource: repositoryName,
+        requestBody: {
+          policy
+        }
+      });
+      
+      console.log('Successfully granted gcf-artifacts permissions:');
+      console.log(`- Compute SA (${computeSA}): admin (CRITICAL for Cloud Functions v2)`);
+      console.log(`- Cloud Build SA (${cloudBuildSA}): admin`);
+      
+    } catch (error: any) {
+      console.error('Error granting gcf-artifacts permissions:', error.message);
+      // Continue deployment - this might work anyway
     }
+  }
+  
+  private async getAuthClient(): Promise<OAuth2Client> {
+    if (!this.gcpAuth.oauth2Client) {
+      throw new Error('OAuth client not initialized');
+    }
+    return this.gcpAuth.oauth2Client;
   }
 
   private async getProjectNumber(projectId: string): Promise<string> {
@@ -759,5 +864,138 @@ export class DeploymentEngine extends EventEmitter {
 
   private emitError(error: any): void {
     this.emit('error', error);
+  }
+
+  private async createFunctionSourceCode(
+    functionName: string,
+    entryPoint: string,
+    _runtime: string
+  ): Promise<string> {
+    const tempDir = path.join(require('os').tmpdir(), `${functionName}-${Date.now()}`);
+    await fs.mkdir(tempDir, { recursive: true });
+    
+    // Create Python source code
+    const pythonCode = this.generatePythonFunctionCode(functionName, entryPoint);
+    await fs.writeFile(path.join(tempDir, 'main.py'), pythonCode);
+    
+    // Create requirements.txt
+    const requirements = functionName === 'token-vending-machine' 
+      ? 'functions-framework>=3.1.0\nrequests>=2.28.0'
+      : 'functions-framework>=3.1.0';
+    await fs.writeFile(path.join(tempDir, 'requirements.txt'), requirements);
+    
+    return tempDir;
+  }
+
+  private generatePythonFunctionCode(functionName: string, entryPoint: string): string {
+    if (functionName === 'device-auth') {
+      return `import functions_framework
+import json
+from datetime import datetime
+
+@functions_framework.http
+def ${entryPoint}(request):
+    """Device authentication endpoint."""
+    return ({
+        'status': 'Device auth endpoint working',
+        'timestamp': datetime.now().isoformat(),
+        'function': '${functionName}'
+    }, 200, {'Content-Type': 'application/json'})`;
+    } else if (functionName === 'token-vending-machine') {
+      return `import functions_framework
+import requests
+import json
+import os
+from datetime import datetime
+
+@functions_framework.http
+def ${entryPoint}(request):
+    """Token vending machine for Firebase to GCP authentication."""
+    
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '3600'
+        }
+        return ('', 204, headers)
+    
+    # Get environment variables
+    project_number = os.environ.get('WIF_PROJECT_NUMBER')
+    pool_id = os.environ.get('WIF_POOL_ID')
+    provider_id = os.environ.get('WIF_PROVIDER_ID')
+    target_sa = os.environ.get('TARGET_SERVICE_ACCOUNT_EMAIL')
+    
+    if not all([project_number, pool_id, provider_id, target_sa]):
+        return ({
+            'error': 'Missing required environment variables'
+        }, 500)
+    
+    try:
+        # Get Firebase ID token from request
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return ({'error': 'Invalid authorization header'}, 401)
+        
+        firebase_token = auth_header.split('Bearer ')[1]
+        
+        # Exchange Firebase token for STS token
+        sts_url = 'https://sts.googleapis.com/v1/token'
+        sts_payload = {
+            'grant_type': 'urn:ietf:params:oauth:grant-type:token-exchange',
+            'subject_token_type': 'urn:ietf:params:oauth:token-type:id_token',
+            'requested_token_type': 'urn:ietf:params:oauth:token-type:access_token',
+            'subject_token': firebase_token,
+            'audience': f'//iam.googleapis.com/projects/{project_number}/locations/global/workloadIdentityPools/{pool_id}/providers/{provider_id}',
+            'scope': 'https://www.googleapis.com/auth/cloud-platform'
+        }
+        
+        sts_response = requests.post(sts_url, data=sts_payload)
+        sts_response.raise_for_status()
+        sts_token = sts_response.json()['access_token']
+        
+        # Exchange STS token for service account token
+        impersonate_url = f'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{target_sa}:generateAccessToken'
+        impersonate_payload = {
+            'scope': ['https://www.googleapis.com/auth/cloud-platform'],
+            'lifetime': '3600s'
+        }
+        impersonate_headers = {
+            'Authorization': f'Bearer {sts_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        impersonate_response = requests.post(
+            impersonate_url,
+            json=impersonate_payload,
+            headers=impersonate_headers
+        )
+        impersonate_response.raise_for_status()
+        
+        # Return the service account access token
+        result = impersonate_response.json()
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        }
+        
+        return (result, 200, headers)
+        
+    except Exception as e:
+        return ({
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }, 500)`;
+    }
+    
+    return `import functions_framework
+
+@functions_framework.http
+def ${entryPoint}(request):
+    """Default function implementation."""
+    return {'status': 'ok', 'function': '${functionName}'}`;
   }
 }

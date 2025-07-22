@@ -15,13 +15,15 @@ import {
 } from '@mui/material';
 import { CheckCircle, ArrowBack, ArrowForward } from '@mui/icons-material';
 import { AuthStatus, GCPProject } from '../../types';
+import TopBar from '../components/TopBar';
 
 interface AuthenticationPageProps {
   onProjectSelected: (project: GCPProject) => void;
   onBack: () => void;
+  onLogout?: () => void;
 }
 
-const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelected, onBack }) => {
+const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelected, onBack, onLogout }) => {
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [projects, setProjects] = useState<GCPProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
@@ -69,9 +71,11 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
 
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
-      <Typography variant="h4" component="h2" gutterBottom>
-        Google Cloud Authentication
-      </Typography>
+      <TopBar 
+        title="Google Cloud Authentication" 
+        showLogout={authStatus?.authenticated && !!onLogout}
+        onLogout={onLogout}
+      />
       
       {authStatus?.authenticated ? (
         <>

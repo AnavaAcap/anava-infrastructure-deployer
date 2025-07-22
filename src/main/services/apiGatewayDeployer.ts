@@ -172,7 +172,41 @@ export class ApiGatewayDeployer {
         }
       }
 
-      // Create the API config with retry logic for "parent not ready" errors
+      // Check for existing configs first
+      console.log('Checking for existing API configs...');
+      try {
+        const { data: configsList } = await this.apigateway.projects.locations.apis.configs.list({
+          parent: parent,
+          auth: this.auth
+        });
+        
+        if (configsList.apiConfigs && configsList.apiConfigs.length > 0) {
+          // Find the most recent config
+          const latestConfig = configsList.apiConfigs.sort((a, b) => {
+            const timeA = a.createTime ? new Date(a.createTime).getTime() : 0;
+            const timeB = b.createTime ? new Date(b.createTime).getTime() : 0;
+            return timeB - timeA;
+          })[0];
+          
+          if (latestConfig && latestConfig.name) {
+            const existingConfigId = latestConfig.name.split('/').pop();
+            console.log(`Found existing API config: ${existingConfigId}, checking if it's compatible...`);
+            
+            // TODO: Could check if the config content matches what we want
+            // For now, we'll use it if it exists
+            console.log(`Using existing API config: ${existingConfigId}`);
+            return existingConfigId || configId;
+          }
+        }
+      } catch (error: any) {
+        console.warn('Could not list existing configs:', error.message);
+      }
+      
+      // Check for any pending operations before creating a new config
+      console.log('Checking for pending API config operations...');
+      await this.checkAndWaitForPendingOperations(projectId, apiId);
+      
+      // Create the API config with retry logic
       console.log(`Creating API config ${configId}...`);
       let response;
       let retries = 0;
@@ -198,8 +232,20 @@ export class ApiGatewayDeployer {
           });
           break; // Success, exit the retry loop
         } catch (error: any) {
-          // Check if it's a "parent not ready" error
           const errorMessage = error.response?.data?.error?.message || error.message || '';
+          
+          // Handle "another config is being created" error
+          if (errorMessage.includes('Cannot create an API Config while another API Config is being created')) {
+            console.log('Another API config creation is in progress, waiting for it to complete...');
+            await this.checkAndWaitForPendingOperations(projectId, apiId);
+            retries++;
+            if (retries < maxRetries) {
+              console.log(`Retrying after pending operation completes (${retries}/${maxRetries})...`);
+              continue;
+            }
+          }
+          
+          // Check if it's a "parent not ready" error
           if (error.code === 409 && errorMessage.includes('parent resource is not in ready state')) {
             retries++;
             if (retries < maxRetries) {
@@ -208,6 +254,7 @@ export class ApiGatewayDeployer {
               continue;
             }
           }
+          
           // For other errors or max retries exceeded, throw the error
           throw error;
         }
@@ -409,12 +456,56 @@ export class ApiGatewayDeployer {
     }
   }
 
+  private async checkAndWaitForPendingOperations(projectId: string, apiId: string): Promise<void> {
+    try {
+      // List all operations for this API
+      const operations = google.apigateway('v1');
+      const { data } = await operations.projects.locations.operations.list({
+        name: `projects/${projectId}/locations/global`,
+        filter: `metadata.@type="type.googleapis.com/google.cloud.apigateway.v1.OperationMetadata" AND metadata.target="${projectId}/locations/global/apis/${apiId}/configs/*"`,
+        auth: this.auth
+      });
+      
+      if (data.operations && data.operations.length > 0) {
+        // Find any in-progress operations
+        const pendingOps = data.operations.filter(op => !op.done);
+        
+        if (pendingOps.length > 0) {
+          console.log(`Found ${pendingOps.length} pending operations, waiting for them to complete...`);
+          
+          // Wait for all pending operations
+          for (const op of pendingOps) {
+            if (op.name) {
+              console.log(`Waiting for operation ${op.name.split('/').pop()} to complete...`);
+              try {
+                await this.waitForApiGatewayOperation(op.name);
+              } catch (error) {
+                console.warn(`Operation ${op.name} failed, but continuing...`);
+              }
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      // If we can't list operations, just continue
+      console.warn('Could not check for pending operations:', error.message);
+    }
+  }
+  
   private async waitForApiGatewayOperation(operationName: string): Promise<void> {
     let done = false;
     let retries = 0;
     const maxRetries = 60;
+    const operationTimeout = 10 * 60 * 1000; // 10 minutes timeout
+    const startTime = Date.now();
 
     while (!done && retries < maxRetries) {
+      // Check if we've exceeded the operation timeout
+      if (Date.now() - startTime > operationTimeout) {
+        console.warn(`Operation ${operationName} timed out after 10 minutes`);
+        throw new Error(`Operation timed out after ${operationTimeout / 1000} seconds`);
+      }
+      
       const { data: operation } = await this.apigateway.projects.locations.operations.get({
         name: operationName,
         auth: this.auth

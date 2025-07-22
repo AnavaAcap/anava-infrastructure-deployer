@@ -1,7 +1,7 @@
 {
-  "name": "anava-infrastructure-deployer",
-  "version": "0.6.0",
-  "description": "Deploy Anava's camera authentication infrastructure to customer GCP projects",
+  "name": "anava-vision",
+  "version": "0.8.2",
+  "description": "Anava Vision - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "npm run build:main && NODE_ENV=development electron .",
@@ -27,14 +27,29 @@
   "author": "Anava Inc.",
   "license": "MIT",
   "build": {
-    "appId": "com.anava.infrastructure-deployer",
-    "productName": "Anava Infrastructure Deployer",
+    "appId": "com.anava.vision",
+    "productName": "Anava Vision",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "oauth-config.json",
+        "to": "oauth-config.json"
+      },
+      {
+        "from": "functions",
+        "to": "functions"
+      },
+      {
+        "from": "api-gateway-config.yaml",
+        "to": "api-gateway-config.yaml"
+      }
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
@@ -54,6 +69,7 @@
     "@types/node": "^24.0.15",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/archiver": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.37.0",
     "@typescript-eslint/parser": "^8.37.0",
     "@vitejs/plugin-react": "^4.7.0",
@@ -78,7 +94,6 @@
     "@google-cloud/storage": "^7.16.0",
     "@mui/icons-material": "^7.2.0",
     "@mui/material": "^7.2.0",
-    "@types/archiver": "^6.0.3",
     "archiver": "^7.0.1",
     "axios": "^1.10.0",
     "electron-store": "^8.1.0",

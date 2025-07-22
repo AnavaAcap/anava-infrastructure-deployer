@@ -29,15 +29,10 @@ function App() {
     setCurrentPage('auth');
   };
 
-  const handleCheckExisting = async () => {
-    // This would be triggered from the auth page after project selection
-    if (selectedProject) {
-      const existing = await window.electronAPI.state.checkExisting(selectedProject.projectId);
-      if (existing) {
-        setExistingDeployment(existing);
-        setCurrentPage('deployment');
-      }
-    }
+  const handleCheckExisting = () => {
+    // Go to auth page to select project and check for existing deployment
+    setExistingDeployment(null);
+    setCurrentPage('auth');
   };
 
   const handleProjectSelected = (project: GCPProject) => {
@@ -71,6 +66,15 @@ function App() {
     }
   };
 
+  const handleLogout = () => {
+    // Reset all state
+    setExistingDeployment(null);
+    setSelectedProject(null);
+    setDeploymentConfig(null);
+    setDeploymentResult(null);
+    setCurrentPage('welcome');
+  };
+
   return (
     <ThemeProvider theme={anavaTheme}>
       <CssBaseline />
@@ -87,6 +91,7 @@ function App() {
             <AuthenticationPage
               onProjectSelected={handleProjectSelected}
               onBack={handleBack}
+              onLogout={handleLogout}
             />
           )}
           
@@ -95,6 +100,7 @@ function App() {
               project={selectedProject}
               onComplete={handleConfigComplete}
               onBack={handleBack}
+              onLogout={handleLogout}
             />
           )}
           
@@ -105,6 +111,7 @@ function App() {
               existingDeployment={existingDeployment}
               onComplete={handleDeploymentComplete}
               onBack={handleBack}
+              onLogout={handleLogout}
             />
           )}
           
@@ -112,6 +119,7 @@ function App() {
             <CompletionPage
               result={deploymentResult}
               onNewDeployment={handleNewDeployment}
+              onLogout={handleLogout}
             />
           )}
         </Container>

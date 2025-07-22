@@ -26,4 +26,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     subscribe: () => ipcRenderer.send('deployment:subscribe'),
   },
+  app: {
+    getVersion: () => ipcRenderer.invoke('app:get-version'),
+  },
 });

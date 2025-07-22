@@ -12,6 +12,9 @@ import {
   ListItem,
   ListItemText,
   Divider,
+  Stepper,
+  Step,
+  StepLabel,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -22,15 +25,19 @@ import {
   Download,
 } from '@mui/icons-material';
 import { DeploymentResult } from '../../types';
+import TopBar from '../components/TopBar';
+import PostDeploymentChecklist from '../components/PostDeploymentChecklist';
 
 interface CompletionPageProps {
   result: DeploymentResult;
   onNewDeployment: () => void;
+  onLogout?: () => void;
 }
 
-const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment }) => {
+const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment, onLogout }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [activeStep, setActiveStep] = useState(0);
 
   const handleCopy = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -59,6 +66,12 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   if (!result.success) {
     return (
       <Paper elevation={3} sx={{ p: 6 }}>
+        <TopBar 
+          title="Deployment Status" 
+          showLogout={!!onLogout}
+          onLogout={onLogout}
+        />
+        
         <Alert severity="error" sx={{ mb: 4 }}>
           <Typography variant="h6" gutterBottom>
             Deployment Failed
@@ -80,14 +93,36 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     );
   }
 
+  const steps = ['Deployment Complete', 'Firebase Setup'];
+
+  const handleChecklistComplete = () => {
+    setActiveStep(2); // Move to final step
+  };
+
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
-        <CheckCircle color="success" sx={{ fontSize: 48 }} />
-        <Typography variant="h4" component="h2">
-          Deployment Complete!
-        </Typography>
-      </Stack>
+      <TopBar 
+        title="Deployment Status" 
+        showLogout={!!onLogout}
+        onLogout={onLogout}
+      />
+      
+      <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+        {steps.map((label) => (
+          <Step key={label}>
+            <StepLabel>{label}</StepLabel>
+          </Step>
+        ))}
+      </Stepper>
+
+      {activeStep === 0 && (
+        <>
+          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+            <CheckCircle color="success" sx={{ fontSize: 36 }} />
+            <Typography variant="h6" color="success.main">
+              All systems deployed successfully
+            </Typography>
+          </Stack>
       
       <List sx={{ mb: 4 }}>
         <ListItem>
@@ -204,23 +239,55 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
         </List>
       </Box>
       
-      <Stack direction="row" spacing={2} justifyContent="center">
-        <Button
-          variant="outlined"
-          startIcon={<Download />}
-          onClick={handleExportConfig}
-        >
-          Export Config
-        </Button>
-        
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={onNewDeployment}
-        >
-          New Deployment
-        </Button>
-      </Stack>
+          <Stack direction="row" spacing={2} justifyContent="center">
+            <Button
+              variant="outlined"
+              startIcon={<Download />}
+              onClick={handleExportConfig}
+            >
+              Export Config
+            </Button>
+            
+            <Button
+              variant="contained"
+              onClick={() => setActiveStep(1)}
+            >
+              Continue to Firebase Setup
+            </Button>
+          </Stack>
+        </>
+      )}
+
+      {activeStep === 1 && (
+        <PostDeploymentChecklist
+          projectId={result.resources?.createServiceAccounts?.accounts ? 
+            result.resources.createServiceAccounts.accounts['device-auth-sa']?.split('@')[1]?.split('.')[0] : 
+            'unknown'
+          }
+          firebaseConfig={result.firebaseConfig}
+          onComplete={handleChecklistComplete}
+        />
+      )}
+
+      {activeStep === 2 && (
+        <Box textAlign="center">
+          <CheckCircle color="success" sx={{ fontSize: 64, mb: 2 }} />
+          <Typography variant="h5" gutterBottom>
+            Setup Complete!
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+            Your Anava Vision authentication infrastructure is fully configured and ready to use.
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={onNewDeployment}
+            size="large"
+          >
+            New Deployment
+          </Button>
+        </Box>
+      )}
     </Paper>
   );
 };

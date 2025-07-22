@@ -1,6 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { GCPAuthService } from './gcpAuthService';
+import { getGcloudCommand } from '../utils/gcloudPath';
 
 const execAsync = promisify(exec);
 
@@ -13,7 +14,7 @@ export class GCPServiceManager {
     try {
       // Check if API is already enabled
       const { stdout } = await execAsync(
-        `gcloud services list --project=${projectId} --filter="config.name:${apiName}" --format=json`
+        getGcloudCommand(`gcloud services list --project=${projectId} --filter="config.name:${apiName}" --format=json`)
       );
       
       const services = JSON.parse(stdout);
@@ -24,7 +25,7 @@ export class GCPServiceManager {
 
       // Enable the API
       await execAsync(
-        `gcloud services enable ${apiName} --project=${projectId} --quiet`
+        getGcloudCommand(`gcloud services enable ${apiName} --project=${projectId} --quiet`)
       );
       
       // Wait a bit for the API to be fully enabled

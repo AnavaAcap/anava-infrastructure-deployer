@@ -45,13 +45,13 @@ export class GCPOAuthService {
         path.join(process.cwd(), 'oauth-config.json')
       ];
       
-      log.info('Searching for OAuth config in multiple locations...');
+      console.log('Searching for OAuth config in multiple locations...');
       
       for (const testPath of possiblePaths) {
-        log.info('Checking:', testPath);
+        console.log('Checking:', testPath);
         if (await this.fileExists(testPath)) {
           configPath = testPath;
-          log.info('Found OAuth config at:', configPath);
+          console.log('Found OAuth config at:', configPath);
           break;
         }
       }
@@ -76,6 +76,7 @@ export class GCPOAuthService {
       );
       
       console.log('OAuth configuration loaded successfully');
+      console.log('Client ID:', this.authConfig.client_id.substring(0, 20) + '...');
     } catch (error) {
       console.error('Failed to load OAuth config:', error);
       throw new Error('OAuth configuration not found. Please ensure oauth-config.json exists.');
@@ -308,11 +309,40 @@ export class GCPOAuthService {
         } as any);
         
         log.info('Opening authentication URL in browser:', authUrl);
+        console.log('=== OAUTH DEBUG ===');
+        console.log('Auth URL:', authUrl);
+        console.log('Redirect URI:', this.authConfig.redirect_uris[0]);
+        console.log('Port:', port);
+        console.log('App path:', app.getPath('userData'));
+        console.log('Logs path:', app.getPath('logs'));
         
-        shell.openExternal(authUrl).catch(error => {
-          log.error('Failed to open browser:', error);
-          reject(new Error('Failed to open authentication URL in browser'));
-        });
+        // Try to open the URL
+        shell.openExternal(authUrl)
+          .then(() => {
+            log.info('Browser opened successfully');
+            console.log('Browser opened successfully for OAuth');
+          })
+          .catch(error => {
+            log.error('Failed to open browser:', error);
+            console.error('Failed to open browser:', error);
+            console.error('Error details:', JSON.stringify(error, null, 2));
+            
+            // Try alternative method on macOS
+            if (process.platform === 'darwin') {
+              console.log('Trying macOS-specific open command...');
+              const { exec } = require('child_process');
+              exec(`open "${authUrl}"`, (err: any) => {
+                if (err) {
+                  console.error('macOS open command failed:', err);
+                  reject(new Error('Failed to open authentication URL in browser'));
+                } else {
+                  console.log('macOS open command succeeded');
+                }
+              });
+            } else {
+              reject(new Error('Failed to open authentication URL in browser'));
+            }
+          });
       });
 
       setTimeout(() => {

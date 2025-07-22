@@ -87,7 +87,7 @@ const AppFooter: React.FC = () => {
       </Typography>
       
       <Typography variant="caption" display="block" sx={{ fontSize: '0.7rem', mt: 1, opacity: 0.7 }}>
-        Anava Infrastructure Deployer v{process.env.REACT_APP_VERSION || '0.5.3'}
+        Anava Vision
       </Typography>
       
       <Typography variant="caption" display="block" sx={{ fontSize: '0.65rem', mt: 0.5, opacity: 0.5 }}>

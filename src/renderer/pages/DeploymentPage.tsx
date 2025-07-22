@@ -23,6 +23,7 @@ import {
   ViewInAr,
 } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig, DeploymentState, DeploymentProgress } from '../../types';
+import TopBar from '../components/TopBar';
 
 const rotate = keyframes`
   from {
@@ -39,6 +40,7 @@ interface DeploymentPageProps {
   existingDeployment: DeploymentState | null;
   onComplete: (result: any) => void;
   onBack: () => void;
+  onLogout?: () => void;
 }
 
 const deploymentSteps = [
@@ -59,6 +61,7 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
   existingDeployment,
   onComplete,
   onBack,
+  onLogout,
 }) => {
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState<DeploymentProgress | null>(null);
@@ -92,7 +95,6 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
       window.electronAPI.deployment.start({
         ...config,
         projectId: project.projectId,
-        region: 'us-central1',
       });
     }
 
@@ -144,9 +146,11 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
 
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
-      <Typography variant="h4" component="h2" gutterBottom>
-        Deployment Progress
-      </Typography>
+      <TopBar 
+        title="Deployment Progress" 
+        showLogout={!!onLogout}
+        onLogout={onLogout}
+      />
       
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>

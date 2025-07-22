@@ -150,45 +150,237 @@ export class FirebaseAppDeployer {
   
   private async getWebAppConfig(webAppName: string): Promise<FirebaseConfig> {
     console.log(`Getting config for web app: ${webAppName}`);
-    const { data: configData } = await this.firebasemanagement.projects.webApps.getConfig({
-      name: webAppName,
-      auth: this.auth
-    });
     
-    console.log('Raw Firebase config response:', JSON.stringify(configData, null, 2));
+    try {
+      // First get the web app details to ensure it's fully created
+      const { data: webApp } = await this.firebasemanagement.projects.webApps.get({
+        name: webAppName,
+        auth: this.auth
+      });
+      
+      console.log('Web app details:', JSON.stringify(webApp, null, 2));
+      
+      // Now get the config
+      const { data: response } = await this.firebasemanagement.projects.webApps.getConfig({
+        name: webAppName,
+        auth: this.auth
+      });
+      
+      console.log('Raw Firebase config response:', JSON.stringify(response, null, 2));
+      
+      // The config data is returned directly from the API
+      let configData: any = response;
+      
+      // Check if we have the config data in the expected format
+      console.log('Config data type:', typeof configData);
+      console.log('Config data keys:', configData ? Object.keys(configData) : 'null');
+      
+      // Extract project ID from web app name (format: projects/{projectId}/webApps/{appId})
+      const parts = webAppName.split('/');
+      const projectId = parts[1];
+      const appIdFull = webApp.appId || parts[3];
+      
+      // The API key might need to be fetched from the project's API keys
+      let apiKey = configData.apiKey || '';
+      
+      if (!apiKey && projectId) {
+        // Try to get the API key from the Firebase project settings
+        console.log('API key not in config, attempting to retrieve from project settings...');
+        
+        // Get the project number which is often the messagingSenderId
+        const messagingSenderId = webApp.projectId ? 
+          (await this.getProjectNumber(projectId)) : '';
+        
+        // Firebase web apps typically get an auto-generated Browser API key
+        // We'll need to construct the config manually if the API doesn't return it
+        const authDomain = configData.authDomain || `${projectId}.firebaseapp.com`;
+        const storageBucket = configData.storageBucket || `${projectId}.firebasestorage.app`;
+        
+        const finalConfig = {
+          apiKey: apiKey || await this.getProjectApiKey(projectId),
+          authDomain: authDomain,
+          projectId: configData.projectId || projectId || '',
+          storageBucket: storageBucket,
+          messagingSenderId: configData.messagingSenderId || messagingSenderId || '',
+          appId: configData.appId || appIdFull || '',
+          measurementId: configData.measurementId || undefined
+        };
+        
+        console.log('Final Firebase config:', JSON.stringify(finalConfig, null, 2));
+        
+        return finalConfig;
+      }
+      
+      // Use the config as-is if we have an API key
+      const finalConfig = {
+        apiKey: apiKey,
+        authDomain: configData.authDomain || `${projectId}.firebaseapp.com`,
+        projectId: configData.projectId || projectId || '',
+        storageBucket: configData.storageBucket || `${projectId}.firebasestorage.app`,
+        messagingSenderId: configData.messagingSenderId || '',
+        appId: configData.appId || appIdFull || '',
+        measurementId: configData.measurementId || undefined
+      };
+      
+      console.log('Final Firebase config:', JSON.stringify(finalConfig, null, 2));
+      
+      return finalConfig;
+    } catch (error: any) {
+      console.error('Failed to get web app config:', error);
+      throw error;
+    }
+  }
+  
+  private async getProjectNumber(projectId: string): Promise<string> {
+    try {
+      const cloudresourcemanager = google.cloudresourcemanager('v1');
+      const { data: project } = await cloudresourcemanager.projects.get({
+        projectId: projectId,
+        auth: this.auth
+      });
+      
+      return project.projectNumber || '';
+    } catch (error) {
+      console.error('Failed to get project number:', error);
+      return '';
+    }
+  }
+  
+  private async getProjectApiKey(projectId: string): Promise<string> {
+    try {
+      // Firebase automatically creates API keys for web apps
+      // We need to list the API keys and find the one for Firebase
+      const apikeys = google.apikeys('v2');
+      
+      const { data } = await apikeys.projects.locations.keys.list({
+        parent: `projects/${projectId}/locations/global`,
+        auth: this.auth
+      });
+      
+      console.log('Available API keys:', JSON.stringify(data.keys?.map(k => ({
+        name: k.name,
+        displayName: k.displayName,
+        restrictions: k.restrictions
+      })), null, 2));
+      
+      // Look for a Firebase or Browser key
+      const firebaseKey = data.keys?.find(key => 
+        key.displayName?.toLowerCase().includes('firebase') ||
+        key.displayName?.toLowerCase().includes('browser') ||
+        key.displayName?.toLowerCase().includes('web') ||
+        key.restrictions?.browserKeyRestrictions !== undefined
+      );
+      
+      if (firebaseKey && firebaseKey.name) {
+        // Get the full key details including the keyString
+        const { data: keyDetails } = await apikeys.projects.locations.keys.get({
+          name: firebaseKey.name,
+          auth: this.auth
+        });
+        
+        console.log('Firebase API key details:', JSON.stringify({
+          name: keyDetails.name,
+          displayName: keyDetails.displayName,
+          keyString: keyDetails.keyString ? 'REDACTED' : 'MISSING'
+        }, null, 2));
+        
+        return keyDetails.keyString || '';
+      }
+      
+      // If no Firebase-specific key found, look for any browser key
+      const anyBrowserKey = data.keys?.find(key => 
+        key.restrictions?.browserKeyRestrictions !== undefined
+      );
+      
+      if (anyBrowserKey && anyBrowserKey.name) {
+        const { data: keyDetails } = await apikeys.projects.locations.keys.get({
+          name: anyBrowserKey.name,
+          auth: this.auth
+        });
+        
+        return keyDetails.keyString || '';
+      }
+      
+      console.warn('No suitable API key found for Firebase web app');
+      
+      // Try to create a new API key for Firebase
+      console.log('Creating new API key for Firebase web app...');
+      return await this.createFirebaseApiKey(projectId);
+    } catch (error: any) {
+      console.error('Failed to get project API key:', error);
+      if (error.code === 403) {
+        console.warn('API Keys API might not be enabled. The web app will work but without an API key.');
+      }
+      return '';
+    }
+  }
+  
+  private async createFirebaseApiKey(projectId: string): Promise<string> {
+    try {
+      const apikeys = google.apikeys('v2');
+      
+      // Create a new API key for Firebase
+      const { data: operation } = await apikeys.projects.locations.keys.create({
+        parent: `projects/${projectId}/locations/global`,
+        keyId: `firebase-web-api-key-${Date.now()}`,
+        auth: this.auth,
+        requestBody: {
+          displayName: 'Firebase Web API Key',
+          restrictions: {
+            browserKeyRestrictions: {
+              allowedReferrers: ['*'] // You might want to restrict this in production
+            }
+          }
+        }
+      });
+      
+      if (!operation.name) {
+        throw new Error('Failed to create API key - no operation returned');
+      }
+      
+      // Wait for the operation to complete
+      console.log('Waiting for API key creation to complete...');
+      const result = await this.waitForApiKeyOperation(operation.name);
+      
+      if (result.response && result.response.keyString) {
+        console.log('Successfully created Firebase API key');
+        return result.response.keyString;
+      }
+      
+      throw new Error('Failed to get API key from operation result');
+    } catch (error: any) {
+      console.error('Failed to create Firebase API key:', error);
+      return '';
+    }
+  }
+  
+  private async waitForApiKeyOperation(operationName: string): Promise<any> {
+    const apikeys = google.apikeys('v2');
+    let done = false;
+    let retries = 0;
+    const maxRetries = 30;
     
-    // The config data is returned directly in the response
-    if (!configData) {
-      throw new Error('No config data returned');
+    while (!done && retries < maxRetries) {
+      const { data: operation } = await apikeys.operations.get({
+        name: operationName,
+        auth: this.auth
+      });
+      
+      if (operation.done) {
+        done = true;
+        if (operation.error) {
+          throw new Error(`Operation failed: ${JSON.stringify(operation.error)}`);
+        }
+        return operation;
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        retries++;
+      }
     }
     
-    // Extract project ID from web app name (format: projects/{projectId}/webApps/{appId})
-    const parts = webAppName.split('/');
-    const projectId = parts[1];
-    const appIdFull = parts[3];
-    
-    // Extract sender ID from app ID (format: 1:{senderId}:web:{hash})
-    const appIdParts = appIdFull?.split(':') || [];
-    const messagingSenderId = appIdParts[1] || '';
-    
-    // Firebase API returns config at top level
-    // Construct missing fields based on project ID
-    const authDomain = configData.authDomain || `${projectId}.firebaseapp.com`;
-    const storageBucket = configData.storageBucket || `${projectId}.firebasestorage.app`;
-    
-    const finalConfig = {
-      apiKey: configData.apiKey || '',
-      authDomain: authDomain,
-      projectId: configData.projectId || projectId || '',
-      storageBucket: storageBucket,
-      messagingSenderId: configData.messagingSenderId || messagingSenderId || '',
-      appId: configData.appId || appIdFull || '',
-      measurementId: configData.measurementId || undefined
-    };
-    
-    console.log('Final Firebase config:', JSON.stringify(finalConfig, null, 2));
-    
-    return finalConfig;
+    if (!done) {
+      throw new Error('API key creation operation timed out');
+    }
   }
   
   private async waitForOperation(operationName: string): Promise<any> {
