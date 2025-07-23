@@ -788,7 +788,7 @@ export class DeploymentEngine extends EventEmitter {
       currentStep: 'setupFirestore',
       stepProgress: 0,
       totalProgress: 87.5,
-      message: 'Setting up Firestore database...',
+      message: 'Setting up Firestore...',
     });
 
     // Deploy security rules for both Firestore and Storage
@@ -806,7 +806,7 @@ export class DeploymentEngine extends EventEmitter {
       currentStep: 'setupFirestore',
       stepProgress: 100,
       totalProgress: 87.5,
-      message: 'Firestore setup complete with security rules',
+      message: 'Firestore setup complete',
     });
   }
 
@@ -823,10 +823,20 @@ export class DeploymentEngine extends EventEmitter {
       stepProgress: 0,
       totalProgress: 87.5,
       message: 'Creating Firebase web app...',
+      subStep: 'create-app',
     });
 
     const appName = `anava-${state.configuration.namePrefix}`;
     const displayName = `Anava Camera Auth - ${state.configuration.namePrefix}`;
+    
+    // Step 1: Create the web app
+    this.emitProgress({
+      currentStep: 'createFirebaseWebApp',
+      stepProgress: 10,
+      totalProgress: 90,
+      message: 'Creating web application...',
+      subStep: 'create-app',
+    });
     
     const firebaseConfig = await this.firebaseAppDeployer.createFirebaseWebApp(
       state.projectId,
@@ -837,21 +847,14 @@ export class DeploymentEngine extends EventEmitter {
     this.stateManager.updateStepResource('createFirebaseWebApp', 'config', firebaseConfig);
     this.stateManager.updateStepResource('createFirebaseWebApp', 'appName', appName);
 
-    // Enable Firebase Authentication
-    this.emitProgress({
-      currentStep: 'createFirebaseWebApp',
-      stepProgress: 50,
-      totalProgress: 93.75,
-      message: 'Enabling Firebase Authentication...',
-    });
-
-    await this.firebaseAppDeployer.enableAuthentication(state.projectId);
-
+    // Firebase Authentication must be enabled manually in Firebase Console
+    
     this.emitProgress({
       currentStep: 'createFirebaseWebApp',
       stepProgress: 100,
       totalProgress: 100,
-      message: 'Firebase web app created and authentication enabled',
+      message: 'Firebase web app created',
+      subStep: 'create-app',
     });
   }
 

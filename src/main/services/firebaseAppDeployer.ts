@@ -52,6 +52,10 @@ export class FirebaseAppDeployer {
       const config = await this.getWebAppConfig(webApp.name!);
       console.log('Firebase config retrieved successfully');
       
+      // Note: Firebase Storage and Authentication must be initialized manually
+      // in the Firebase Console for the first time
+      console.log('⚠️  Note: Firebase Storage and Authentication require manual initialization in Firebase Console');
+      
       return config;
     } catch (error: any) {
       console.error('Failed to create Firebase web app:', error);
@@ -350,6 +354,209 @@ export class FirebaseAppDeployer {
     
     if (!done) {
       throw new Error('Firebase operation timed out after 5 minutes');
+    }
+  }
+
+  async initializeFirebaseStorage(projectId: string): Promise<void> {
+    console.log('=== Initializing Firebase Storage ===');
+    
+    try {
+      // Step 1: Create the default bucket if it doesn't exist
+      const storage = google.storage({ version: 'v1', auth: this.auth });
+      const defaultBucketName = `${projectId}.appspot.com`;
+      
+      try {
+        await storage.buckets.get({
+          bucket: defaultBucketName,
+          auth: this.auth
+        });
+        console.log(`Default storage bucket ${defaultBucketName} already exists`);
+      } catch (error: any) {
+        if (error.code === 404) {
+          console.log(`Creating default storage bucket ${defaultBucketName}...`);
+          await storage.buckets.insert({
+            project: projectId,
+            requestBody: {
+              name: defaultBucketName,
+              location: 'US',
+              storageClass: 'STANDARD'
+            },
+            auth: this.auth
+          });
+          console.log('Default storage bucket created');
+          
+          // Wait for bucket to be ready
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        } else {
+          throw error;
+        }
+      }
+      
+      // Step 2: Get project number for service account
+      const projectNumber = await this.getProjectNumber(projectId);
+      
+      // Step 3: Grant Firebase Storage service account admin permissions
+      const firebaseStorageServiceAccount = `service-${projectNumber}@gcp-sa-firebasestorage.iam.gserviceaccount.com`;
+      console.log(`Granting permissions to Firebase Storage service account: ${firebaseStorageServiceAccount}`);
+      
+      const cloudResourceManager = google.cloudresourcemanager({ version: 'v1', auth: this.auth });
+      const { data: policy } = await cloudResourceManager.projects.getIamPolicy({
+        resource: projectId,
+        requestBody: {}
+      });
+      
+      // Add Firebase Storage Admin role
+      const role = 'roles/firebase.storageAdmin';
+      const member = `serviceAccount:${firebaseStorageServiceAccount}`;
+      
+      let binding = policy.bindings?.find(b => b.role === role);
+      if (!binding) {
+        binding = { role, members: [] };
+        policy.bindings = policy.bindings || [];
+        policy.bindings.push(binding);
+      }
+      
+      if (!binding.members?.includes(member)) {
+        binding.members = binding.members || [];
+        binding.members.push(member);
+        
+        await cloudResourceManager.projects.setIamPolicy({
+          resource: projectId,
+          requestBody: { policy }
+        });
+        console.log('Granted Firebase Storage Admin role');
+      }
+      
+      // Step 4: Finalize the default bucket with Firebase
+      console.log('Finalizing Firebase Storage initialization...');
+      const finalizeUrl = `https://firebase.googleapis.com/v1beta1/projects/${projectId}/defaultBucket:finalize`;
+      
+      const accessToken = await this.auth.getAccessToken();
+      const response = await fetch(finalizeUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken.token}`,
+          'Content-Type': 'application/json',
+          'x-goog-user-project': projectId
+        },
+        body: JSON.stringify({})
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`Firebase Storage finalization returned: ${response.status} ${errorText}`);
+        // Don't throw error as it might already be initialized
+      } else {
+        console.log('Firebase Storage initialized successfully!');
+      }
+      
+    } catch (error: any) {
+      console.error('Failed to initialize Firebase Storage:', error);
+      console.log('⚠️  Firebase Storage may need to be initialized manually in the Firebase Console');
+      // Don't throw - allow deployment to continue
+    }
+  }
+
+  async enableAuthentication(projectId: string): Promise<void> {
+    console.log('=== Enabling Firebase Authentication ===');
+    
+    try {
+      // Enable Email/Password authentication provider
+      const configUrl = `https://identitytoolkit.googleapis.com/admin/v2/projects/${projectId}/config`;
+      
+      // First get current config
+      const accessToken = await this.auth.getAccessToken();
+      const getResponse = await fetch(configUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken.token}`,
+          'x-goog-user-project': projectId
+        }
+      });
+      
+      if (!getResponse.ok) {
+        const errorText = await getResponse.text();
+        console.error(`Failed to get auth config: ${getResponse.status} ${errorText}`);
+        throw new Error('Failed to get authentication config');
+      }
+      
+      const currentConfig = await getResponse.json();
+      console.log('Current auth config:', JSON.stringify(currentConfig, null, 2));
+      
+      // Check if email/password is already enabled
+      const signInProviders = currentConfig.signIn?.email || {};
+      if (signInProviders.enabled) {
+        console.log('Email/Password authentication is already enabled');
+        return;
+      }
+      
+      // Update config to enable email/password
+      const updateMask = 'signIn.email.enabled,signIn.email.passwordRequired';
+      const patchUrl = `${configUrl}?updateMask=${encodeURIComponent(updateMask)}`;
+      
+      const patchResponse = await fetch(patchUrl, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken.token}`,
+          'Content-Type': 'application/json',
+          'x-goog-user-project': projectId
+        },
+        body: JSON.stringify({
+          signIn: {
+            email: {
+              enabled: true,
+              passwordRequired: true
+            }
+          }
+        })
+      });
+      
+      if (!patchResponse.ok) {
+        const errorText = await patchResponse.text();
+        console.error(`Failed to enable authentication: ${patchResponse.status} ${errorText}`);
+        throw new Error('Failed to enable email/password authentication');
+      }
+      
+      console.log('✅ Email/Password authentication enabled successfully!');
+      
+    } catch (error: any) {
+      console.error('Failed to enable authentication:', error);
+      throw error;
+    }
+  }
+
+  async createAdminUser(_projectId: string, email: string, password: string, apiKey: string): Promise<string> {
+    console.log(`=== Creating admin user: ${email} ===`);
+    
+    try {
+      const createUserUrl = 'https://identitytoolkit.googleapis.com/v1/accounts:signUp';
+      
+      const response = await fetch(`${createUserUrl}?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          returnSecureToken: true
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Failed to create user:', errorData);
+        throw new Error(errorData.error?.message || 'Failed to create user');
+      }
+      
+      const userData = await response.json();
+      console.log(`✅ Admin user created successfully with UID: ${userData.localId}`);
+      
+      return userData.localId;
+      
+    } catch (error: any) {
+      console.error('Failed to create admin user:', error);
+      throw error;
     }
   }
 }

@@ -20,9 +20,11 @@ def device_authenticator(request):
         if not device_id: 
             return ("Bad Request: 'device_id' missing", 400)
         print(f"DeviceAuthFn: Req for device_id: {device_id}")
+        # The service account used by this function needs
+        # "Service Account Token Creator" role on ITSELF
         custom_token = auth.create_custom_token(uid=str(device_id)).decode('utf-8')
         print(f"DeviceAuthFn: Firebase Custom Token created for {device_id}")
         return ({"firebase_custom_token": custom_token}, 200)
     except Exception as e: 
-        print(f"DeviceAuthFn ERROR: {e}")
+        print(f"DeviceAuthFn ERROR for {device_id if 'device_id' in locals() else 'unknown'}: {e}")
         return ("Token gen error", 500)

@@ -226,3 +226,40 @@ ipcMain.on('deployment:subscribe', (event) => {
     event.sender.send('deployment:log', message);
   });
 });
+
+ipcMain.handle('firebase:create-user', async (_, params: { 
+  projectId: string; 
+  email: string; 
+  password: string; 
+  apiKey: string 
+}) => {
+  try {
+    const { FirebaseAppDeployer } = await import('./services/firebaseAppDeployer');
+    
+    if (!gcpOAuthService.oauth2Client) {
+      throw new Error('Not authenticated');
+    }
+    
+    const firebaseDeployer = new FirebaseAppDeployer(gcpOAuthService.oauth2Client);
+    
+    const userId = await firebaseDeployer.createAdminUser(
+      params.projectId,
+      params.email,
+      params.password,
+      params.apiKey
+    );
+    
+    return { success: true, userId };
+  } catch (error: any) {
+    logger.error('Failed to create Firebase user:', error);
+    return { 
+      success: false, 
+      error: error.message || 'Failed to create user' 
+    };
+  }
+});
+
+ipcMain.handle('open-external', async (_, url: string) => {
+  const { shell } = await import('electron');
+  await shell.openExternal(url);
+});

@@ -32,4 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   app: {
     getVersion: () => ipcRenderer.invoke('app:get-version'),
   },
+  createFirebaseUser: (params: { projectId: string; email: string; password: string; apiKey: string }) => 
+    ipcRenderer.invoke('firebase:create-user', params),
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 });

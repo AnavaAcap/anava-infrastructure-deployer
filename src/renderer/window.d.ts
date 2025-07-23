@@ -24,6 +24,13 @@ declare global {
       app: {
         getVersion: () => Promise<string>;
       };
+      createFirebaseUser: (params: {
+        projectId: string;
+        email: string;
+        password: string;
+        apiKey: string;
+      }) => Promise<{ success: boolean; userId?: string; error?: string }>;
+      openExternal: (url: string) => Promise<void>;
     };
   }
 }

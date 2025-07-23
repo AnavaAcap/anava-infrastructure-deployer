@@ -91,110 +91,174 @@ export class GCPApiServiceManager {
         }
       });
 
-      return data.email || email;
+      const createdEmail = data.email || email;
+      
+      // Verify the service account exists before returning (handle eventual consistency)
+      await this.verifyServiceAccountExists(projectId, createdEmail);
+      
+      return createdEmail;
     } catch (error: any) {
       throw new Error(`Failed to create service account ${accountId}: ${error.message}`);
     }
   }
 
-  async assignIamRole(projectId: string, memberEmail: string, role: string): Promise<void> {
+  async verifyServiceAccountExists(projectId: string, email: string, maxRetries: number = 10): Promise<void> {
+    const auth = await this.getAuthClient();
+    const iam = google.iam({ version: 'v1', auth });
+    
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        await iam.projects.serviceAccounts.get({
+          name: `projects/${projectId}/serviceAccounts/${email}`
+        });
+        console.log(`Service account ${email} verified as existing`);
+        return; // Success, account exists
+      } catch (error: any) {
+        if (error.code === 404 && i < maxRetries - 1) {
+          console.log(`Service account ${email} not yet available, waiting... (${i + 1}/${maxRetries})`);
+          await this.sleep(2000); // 2 second delay
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error(`Service account ${email} was not available after ${maxRetries} attempts`);
+  }
+
+  async assignIamRole(projectId: string, memberEmail: string, role: string, maxRetries: number = 5): Promise<void> {
     if (!memberEmail) {
       throw new Error(`Cannot assign IAM role ${role}: memberEmail is undefined or null`);
     }
     
-    try {
-      const auth = await this.getAuthClient();
-      const cloudResourceManager = google.cloudresourcemanager({
-        version: 'v1',
-        auth
-      });
+    const auth = await this.getAuthClient();
+    const cloudResourceManager = google.cloudresourcemanager({
+      version: 'v1',
+      auth
+    });
 
-      const member = memberEmail.includes('@') ? `serviceAccount:${memberEmail}` : memberEmail;
+    const member = memberEmail.includes('@') ? `serviceAccount:${memberEmail}` : memberEmail;
 
-      // Get current IAM policy
-      const { data: policy } = await cloudResourceManager.projects.getIamPolicy({
-        resource: projectId,
-        requestBody: {}
-      });
-
-      // Check if binding already exists
-      const binding = policy.bindings?.find(b => b.role === role);
-      if (binding && binding.members?.includes(member)) {
-        console.log(`IAM binding already exists for ${member} with role ${role}`);
-        return;
-      }
-
-      // Add new binding
-      if (binding) {
-        binding.members = binding.members || [];
-        binding.members.push(member);
-      } else {
-        policy.bindings = policy.bindings || [];
-        policy.bindings.push({
-          role,
-          members: [member]
+    // Retry logic for eventual consistency
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Get current IAM policy
+        const { data: policy } = await cloudResourceManager.projects.getIamPolicy({
+          resource: projectId,
+          requestBody: {}
         });
-      }
 
-      // Update IAM policy
-      await cloudResourceManager.projects.setIamPolicy({
-        resource: projectId,
-        requestBody: {
-          policy
+        // Check if binding already exists
+        const binding = policy.bindings?.find(b => b.role === role);
+        if (binding && binding.members?.includes(member)) {
+          console.log(`IAM binding already exists for ${member} with role ${role}`);
+          return;
         }
-      });
-    } catch (error: any) {
-      throw new Error(`Failed to assign IAM role ${role} to ${memberEmail}: ${error.message}`);
+
+        // Add new binding
+        if (binding) {
+          binding.members = binding.members || [];
+          binding.members.push(member);
+        } else {
+          policy.bindings = policy.bindings || [];
+          policy.bindings.push({
+            role,
+            members: [member]
+          });
+        }
+
+        // Update IAM policy
+        await cloudResourceManager.projects.setIamPolicy({
+          resource: projectId,
+          requestBody: {
+            policy
+          }
+        });
+        
+        console.log(`Successfully assigned IAM role ${role} to ${memberEmail}`);
+        return; // Success
+        
+      } catch (error: any) {
+        const isServiceAccountNotExist = error.message?.includes('does not exist') || 
+                                       error.message?.includes('not found') ||
+                                       error.code === 404;
+        
+        if (isServiceAccountNotExist && attempt < maxRetries - 1) {
+          const waitTime = Math.pow(2, attempt) * 2000; // Exponential backoff: 2s, 4s, 8s, 16s
+          console.log(`Service account not yet available for IAM role assignment, retrying in ${waitTime/1000}s... (${attempt + 1}/${maxRetries})`);
+          await this.sleep(waitTime);
+          continue;
+        }
+        
+        // Final attempt failed or non-retryable error
+        throw new Error(`Failed to assign IAM role ${role} to ${memberEmail}: ${error.message}`);
+      }
     }
   }
 
-  async assignServiceAccountUser(projectId: string, serviceAccountEmail: string, memberEmail: string): Promise<void> {
-    try {
-      const auth = await this.getAuthClient();
-      const iam = google.iam({
-        version: 'v1',
-        auth
-      });
+  async assignServiceAccountUser(projectId: string, serviceAccountEmail: string, memberEmail: string, maxRetries: number = 5): Promise<void> {
+    const auth = await this.getAuthClient();
+    const iam = google.iam({
+      version: 'v1',
+      auth
+    });
 
-      // Get current IAM policy for the service account
-      const resource = `projects/${projectId}/serviceAccounts/${serviceAccountEmail}`;
-      const { data: policy } = await iam.projects.serviceAccounts.getIamPolicy({
-        resource
-      });
+    const resource = `projects/${projectId}/serviceAccounts/${serviceAccountEmail}`;
+    const role = 'roles/iam.serviceAccountUser';
+    const member = `serviceAccount:${memberEmail}`;
 
-      const role = 'roles/iam.serviceAccountUser';
-      const member = `serviceAccount:${memberEmail}`;
-
-      // Check if binding already exists
-      const binding = policy.bindings?.find(b => b.role === role);
-      if (binding && binding.members?.includes(member)) {
-        console.log(`Service account user binding already exists for ${memberEmail} on ${serviceAccountEmail}`);
-        return;
-      }
-
-      // Add new binding
-      if (binding) {
-        binding.members = binding.members || [];
-        binding.members.push(member);
-      } else {
-        policy.bindings = policy.bindings || [];
-        policy.bindings.push({
-          role,
-          members: [member]
+    // Retry logic for eventual consistency
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Get current IAM policy for the service account
+        const { data: policy } = await iam.projects.serviceAccounts.getIamPolicy({
+          resource
         });
-      }
 
-      // Update IAM policy
-      await iam.projects.serviceAccounts.setIamPolicy({
-        resource,
-        requestBody: {
-          policy
+        // Check if binding already exists
+        const binding = policy.bindings?.find(b => b.role === role);
+        if (binding && binding.members?.includes(member)) {
+          console.log(`Service account user binding already exists for ${memberEmail} on ${serviceAccountEmail}`);
+          return;
         }
-      });
 
-      console.log(`Granted ${memberEmail} permission to act as ${serviceAccountEmail}`);
-    } catch (error: any) {
-      throw new Error(`Failed to assign service account user permission: ${error.message}`);
+        // Add new binding
+        if (binding) {
+          binding.members = binding.members || [];
+          binding.members.push(member);
+        } else {
+          policy.bindings = policy.bindings || [];
+          policy.bindings.push({
+            role,
+            members: [member]
+          });
+        }
+
+        // Update IAM policy
+        await iam.projects.serviceAccounts.setIamPolicy({
+          resource,
+          requestBody: {
+            policy
+          }
+        });
+
+        console.log(`Granted ${memberEmail} permission to act as ${serviceAccountEmail}`);
+        return; // Success
+        
+      } catch (error: any) {
+        const isServiceAccountNotExist = error.message?.includes('does not exist') || 
+                                       error.message?.includes('not found') ||
+                                       error.code === 404;
+        
+        if (isServiceAccountNotExist && attempt < maxRetries - 1) {
+          const waitTime = Math.pow(2, attempt) * 2000; // Exponential backoff: 2s, 4s, 8s, 16s
+          console.log(`Service account not yet available for user permission, retrying in ${waitTime/1000}s... (${attempt + 1}/${maxRetries})`);
+          await this.sleep(waitTime);
+          continue;
+        }
+        
+        // Final attempt failed or non-retryable error
+        throw new Error(`Failed to assign service account user permission: ${error.message}`);
+      }
     }
   }
 
