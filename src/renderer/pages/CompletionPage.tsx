@@ -95,7 +95,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     );
   }
 
-  const steps = ['Deployment Complete', 'Firebase Setup'];
+  const steps = ['Deployment Complete', 'Firebase Setup', 'Ready to Export'];
 
   const handleChecklistComplete = () => {
     setActiveStep(2); // Move to final step
@@ -242,39 +242,15 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
         )}
       </List>
       
-      <Box sx={{ bgcolor: 'grey.50', p: 3, borderRadius: 2, mb: 4 }}>
-        <Typography variant="h6" gutterBottom>
-          Next Steps:
-        </Typography>
-        <List dense>
-          <ListItem>
-            <ListItemText primary="1. Configure cameras with the API Gateway URL" />
-          </ListItem>
-          <ListItem>
-            <ListItemText primary="2. Set API key in ACAP application settings" />
-          </ListItem>
-          <ListItem>
-            <ListItemText primary="3. Test authentication flow with a camera" />
-          </ListItem>
-        </List>
+      <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
+        <Button
+          variant="contained"
+          size="large"
+          onClick={() => setActiveStep(1)}
+        >
+          Continue to Firebase Setup
+        </Button>
       </Box>
-      
-          <Stack direction="row" spacing={2} justifyContent="center">
-            <Button
-              variant="outlined"
-              startIcon={<Download />}
-              onClick={handleExportConfig}
-            >
-              Export Config
-            </Button>
-            
-            <Button
-              variant="contained"
-              onClick={() => setActiveStep(1)}
-            >
-              Continue to Firebase Setup
-            </Button>
-          </Stack>
         </>
       )}
 
@@ -304,31 +280,64 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
         <Box textAlign="center">
           <CheckCircle color="success" sx={{ fontSize: 64, mb: 2 }} />
           <Typography variant="h5" gutterBottom>
-            Setup Complete!
+            Setup Complete! 🎉
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
             Your Anava Vision authentication infrastructure is fully configured and ready to use.
           </Typography>
+          
+          <Paper elevation={1} sx={{ p: 3, mb: 4, maxWidth: 600, mx: 'auto', textAlign: 'left' }}>
+            <Typography variant="h6" gutterBottom>
+              Configuration Details
+            </Typography>
+            <List dense>
+              <ListItem>
+                <ListItemText 
+                  primary="API Gateway URL"
+                  secondary={result.apiGatewayUrl}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemText 
+                  primary="Firebase Project"
+                  secondary={result.firebaseConfig?.projectId || 'N/A'}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemText 
+                  primary="Authentication"
+                  secondary="Email/Password enabled with admin user created"
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemText 
+                  primary="Storage"
+                  secondary="Firebase Storage initialized"
+                />
+              </ListItem>
+            </List>
+          </Paper>
+          
+          <Typography variant="h6" gutterBottom>
+            Next Steps for Camera Configuration
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Use the exported configuration file to set up your Anava cameras:
+          </Typography>
+          
           <Stack direction="row" spacing={2} justifyContent="center">
             <Button
-              variant="outlined"
-              startIcon={<ArrowBack />}
-              onClick={() => setActiveStep(0)}
-            >
-              Back to Summary
-            </Button>
-            <Button
-              variant="outlined"
+              variant="contained"
               startIcon={<Download />}
               onClick={handleExportConfig}
+              size="large"
             >
-              Export Config
+              Export Configuration
             </Button>
             <Button
-              variant="contained"
+              variant="outlined"
               startIcon={<Add />}
               onClick={onNewDeployment}
-              size="large"
             >
               New Deployment
             </Button>

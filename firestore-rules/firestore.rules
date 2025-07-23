@@ -1,0 +1,56 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Common function to check if the request has valid authentication
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    // Function to check if the timestamp is valid (not too far in the future)
+    function isValidTimestamp(ts) {
+      return ts is timestamp &&
+             ts <= request.time + duration.value(5, 'm');
+    }
+    // Rule for the top-level 'devices' collection
+    match /devices {
+      // For now, keep 'if true' for debugging the session/event reads.
+      // IMPORTANT: Change this back to 'if isAuthenticated();' later for security.
+      allow list: if true;
+    }
+    // Match individual device documents
+    match /devices/{deviceId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() &&
+                          request.resource.data.deviceId == deviceId &&
+                          isValidTimestamp(request.resource.data.updatedAt);
+      // Match sessions subcollection
+      match /sessions/{sessionId} { // Path: /devices/{deviceId}/sessions/{sessionId}
+        allow read: if isAuthenticated(); // Allows LISTING sessions and GETTING individual session docs
+        allow write: if isAuthenticated() &&
+                            request.resource.data.deviceId == deviceId &&
+                            request.resource.data.status is string && // Ensure 'status' exists if used in writes
+                            isValidTimestamp(request.resource.data.updatedAt); // Ensure 'updatedAt' exists
+        // This 'events' subcollection is UNDER 'sessions/{sessionId}'
+        match /events/{eventId} { // Path: /devices/{deviceId}/sessions/{sessionId}/events/{eventId}
+          allow read: if isAuthenticated(); // Allows LISTING events in this session and GETTING individual event docs
+          allow write: if isAuthenticated() &&
+                               request.resource.data.deviceId == deviceId && // Good check
+                               request.resource.data.sessionId == sessionId && // Also a good check
+                               isValidTimestamp(request.resource.data.updatedAt); // Or your relevant event timestamp
+        }
+      }
+    }
+    // Add this rule for collectionGroup queries on 'events'
+    match /{path=**}/events/{eventId} {
+      allow read: if isAuthenticated();
+    }
+    // Allow read access to prompts collection for authenticated users
+    match /prompts/{document=**} {
+      allow read: if isAuthenticated();
+    }
+    // Deny access to all other paths by default
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

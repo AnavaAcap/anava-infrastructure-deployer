@@ -154,9 +154,67 @@ export class ApiGatewayDeployer {
     progressCallback?.('api-config', 10, 'Reading API configuration template...');
     
     let configContent = fs.readFileSync(configPath, 'utf8');
-    configContent = configContent
-      .replace('${DEVICE_AUTH_URL}', deviceAuthUrl)
-      .replace('${TVM_URL}', tvmUrl);
+    
+    // Log initial state
+    log(`Config template has ${(configContent.match(/\${DEVICE_AUTH_URL}/g) || []).length} instances of \${DEVICE_AUTH_URL}`);
+    log(`Config template has ${(configContent.match(/\${TVM_URL}/g) || []).length} instances of \${TVM_URL}`);
+    
+    // Verify the URLs we're replacing with are valid
+    if (!deviceAuthUrl || !tvmUrl || deviceAuthUrl.includes('undefined') || tvmUrl.includes('undefined')) {
+      log(`ERROR: Invalid URLs provided - deviceAuthUrl: ${deviceAuthUrl}, tvmUrl: ${tvmUrl}`);
+      throw new Error('Invalid Cloud Run URLs provided for API Gateway configuration');
+    }
+    
+    // Replace all occurrences of the placeholders with actual URLs
+    // Use a more robust replacement to ensure all instances are replaced
+    let replacementCount = 0;
+    while (configContent.includes('${DEVICE_AUTH_URL}')) {
+      configContent = configContent.replace('${DEVICE_AUTH_URL}', deviceAuthUrl);
+      replacementCount++;
+      if (replacementCount > 10) {
+        log('ERROR: Too many replacement iterations for DEVICE_AUTH_URL - possible infinite loop');
+        break;
+      }
+    }
+    log(`Replaced ${replacementCount} instances of \${DEVICE_AUTH_URL}`);
+    
+    replacementCount = 0;
+    while (configContent.includes('${TVM_URL}')) {
+      configContent = configContent.replace('${TVM_URL}', tvmUrl);
+      replacementCount++;
+      if (replacementCount > 10) {
+        log('ERROR: Too many replacement iterations for TVM_URL - possible infinite loop');
+        break;
+      }
+    }
+    log(`Replaced ${replacementCount} instances of \${TVM_URL}`);
+    
+    // Debug logging to verify replacements
+    log(`Replaced DEVICE_AUTH_URL with: ${deviceAuthUrl}`);
+    log(`Replaced TVM_URL with: ${tvmUrl}`);
+    
+    // Check if replacements actually happened
+    if (configContent.includes('${DEVICE_AUTH_URL}') || configContent.includes('${TVM_URL}')) {
+      log('WARNING: Placeholders still exist in config after replacement!');
+      log('This will cause 401 errors when the API Gateway tries to call Cloud Functions');
+      
+      // Log first occurrence of remaining placeholders for debugging
+      const lines = configContent.split('\n');
+      lines.forEach((line, index) => {
+        if (line.includes('${DEVICE_AUTH_URL}') || line.includes('${TVM_URL}')) {
+          log(`Line ${index + 1} still has placeholder: ${line.trim()}`);
+        }
+      });
+    } else {
+      log('✓ All placeholders successfully replaced');
+    }
+    
+    // Log a sample of the backend configuration for verification
+    const backendSample = configContent.split('\n').filter(line => 
+      line.includes('address:') || line.includes('jwt_audience:')
+    ).slice(0, 4);
+    log('Backend configuration sample:');
+    backendSample.forEach(line => log(`  ${line.trim()}`));
     
     log(`Successfully read API config (${configContent.length} characters)`);
     progressCallback?.('api-config', 20, 'Processing API configuration...');
@@ -239,6 +297,8 @@ export class ApiGatewayDeployer {
     const configId = `config-${Date.now()}`;
     log(`Creating API config ${configId}...`);
     
+    log(`Creating API config with service account: ${serviceAccount}`);
+    
     const { data: operation } = await this.apigateway.projects.locations.apis.configs.create({
       parent: `projects/${projectId}/locations/global/apis/${apiId}`,
       apiConfigId: configId,
@@ -250,7 +310,7 @@ export class ApiGatewayDeployer {
             contents: Buffer.from(configContent).toString('base64')
           }
         }],
-        gatewayServiceAccount: `projects/${projectId}/serviceAccounts/${serviceAccount}`
+        gatewayServiceAccount: serviceAccount
       },
       auth: this.auth
     });
@@ -413,7 +473,7 @@ export class ApiGatewayDeployer {
     projectId: string,
     apiId: string,
     serviceName: string,
-    corsOrigins: string[],
+    _corsOrigins: string[],
     log: (message: string) => void = console.log
   ): Promise<string> {
     const parent = `projects/${projectId}/locations/global`;
@@ -450,18 +510,15 @@ export class ApiGatewayDeployer {
     log(`Creating new API key ${keyId}...`);
     
     // Create restrictions for the API key
+    // Only restrict to the API service, no browser/referrer restrictions since cameras make direct API calls
     const restrictions: any = {
       apiTargets: [{
         service: serviceName
       }]
     };
-
-    // Add browser restrictions if CORS origins are specified
-    if (corsOrigins && corsOrigins.length > 0) {
-      restrictions.browserKeyRestrictions = {
-        allowedReferrers: corsOrigins.map(origin => `${origin}/*`)
-      };
-    }
+    
+    // Note: We don't add browser restrictions because the Anava cameras make direct API calls,
+    // not browser-based calls. Browser restrictions would cause 403 errors.
 
     const response = await this.apikeys.projects.locations.keys.create({
       parent: parent,

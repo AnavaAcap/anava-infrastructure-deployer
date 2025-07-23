@@ -1,19 +1,14 @@
 import React, { useState } from 'react';
 import {
-  Box,
   Button,
   Typography,
   Paper,
   TextField,
   Stack,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Divider,
 } from '@mui/material';
 import { ArrowBack, RocketLaunch } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig } from '../../types';
@@ -29,22 +24,22 @@ interface ConfigurationPageProps {
 const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComplete, onBack, onLogout }) => {
   const [namePrefix, setNamePrefix] = useState('anava-iot');
   const [region, setRegion] = useState('us-central1');
-  const [firebaseSetup, setFirebaseSetup] = useState<'new' | 'existing'>('new');
-  const [firebaseApiKey, setFirebaseApiKey] = useState('');
-  const [corsOrigins, setCorsOrigins] = useState('');
 
   const handleDeploy = () => {
+    // Automatically configure CORS for Anava cameras
+    const defaultCorsOrigins = [
+      'https://*.axis.com',
+      'https://localhost:*',
+      'http://localhost:*'
+    ];
+
     const config: DeploymentConfig = {
       projectId: project.projectId,
       region: region,
       namePrefix,
-      corsOrigins: corsOrigins.split('\n').filter(origin => origin.trim()),
-      apiKeyRestrictions: corsOrigins.split('\n').filter(origin => origin.trim()),
+      corsOrigins: defaultCorsOrigins,
+      apiKeyRestrictions: defaultCorsOrigins,
     };
-
-    if (firebaseSetup === 'existing' && firebaseApiKey) {
-      config.firebaseApiKey = firebaseApiKey;
-    }
 
     onComplete(config);
   };
@@ -129,52 +124,6 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
             Select the Google Cloud region where your resources will be deployed
           </Typography>
         </FormControl>
-        
-        <Divider />
-        
-        <Box>
-          <Typography variant="h6" gutterBottom>
-            Firebase Setup
-          </Typography>
-          
-          <RadioGroup
-            value={firebaseSetup}
-            onChange={(e) => setFirebaseSetup(e.target.value as 'new' | 'existing')}
-          >
-            <FormControlLabel
-              value="new"
-              control={<Radio />}
-              label="Create new Firebase Web App"
-            />
-            <FormControlLabel
-              value="existing"
-              control={<Radio />}
-              label="Use existing (paste API key)"
-            />
-          </RadioGroup>
-          
-          {firebaseSetup === 'existing' && (
-            <TextField
-              label="Firebase API Key"
-              value={firebaseApiKey}
-              onChange={(e) => setFirebaseApiKey(e.target.value)}
-              fullWidth
-              sx={{ mt: 2 }}
-              placeholder="AIzaSy..."
-            />
-          )}
-        </Box>
-        
-        <TextField
-          label="CORS Origins (one per line)"
-          value={corsOrigins}
-          onChange={(e) => setCorsOrigins(e.target.value)}
-          multiline
-          rows={4}
-          fullWidth
-          placeholder="https://example.com&#10;https://app.example.com"
-          helperText="Allowed origins for API access"
-        />
       </Stack>
       
       <Stack direction="row" spacing={2} justifyContent="space-between" sx={{ mt: 4 }}>
@@ -190,7 +139,7 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
           variant="contained"
           startIcon={<RocketLaunch />}
           onClick={handleDeploy}
-          disabled={!namePrefix || (firebaseSetup === 'existing' && !firebaseApiKey)}
+          disabled={!namePrefix}
           size="large"
         >
           Deploy

@@ -12,8 +12,10 @@ import {
   InputLabel,
   Stack,
   Chip,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
-import { CheckCircle, ArrowBack, ArrowForward } from '@mui/icons-material';
+import { CheckCircle, ArrowBack, ArrowForward, Refresh } from '@mui/icons-material';
 import { AuthStatus, GCPProject } from '../../types';
 import TopBar from '../components/TopBar';
 
@@ -28,6 +30,7 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   const [projects, setProjects] = useState<GCPProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,6 +60,23 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
     const project = projects.find(p => p.projectId === selectedProject);
     if (project) {
       onProjectSelected(project);
+    }
+  };
+
+  const handleRefreshProjects = async () => {
+    try {
+      setRefreshing(true);
+      setError(null);
+      const projectList = await window.electronAPI.auth.getProjects();
+      setProjects(projectList);
+      // Clear selection if the previously selected project is no longer in the list
+      if (selectedProject && !projectList.find(p => p.projectId === selectedProject)) {
+        setSelectedProject('');
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -91,23 +111,43 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
             </Stack>
           </Box>
           
-          <FormControl fullWidth sx={{ mb: 4 }}>
-            <InputLabel>Project</InputLabel>
-            <Select
-              value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              label="Project"
-            >
-              {projects.map((project) => (
-                <MenuItem key={project.projectId} value={project.projectId}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Typography>{project.displayName}</Typography>
-                    <Chip label={project.projectId} size="small" />
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 4 }}>
+            <FormControl fullWidth>
+              <InputLabel>Project</InputLabel>
+              <Select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                label="Project"
+                disabled={refreshing}
+              >
+                {projects.length === 0 ? (
+                  <MenuItem disabled>
+                    <Typography color="text.secondary">
+                      No projects found. Click refresh if you just created one.
+                    </Typography>
+                  </MenuItem>
+                ) : (
+                  projects.map((project) => (
+                    <MenuItem key={project.projectId} value={project.projectId}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Typography>{project.displayName}</Typography>
+                        <Chip label={project.projectId} size="small" />
+                      </Box>
+                    </MenuItem>
+                  ))
+                )}
+              </Select>
+            </FormControl>
+            <Tooltip title="Refresh project list">
+              <IconButton 
+                onClick={handleRefreshProjects}
+                disabled={refreshing}
+                sx={{ mt: 1 }}
+              >
+                {refreshing ? <CircularProgress size={24} /> : <Refresh />}
+              </IconButton>
+            </Tooltip>
+          </Box>
           
           {error && (
             <Alert severity="error" sx={{ mb: 3 }}>
