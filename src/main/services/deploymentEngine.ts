@@ -103,6 +103,24 @@ export class DeploymentEngine extends EventEmitter {
           const apiKey = this.getResourceValue('createApiGateway', 'apiKey');
           const firebaseConfig = this.getResourceValue('createFirebaseWebApp', 'config');
           
+          // Validate critical resources exist
+          const missingResources: string[] = [];
+          if (!gatewayUrl) missingResources.push('API Gateway URL');
+          if (!apiKey) missingResources.push('API Key');
+          if (!firebaseConfig) missingResources.push('Firebase Configuration');
+          if (!firebaseConfig?.apiKey) missingResources.push('Firebase API Key');
+          
+          if (missingResources.length > 0) {
+            const errorMessage = `Deployment completed but critical resources are missing: ${missingResources.join(', ')}`;
+            console.error(`❌ ${errorMessage}`);
+            this.emitComplete({
+              success: false,
+              error: errorMessage,
+              resources: this.getAllResources()
+            });
+            return;
+          }
+          
           console.log('📋 Deployment Summary:');
           console.log(`✅ API Gateway URL: ${gatewayUrl}`);
           console.log(`✅ API Key: ${apiKey}`);
@@ -113,6 +131,7 @@ export class DeploymentEngine extends EventEmitter {
             console.log('\n🔥 Firebase Configuration:');
             console.log(`✅ Auth Domain: ${firebaseConfig.authDomain}`);
             console.log(`✅ App ID: ${firebaseConfig.appId}`);
+            console.log(`✅ API Key: ${firebaseConfig.apiKey ? 'Retrieved successfully' : 'MISSING!'}`);
           }
           
           console.log('\n🔐 All authentication infrastructure deployed!');
@@ -228,6 +247,7 @@ export class DeploymentEngine extends EventEmitter {
       'sts.googleapis.com',
       'apikeys.googleapis.com',
       'identitytoolkit.googleapis.com', // Firebase Auth API
+      'aiplatform.googleapis.com', // Vertex AI API
     ];
 
     const state = this.stateManager.getState()!;
@@ -246,6 +266,16 @@ export class DeploymentEngine extends EventEmitter {
     }
 
     this.stateManager.updateStepResource('enableApis', 'apis', apis);
+    
+    // Wait for critical APIs to be fully ready
+    console.log('Waiting 15 seconds for APIs to be fully ready...');
+    this.emitProgress({
+      currentStep: 'enableApis',
+      stepProgress: 100,
+      totalProgress: 25,
+      message: 'Waiting for APIs to be fully ready...',
+    });
+    await new Promise(resolve => setTimeout(resolve, 15000));
   }
 
   private async stepCreateServiceAccounts(): Promise<void> {
@@ -286,6 +316,44 @@ export class DeploymentEngine extends EventEmitter {
       
       // Save state after each account is created to handle pauses/failures
       this.stateManager.updateStepResource('createServiceAccounts', 'accounts', createdAccounts);
+    }
+    
+    // Add a brief delay for IAM propagation across all Google Cloud regions
+    console.log('Waiting 10 seconds for service accounts to propagate globally...');
+    this.emitProgress({
+      currentStep: 'createServiceAccounts',
+      stepProgress: 100,
+      totalProgress: 37.5,
+      message: 'Waiting for service accounts to propagate...',
+    });
+    await new Promise(resolve => setTimeout(resolve, 10000));
+    
+    // Grant the current user permission to act as the API Gateway invoker service account
+    // This is required for the API Gateway config to be created with the correct service account
+    if (createdAccounts['apigw-invoker-sa']) {
+      console.log('Granting actAs permission for API Gateway service account...');
+      try {
+        // Get current authenticated user
+        const { google } = await import('googleapis');
+        const oauth2 = google.oauth2('v2');
+        const auth = await this.getAuthClient();
+        const { data } = await oauth2.userinfo.get({ auth });
+        const currentUser = data.email;
+        
+        if (currentUser) {
+          console.log(`Granting serviceAccountUser role to ${currentUser} for ${createdAccounts['apigw-invoker-sa']}`);
+          await this.gcpService.assignServiceAccountUser(
+            state.projectId,
+            createdAccounts['apigw-invoker-sa'],
+            `user:${currentUser}`
+          );
+          console.log(`Successfully granted actAs permission to ${currentUser}`);
+        }
+      } catch (error) {
+        console.warn('Could not grant actAs permission automatically:', error);
+        console.warn('The user may need to manually grant this permission for API Gateway to work correctly');
+        // Continue anyway - the deployment might work if the user already has the permission
+      }
     }
   }
 
@@ -379,6 +447,9 @@ export class DeploymentEngine extends EventEmitter {
     
     const roleBindings = [
       { account: 'vertex-ai-sa', role: 'roles/aiplatform.user' },
+      { account: 'vertex-ai-sa', role: 'roles/storage.objectAdmin' },
+      { account: 'vertex-ai-sa', role: 'roles/logging.logWriter' },
+      { account: 'vertex-ai-sa', role: 'roles/datastore.user' },
       { account: 'device-auth-sa', role: 'roles/firebase.sdkAdminServiceAgent' },
       { account: 'device-auth-sa', role: 'roles/firebasedatabase.admin' },
       { account: 'device-auth-sa', role: 'roles/iam.serviceAccountTokenCreator', self: true },
@@ -720,15 +791,22 @@ export class DeploymentEngine extends EventEmitter {
       message: 'Setting up Firestore database...',
     });
 
-    await this.firestoreDeployer.setupFirestore(state.projectId, state.region);
+    // Deploy security rules for both Firestore and Storage
+    const logCallback = (message: string) => {
+      this.emitLog(message);
+      console.log(message);
+    };
+
+    await this.firestoreDeployer.deploySecurityRules(state.projectId, logCallback);
 
     this.stateManager.updateStepResource('setupFirestore', 'databaseId', '(default)');
+    this.stateManager.updateStepResource('setupFirestore', 'rulesDeployed', true);
 
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 100,
       totalProgress: 87.5,
-      message: 'Firestore setup complete',
+      message: 'Firestore setup complete with security rules',
     });
   }
 
@@ -759,11 +837,21 @@ export class DeploymentEngine extends EventEmitter {
     this.stateManager.updateStepResource('createFirebaseWebApp', 'config', firebaseConfig);
     this.stateManager.updateStepResource('createFirebaseWebApp', 'appName', appName);
 
+    // Enable Firebase Authentication
+    this.emitProgress({
+      currentStep: 'createFirebaseWebApp',
+      stepProgress: 50,
+      totalProgress: 93.75,
+      message: 'Enabling Firebase Authentication...',
+    });
+
+    await this.firebaseAppDeployer.enableAuthentication(state.projectId);
+
     this.emitProgress({
       currentStep: 'createFirebaseWebApp',
       stepProgress: 100,
       totalProgress: 100,
-      message: 'Firebase web app created',
+      message: 'Firebase web app created and authentication enabled',
     });
   }
 
