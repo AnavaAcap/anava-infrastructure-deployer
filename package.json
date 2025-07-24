@@ -121,6 +121,7 @@
     "vite": "^7.0.5"
   },
   "dependencies": {
+    "@anava/mcp-server": "file:../anava-mcp-server/anava-mcp-server-1.0.0.tgz",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@google-cloud/api-gateway": "^4.2.0",
@@ -130,6 +131,7 @@
     "@google-cloud/resource-manager": "^6.2.0",
     "@google-cloud/service-usage": "^4.2.0",
     "@google-cloud/storage": "^7.16.0",
+    "@modelcontextprotocol/sdk": "^1.16.0",
     "@mui/icons-material": "^7.2.0",
     "@mui/material": "^7.2.0",
     "archiver": "^7.0.1",

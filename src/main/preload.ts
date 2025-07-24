@@ -58,4 +58,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     download: (release: any) => ipcRenderer.invoke('acap:download', release),
     getLocalPath: (filename: string) => ipcRenderer.invoke('acap:get-local-path', filename),
   },
+  // Vision MCP APIs
+  vision: {
+    loadConnections: () => ipcRenderer.invoke('vision:loadConnections'),
+    saveConnections: (connections: any[]) => ipcRenderer.invoke('vision:saveConnections', connections),
+    startMCPServer: (config: any) => ipcRenderer.invoke('vision:startMCPServer', config),
+    stopMCPServer: () => ipcRenderer.invoke('vision:stopMCPServer'),
+    captureImage: () => ipcRenderer.invoke('vision:captureImage'),
+    captureAndAnalyze: (prompt?: string) => ipcRenderer.invoke('vision:captureAndAnalyze', prompt),
+    speak: (text: string) => ipcRenderer.invoke('vision:speak', text),
+    getEvents: (limit?: number) => ipcRenderer.invoke('vision:getEvents', limit),
+    sendCommand: (command: string) => ipcRenderer.invoke('vision:sendCommand', command),
+  },
 });

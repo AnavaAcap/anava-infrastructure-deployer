@@ -9,6 +9,7 @@ import { ACAPDownloaderService } from './services/camera/acapDownloaderService';
 import { CameraConfigurationService } from './services/camera/cameraConfigurationService';
 import { ProjectCreatorService } from './services/projectCreatorService';
 import { AuthTestService } from './services/authTestService';
+import { visionService } from './services/visionService';
 import { getLogger } from './utils/logger';
 
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
@@ -276,4 +277,41 @@ ipcMain.handle('firebase:create-user', async (_, params: {
 ipcMain.handle('open-external', async (_, url: string) => {
   const { shell } = await import('electron');
   await shell.openExternal(url);
+});
+
+// Vision MCP handlers
+ipcMain.handle('vision:loadConnections', async () => {
+  return visionService.loadConnections();
+});
+
+ipcMain.handle('vision:saveConnections', async (_, connections: any[]) => {
+  return visionService.saveConnections(connections);
+});
+
+ipcMain.handle('vision:startMCPServer', async (_, config: any) => {
+  return visionService.startMCPServer(config);
+});
+
+ipcMain.handle('vision:stopMCPServer', async () => {
+  return visionService.stopMCPServer();
+});
+
+ipcMain.handle('vision:captureImage', async () => {
+  return visionService.captureImage();
+});
+
+ipcMain.handle('vision:captureAndAnalyze', async (_, prompt?: string) => {
+  return visionService.captureAndAnalyze(prompt);
+});
+
+ipcMain.handle('vision:speak', async (_, text: string) => {
+  return visionService.speak(text);
+});
+
+ipcMain.handle('vision:getEvents', async (_, limit?: number) => {
+  return visionService.getEvents(limit);
+});
+
+ipcMain.handle('vision:sendCommand', async (_, command: string) => {
+  return visionService.sendCommand(command);
 });

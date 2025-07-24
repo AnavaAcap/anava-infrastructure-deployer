@@ -132,7 +132,7 @@ export class AuthTestService {
     }
   }
 
-  private async verifyGcpToken(gcpToken: string, projectId: string) {
+  private async verifyGcpToken(gcpToken: string, _projectId: string) {
     console.log('[AuthTest] Step 4: Verifying GCP token...');
     
     // Test the token by getting token info

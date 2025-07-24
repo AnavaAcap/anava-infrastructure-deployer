@@ -19,6 +19,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Settings as SettingsIcon,
   Download as DownloadIcon,
+  Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 
 export type NavigationView = 
@@ -27,6 +28,7 @@ export type NavigationView =
   | 'camera-discovery' 
   | 'acap-manager'
   | 'camera-deployment' 
+  | 'vision'
   | 'status';
 
 interface NavigationSidebarProps {
@@ -74,6 +76,12 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       icon: <CloudUploadIcon />,
       alwaysEnabled: true,
       status: camerasConfigured ? 'complete' : undefined
+    },
+    { 
+      id: 'vision' as NavigationView, 
+      label: 'Vision', 
+      icon: <VisibilityIcon />,
+      alwaysEnabled: true 
     },
     { 
       id: 'status' as NavigationView, 

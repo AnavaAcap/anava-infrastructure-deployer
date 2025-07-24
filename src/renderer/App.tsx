@@ -8,6 +8,7 @@ import CompletionPage from './pages/CompletionPage';
 import { CameraDiscoveryPage } from './pages/camera/CameraDiscoveryPage';
 import { ACAPDeploymentPage } from './pages/camera/ACAPDeploymentPage';
 import { ACAPManager } from './pages/camera/ACAPManager';
+import VisionPage from './pages/vision/VisionPage';
 import NavigationSidebar, { NavigationView } from './components/NavigationSidebar';
 import TopBar from './components/TopBar';
 import { anavaTheme } from './theme/anavaTheme';
@@ -192,6 +193,14 @@ function App() {
             deploymentConfig={deploymentResult}
             onComplete={handleCameraDeploymentComplete}
             onBack={() => setCurrentView('camera-discovery')}
+          />
+        );
+
+      case 'vision':
+        return (
+          <VisionPage
+            deploymentConfig={deploymentResult}
+            configuredCameras={selectedCameras}
           />
         );
 
