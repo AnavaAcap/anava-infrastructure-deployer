@@ -3,6 +3,8 @@ import path from 'path';
 import { DeploymentEngine } from './services/deploymentEngine';
 import { StateManager } from './services/stateManager';
 import { GCPOAuthService } from './services/gcpOAuthService';
+import { CameraDiscoveryService } from './services/camera/cameraDiscoveryService';
+import { ACAPDeploymentService } from './services/camera/acapDeploymentService';
 import { getLogger } from './utils/logger';
 
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
@@ -12,6 +14,8 @@ let mainWindow: BrowserWindow | null = null;
 let deploymentEngine: DeploymentEngine;
 let stateManager: StateManager;
 let gcpOAuthService: GCPOAuthService;
+let cameraDiscoveryService: CameraDiscoveryService;
+let acapDeploymentService: ACAPDeploymentService;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -63,6 +67,8 @@ app.whenReady().then(() => {
   stateManager = new StateManager();
   gcpOAuthService = new GCPOAuthService();
   deploymentEngine = new DeploymentEngine(stateManager, gcpOAuthService);
+  cameraDiscoveryService = new CameraDiscoveryService();
+  acapDeploymentService = new ACAPDeploymentService();
 
   // Create application menu with standard shortcuts
   const template: any[] = [

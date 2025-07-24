@@ -35,4 +35,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createFirebaseUser: (params: { projectId: string; email: string; password: string; apiKey: string }) => 
     ipcRenderer.invoke('firebase:create-user', params),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  // Camera-related APIs
+  scanNetworkCameras: () => ipcRenderer.invoke('scan-network-cameras'),
+  quickScanCamera: (ip: string, username: string, password: string) => 
+    ipcRenderer.invoke('quick-scan-camera', ip, username, password),
+  testCameraCredentials: (cameraId: string, ip: string, username: string, password: string) =>
+    ipcRenderer.invoke('test-camera-credentials', cameraId, ip, username, password),
+  deployACAP: (camera: any, acapPath: string) => ipcRenderer.invoke('deploy-acap', camera, acapPath),
+  uninstallACAP: (camera: any, appName: string) => ipcRenderer.invoke('uninstall-acap', camera, appName),
+  listInstalledACAPs: (camera: any) => ipcRenderer.invoke('list-installed-acaps', camera),
 });

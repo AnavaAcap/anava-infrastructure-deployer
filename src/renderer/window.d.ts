@@ -31,6 +31,13 @@ declare global {
         apiKey: string;
       }) => Promise<{ success: boolean; userId?: string; error?: string }>;
       openExternal: (url: string) => Promise<void>;
+      // Camera-related APIs
+      scanNetworkCameras: () => Promise<any[]>;
+      quickScanCamera: (ip: string, username: string, password: string) => Promise<any[]>;
+      testCameraCredentials: (cameraId: string, ip: string, username: string, password: string) => Promise<any>;
+      deployACAP: (camera: any, acapPath: string) => Promise<any>;
+      uninstallACAP: (camera: any, appName: string) => Promise<any>;
+      listInstalledACAPs: (camera: any) => Promise<string[]>;
     };
   }
 }
