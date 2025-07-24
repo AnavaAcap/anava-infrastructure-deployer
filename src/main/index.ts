@@ -3,6 +3,12 @@ import path from 'path';
 import { DeploymentEngine } from './services/deploymentEngine';
 import { StateManager } from './services/stateManager';
 import { GCPOAuthService } from './services/gcpOAuthService';
+import { CameraDiscoveryService } from './services/camera/cameraDiscoveryService';
+import { ACAPDeploymentService } from './services/camera/acapDeploymentService';
+import { ACAPDownloaderService } from './services/camera/acapDownloaderService';
+import { CameraConfigurationService } from './services/camera/cameraConfigurationService';
+import { ProjectCreatorService } from './services/projectCreatorService';
+import { AuthTestService } from './services/authTestService';
 import { getLogger } from './utils/logger';
 
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
@@ -63,6 +69,14 @@ app.whenReady().then(() => {
   stateManager = new StateManager();
   gcpOAuthService = new GCPOAuthService();
   deploymentEngine = new DeploymentEngine(stateManager, gcpOAuthService);
+  
+  // Initialize camera services
+  new CameraDiscoveryService();
+  new ACAPDeploymentService();
+  new ACAPDownloaderService();
+  new CameraConfigurationService();
+  new ProjectCreatorService(gcpOAuthService);
+  new AuthTestService();
 
   // Create application menu with standard shortcuts
   const template: any[] = [

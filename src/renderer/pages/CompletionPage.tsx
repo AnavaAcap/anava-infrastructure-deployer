@@ -24,10 +24,12 @@ import {
   Add,
   Download,
   ArrowBack,
+  Science as ScienceIcon,
 } from '@mui/icons-material';
 import { DeploymentResult } from '../../types';
 import TopBar from '../components/TopBar';
 import PostDeploymentChecklist from '../components/PostDeploymentChecklist';
+import { TestConfigurationDialog } from '../components/TestConfigurationDialog';
 
 interface CompletionPageProps {
   result: DeploymentResult;
@@ -40,6 +42,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   const [showApiKey, setShowApiKey] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
 
   const handleCopy = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -242,14 +245,30 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
         )}
       </List>
       
-      <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
-        <Button
-          variant="contained"
-          size="large"
-          onClick={() => setActiveStep(1)}
-        >
-          Continue to Firebase Setup
-        </Button>
+      <Box sx={{ mt: 4 }}>
+        <Stack direction="row" spacing={2} justifyContent="center">
+          <Button
+            variant="outlined"
+            startIcon={<Download />}
+            onClick={handleExportConfig}
+          >
+            Export Configuration
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<ScienceIcon />}
+            onClick={() => setTestDialogOpen(true)}
+          >
+            Test Auth Flow
+          </Button>
+          <Button
+            variant="contained"
+            size="large"
+            onClick={() => setActiveStep(1)}
+          >
+            Continue to Firebase Setup
+          </Button>
+        </Stack>
       </Box>
         </>
       )}
@@ -336,6 +355,14 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             </Button>
             <Button
               variant="outlined"
+              startIcon={<ScienceIcon />}
+              onClick={() => setTestDialogOpen(true)}
+              size="large"
+            >
+              Test Configuration
+            </Button>
+            <Button
+              variant="outlined"
               startIcon={<Add />}
               onClick={onNewDeployment}
             >
@@ -344,6 +371,12 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
           </Stack>
         </Box>
       )}
+      
+      <TestConfigurationDialog
+        open={testDialogOpen}
+        onClose={() => setTestDialogOpen(false)}
+        deploymentConfig={result}
+      />
     </Paper>
   );
 };
