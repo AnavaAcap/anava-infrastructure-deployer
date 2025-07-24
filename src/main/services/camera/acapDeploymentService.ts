@@ -16,22 +16,20 @@ export interface DeploymentResult {
 }
 
 export class ACAPDeploymentService {
-  private deployments: Map<string, any> = new Map();
-
   constructor() {
     this.setupIPC();
   }
 
   private setupIPC() {
-    ipcMain.handle('deploy-acap', async (event, camera: Camera, acapPath: string) => {
+    ipcMain.handle('deploy-acap', async (_event, camera: Camera, acapPath: string) => {
       return this.deployACAP(camera, acapPath);
     });
     
-    ipcMain.handle('uninstall-acap', async (event, camera: Camera, appName: string) => {
+    ipcMain.handle('uninstall-acap', async (_event, camera: Camera, appName: string) => {
       return this.uninstallACAP(camera, appName);
     });
     
-    ipcMain.handle('list-installed-acaps', async (event, camera: Camera) => {
+    ipcMain.handle('list-installed-acaps', async (_event, camera: Camera) => {
       return this.listInstalledACAPs(camera);
     });
   }

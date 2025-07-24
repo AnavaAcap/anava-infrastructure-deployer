@@ -1,10 +1,9 @@
-import { ipcMain } from 'electron';
+import { ipcMain, WebContents } from 'electron';
 import ping from 'ping';
 import axios from 'axios';
 import { spawn } from 'child_process';
 import os from 'os';
 import crypto from 'crypto';
-import https from 'https';
 
 export interface Camera {
   id: string;
@@ -27,22 +26,20 @@ export interface Camera {
 }
 
 export class CameraDiscoveryService {
-  private activeScans: Map<string, any> = new Map();
-
   constructor() {
     this.setupIPC();
   }
 
   private setupIPC() {
-    ipcMain.handle('scan-network-cameras', async () => {
-      return this.scanNetworkForCameras();
+    ipcMain.handle('scan-network-cameras', async (event) => {
+      return this.scanNetworkForCameras(event.sender);
     });
     
-    ipcMain.handle('quick-scan-camera', async (event, ip: string, username = 'root', password = 'pass') => {
+    ipcMain.handle('quick-scan-camera', async (_event, ip: string, username = 'root', password = 'pass') => {
       return this.quickScanSpecificCamera(ip, username, password);
     });
     
-    ipcMain.handle('test-camera-credentials', async (event, cameraId: string, ip: string, username: string, password: string) => {
+    ipcMain.handle('test-camera-credentials', async (_event, cameraId: string, ip: string, username: string, password: string) => {
       console.log(`=== Testing credentials for camera ${cameraId} at ${ip} ===`);
       return this.testCameraCredentials(ip, username, password);
     });
@@ -116,7 +113,7 @@ export class CameraDiscoveryService {
     }
   }
 
-  async scanNetworkForCameras(): Promise<Camera[]> {
+  async scanNetworkForCameras(sender?: WebContents): Promise<Camera[]> {
     try {
       const networkInterfaces = os.networkInterfaces();
       const networks = [];
@@ -140,7 +137,7 @@ export class CameraDiscoveryService {
       const cameras: Camera[] = [];
       
       for (const network of networks) {
-        const networkCameras = await this.scanNetwork(network);
+        const networkCameras = await this.scanNetwork(network, sender);
         cameras.push(...networkCameras);
       }
 
@@ -151,7 +148,7 @@ export class CameraDiscoveryService {
     }
   }
 
-  private async scanNetwork(network: any): Promise<Camera[]> {
+  private async scanNetwork(network: any, sender?: WebContents): Promise<Camera[]> {
     const cameras: Camera[] = [];
     const networkParts = network.network.split('/');
     const baseIp = networkParts[0];
@@ -162,18 +159,37 @@ export class CameraDiscoveryService {
     
     console.log(`Scanning network ${network.network} (${ipRange.start} - ${ipRange.end})`);
     
+    // Send initial progress
+    if (sender) {
+      sender.send('camera-scan-progress', { ip: network.network, status: 'scanning' });
+    }
+    
     const scanPromises = [];
     
     for (let i = ipRange.startNum; i <= ipRange.endNum; i++) {
       const ip = this.numberToIP(i);
-      scanPromises.push(this.checkForCamera(ip));
+      scanPromises.push(this.checkForCamera(ip, sender));
     }
     
     // Process in batches to avoid overwhelming the network
     const batchSize = 20;
+    let scannedCount = 0;
+    const totalIPs = scanPromises.length;
+    
     for (let i = 0; i < scanPromises.length; i += batchSize) {
       const batch = scanPromises.slice(i, i + batchSize);
       const results = await Promise.allSettled(batch);
+      
+      scannedCount += batch.length;
+      
+      // Send progress update every batch
+      if (sender) {
+        const currentIP = this.numberToIP(ipRange.startNum + Math.min(i + batchSize, totalIPs - 1));
+        sender.send('camera-scan-progress', { 
+          ip: `${currentIP} (${scannedCount}/${totalIPs})`, 
+          status: 'scanning' 
+        });
+      }
       
       for (const result of results) {
         if (result.status === 'fulfilled' && result.value) {
@@ -185,7 +201,7 @@ export class CameraDiscoveryService {
     return cameras;
   }
 
-  private async checkForCamera(ip: string): Promise<Camera | null> {
+  private async checkForCamera(ip: string, sender?: WebContents): Promise<Camera | null> {
     try {
       // First, ping the IP to see if it's alive
       const pingResult = await ping.promise.probe(ip, {
@@ -198,6 +214,11 @@ export class CameraDiscoveryService {
       }
       
       console.log(`Checking device at ${ip}...`);
+      
+      // Send progress update
+      if (sender) {
+        sender.send('camera-scan-progress', { ip, status: 'checking' });
+      }
       
       // Check for Axis-specific endpoints
       try {

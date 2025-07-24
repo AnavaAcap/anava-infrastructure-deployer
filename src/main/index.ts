@@ -5,6 +5,10 @@ import { StateManager } from './services/stateManager';
 import { GCPOAuthService } from './services/gcpOAuthService';
 import { CameraDiscoveryService } from './services/camera/cameraDiscoveryService';
 import { ACAPDeploymentService } from './services/camera/acapDeploymentService';
+import { ACAPDownloaderService } from './services/camera/acapDownloaderService';
+import { CameraConfigurationService } from './services/camera/cameraConfigurationService';
+import { ProjectCreatorService } from './services/projectCreatorService';
+import { AuthTestService } from './services/authTestService';
 import { getLogger } from './utils/logger';
 
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
@@ -14,8 +18,6 @@ let mainWindow: BrowserWindow | null = null;
 let deploymentEngine: DeploymentEngine;
 let stateManager: StateManager;
 let gcpOAuthService: GCPOAuthService;
-let cameraDiscoveryService: CameraDiscoveryService;
-let acapDeploymentService: ACAPDeploymentService;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -67,8 +69,14 @@ app.whenReady().then(() => {
   stateManager = new StateManager();
   gcpOAuthService = new GCPOAuthService();
   deploymentEngine = new DeploymentEngine(stateManager, gcpOAuthService);
-  cameraDiscoveryService = new CameraDiscoveryService();
-  acapDeploymentService = new ACAPDeploymentService();
+  
+  // Initialize camera services
+  new CameraDiscoveryService();
+  new ACAPDeploymentService();
+  new ACAPDownloaderService();
+  new CameraConfigurationService();
+  new ProjectCreatorService(gcpOAuthService);
+  new AuthTestService();
 
   // Create application menu with standard shortcuts
   const template: any[] = [
