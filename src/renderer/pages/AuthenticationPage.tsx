@@ -14,8 +14,13 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from '@mui/material';
-import { CheckCircle, ArrowBack, ArrowForward, Refresh } from '@mui/icons-material';
+import { CheckCircle, ArrowBack, ArrowForward, Refresh, Add } from '@mui/icons-material';
 import { AuthStatus, GCPProject } from '../../types';
 import TopBar from '../components/TopBar';
 
@@ -32,6 +37,9 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('AnavaPrivateCloud');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     checkAuthentication();
@@ -80,6 +88,34 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
     }
   };
 
+  const handleCreateProject = async () => {
+    try {
+      setCreating(true);
+      setError(null);
+      
+      // Create the project
+      const result = await window.electronAPI.createProject(newProjectName);
+      
+      if (result.success) {
+        // Refresh the project list
+        await handleRefreshProjects();
+        
+        // Select the new project
+        if (result.projectId) {
+          setSelectedProject(result.projectId);
+        }
+        
+        setCreateDialogOpen(false);
+      } else {
+        setError(result.error || 'Failed to create project');
+      }
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   if (loading) {
     return (
       <Paper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
@@ -90,7 +126,8 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   }
 
   return (
-    <Paper elevation={3} sx={{ p: 6 }}>
+    <>
+      <Paper elevation={3} sx={{ p: 6 }}>
       <TopBar 
         title="Google Cloud Authentication" 
         showLogout={authStatus?.authenticated && !!onLogout}
@@ -149,6 +186,17 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
             </Tooltip>
           </Box>
           
+          <Box sx={{ mt: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={<Add />}
+              onClick={() => setCreateDialogOpen(true)}
+              fullWidth
+            >
+              Create New Project
+            </Button>
+          </Box>
+          
           {error && (
             <Alert severity="error" sx={{ mb: 3 }}>
               {error}
@@ -202,7 +250,44 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
           Next
         </Button>
       </Stack>
-    </Paper>
+      </Paper>
+      
+      {/* Create Project Dialog */}
+      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
+      <DialogTitle>Create New GCP Project</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          This will create a new Google Cloud project for your Anava deployment.
+        </Typography>
+        <TextField
+          autoFocus
+          margin="dense"
+          label="Project Name"
+          fullWidth
+          variant="outlined"
+          value={newProjectName}
+          onChange={(e) => setNewProjectName(e.target.value)}
+          helperText="A unique project ID will be generated from this name"
+        />
+        {error && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {error}
+          </Alert>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+        <Button 
+          onClick={handleCreateProject} 
+          variant="contained" 
+          disabled={creating || !newProjectName.trim()}
+          startIcon={creating ? <CircularProgress size={20} /> : null}
+        >
+          {creating ? 'Creating...' : 'Create Project'}
+        </Button>
+      </DialogActions>
+      </Dialog>
+    </>
   );
 };
 

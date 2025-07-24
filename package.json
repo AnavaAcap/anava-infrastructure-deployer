@@ -1,6 +1,6 @@
 {
   "name": "anava-vision",
-  "version": "0.8.36",
+  "version": "0.9.2",
   "description": "Anava Vision - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
@@ -10,8 +10,10 @@
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
     "start": "electron .",
+    "postinstall": "electron-builder install-app-deps",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
+    "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux",
     "test": "jest",
@@ -36,7 +38,14 @@
     "files": [
       "dist/**/*",
       "node_modules/**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "!node_modules/**/test/**",
+      "!node_modules/**/*.map",
+      "!node_modules/**/*.ts",
+      "!node_modules/**/*.tsx"
+    ],
+    "asarUnpack": [
+      "node_modules/ping/**/*"
     ],
     "extraResources": [
       {
@@ -66,9 +75,22 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
-      ]
+      ],
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
       "target": "nsis",
@@ -80,11 +102,12 @@
     }
   },
   "devDependencies": {
+    "@types/archiver": "^6.0.3",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.15",
+    "@types/ping": "^0.4.4",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "@types/archiver": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.37.0",
     "@typescript-eslint/parser": "^8.37.0",
     "@vitejs/plugin-react": "^4.7.0",
@@ -112,8 +135,10 @@
     "archiver": "^7.0.1",
     "axios": "^1.10.0",
     "electron-store": "^8.1.0",
+    "form-data": "^4.0.0",
     "google-auth-library": "^10.1.0",
     "googleapis": "^153.0.0",
+    "ping": "^0.4.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "uuid": "^11.1.0"
