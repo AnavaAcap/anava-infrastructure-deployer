@@ -5,12 +5,14 @@ import AuthenticationPage from './pages/AuthenticationPage';
 import ConfigurationPage from './pages/ConfigurationPage';
 import DeploymentPage from './pages/DeploymentPage';
 import CompletionPage from './pages/CompletionPage';
+import { CameraDiscoveryPage } from './pages/camera/CameraDiscoveryPage';
+import { ACAPDeploymentPage } from './pages/camera/ACAPDeploymentPage';
 import { anavaTheme } from './theme/anavaTheme';
 import AppFooter from './components/AppFooter';
 import RetroEasterEgg from './components/RetroEasterEgg';
 import { DeploymentState, DeploymentConfig, GCPProject } from '../types';
 
-type Page = 'welcome' | 'auth' | 'config' | 'deployment' | 'completion';
+type Page = 'welcome' | 'auth' | 'config' | 'deployment' | 'completion' | 'camera-discovery' | 'camera-deployment';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('welcome');
@@ -18,6 +20,7 @@ function App() {
   const [selectedProject, setSelectedProject] = useState<GCPProject | null>(null);
   const [deploymentConfig, setDeploymentConfig] = useState<DeploymentConfig | null>(null);
   const [deploymentResult, setDeploymentResult] = useState<any>(null);
+  const [selectedCameras, setSelectedCameras] = useState<any[]>([]);
 
   useEffect(() => {
     // Subscribe to deployment events
@@ -47,6 +50,16 @@ function App() {
 
   const handleDeploymentComplete = (result: any) => {
     setDeploymentResult(result);
+    // After GCP deployment, go to camera discovery
+    setCurrentPage('camera-discovery');
+  };
+
+  const handleCamerasSelected = (cameras: any[]) => {
+    setSelectedCameras(cameras);
+    setCurrentPage('camera-deployment');
+  };
+
+  const handleCameraDeploymentComplete = () => {
     setCurrentPage('completion');
   };
 
@@ -62,6 +75,15 @@ function App() {
         if (!existingDeployment) {
           setCurrentPage('config');
         }
+        break;
+      case 'camera-discovery':
+        setCurrentPage('deployment');
+        break;
+      case 'camera-deployment':
+        setCurrentPage('camera-discovery');
+        break;
+      case 'completion':
+        setCurrentPage('camera-deployment');
         break;
     }
   };
@@ -112,6 +134,21 @@ function App() {
               onComplete={handleDeploymentComplete}
               onBack={handleBack}
               onLogout={handleLogout}
+            />
+          )}
+          
+          {currentPage === 'camera-discovery' && (
+            <CameraDiscoveryPage
+              onCamerasSelected={handleCamerasSelected}
+              deploymentConfig={deploymentResult}
+            />
+          )}
+          
+          {currentPage === 'camera-deployment' && (
+            <ACAPDeploymentPage
+              cameras={selectedCameras}
+              deploymentConfig={deploymentResult}
+              onComplete={handleCameraDeploymentComplete}
             />
           )}
           
