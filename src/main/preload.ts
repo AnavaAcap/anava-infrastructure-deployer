@@ -70,4 +70,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getEvents: (limit?: number) => ipcRenderer.invoke('vision:getEvents', limit),
     sendCommand: (command: string) => ipcRenderer.invoke('vision:sendCommand', command),
   },
+  // Vision Agent APIs
+  agent: {
+    create: (agent: any) => ipcRenderer.invoke('agent:create', agent),
+    list: (page?: number, pageSize?: number) => ipcRenderer.invoke('agent:list', page, pageSize),
+    get: (agentId: string) => ipcRenderer.invoke('agent:get', agentId),
+    update: (agentId: string, updates: any) => ipcRenderer.invoke('agent:update', agentId, updates),
+    delete: (agentId: string) => ipcRenderer.invoke('agent:delete', agentId),
+    deploy: (agentId: string) => ipcRenderer.invoke('agent:deploy', agentId),
+    pause: (agentId: string) => ipcRenderer.invoke('agent:pause', agentId),
+    resume: (agentId: string) => ipcRenderer.invoke('agent:resume', agentId),
+    getEvents: (agentId: string, limit?: number) => ipcRenderer.invoke('agent:getEvents', agentId, limit),
+    onEvent: (callback: (event: any) => void) => {
+      ipcRenderer.on('agent:event', (_, event) => callback(event));
+      return () => ipcRenderer.removeAllListeners('agent:event');
+    },
+  },
 });

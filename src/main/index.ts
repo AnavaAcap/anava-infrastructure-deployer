@@ -10,6 +10,7 @@ import { CameraConfigurationService } from './services/camera/cameraConfiguratio
 import { ProjectCreatorService } from './services/projectCreatorService';
 import { AuthTestService } from './services/authTestService';
 import { visionService } from './services/visionService';
+import { agentConfigurationService } from './services/agentConfigurationService';
 import { getLogger } from './utils/logger';
 
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
@@ -314,4 +315,46 @@ ipcMain.handle('vision:getEvents', async (_, limit?: number) => {
 
 ipcMain.handle('vision:sendCommand', async (_, command: string) => {
   return visionService.sendCommand(command);
+});
+
+// Vision Agent handlers
+ipcMain.handle('agent:create', async (_, agent: any) => {
+  return agentConfigurationService.createAgent(agent);
+});
+
+ipcMain.handle('agent:list', async (_, page?: number, pageSize?: number) => {
+  return agentConfigurationService.listAgents(page, pageSize);
+});
+
+ipcMain.handle('agent:get', async (_, agentId: string) => {
+  return agentConfigurationService.getAgent(agentId);
+});
+
+ipcMain.handle('agent:update', async (_, agentId: string, updates: any) => {
+  return agentConfigurationService.updateAgent(agentId, updates);
+});
+
+ipcMain.handle('agent:delete', async (_, agentId: string) => {
+  return agentConfigurationService.deleteAgent(agentId);
+});
+
+ipcMain.handle('agent:deploy', async (_, agentId: string) => {
+  return agentConfigurationService.deployAgent(agentId);
+});
+
+ipcMain.handle('agent:pause', async (_, agentId: string) => {
+  return agentConfigurationService.pauseAgent(agentId);
+});
+
+ipcMain.handle('agent:resume', async (_, agentId: string) => {
+  return agentConfigurationService.resumeAgent(agentId);
+});
+
+ipcMain.handle('agent:getEvents', async (_, agentId: string, limit?: number) => {
+  return agentConfigurationService.getAgentEvents(agentId, limit);
+});
+
+// Forward agent events to renderer
+agentConfigurationService.on('agent:event', (event) => {
+  mainWindow?.webContents.send('agent:event', event);
 });

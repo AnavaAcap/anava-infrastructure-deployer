@@ -72,7 +72,8 @@
       "Bash(--flatten=\"bindings[].members\" )",
       "Bash(--format='table(bindings.role, bindings.members)' )",
       "Bash(--filter=\"bindings.members:user:ryan@anava.ai\")",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "mcp__multi-ai-collab__collaborative_solve"
     ],
     "deny": []
   }
