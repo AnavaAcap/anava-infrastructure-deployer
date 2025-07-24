@@ -49,3 +49,16 @@ electron-builder.yml
 
 # OAuth configuration (contains secrets)
 oauth-config.json
+
+# Bundled MCP server (generated during build)
+resources/mcp-server/dist/
+resources/mcp-server/node_modules/
+
+# Keep the structure and config files
+!resources/mcp-server/package.json
+!resources/mcp-server/.env.example
+!resources/mcp-server/README.md
+!resources/mcp-server/LICENSE
+
+# Logs directory
+logs/

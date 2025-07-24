@@ -1,4 +1,4 @@
-import { ChildProcess, spawn, exec } from 'child_process';
+import { ChildProcess, exec } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -38,7 +38,6 @@ class VisionService {
   private mcpClient: Client | null = null;
   private connectionsPath: string;
   private mcpServerPath: string;
-  private mcpInstallPath: string;
   // private healthChecker: HealthCheckService;
   private isConnecting: boolean = false;
   // private connectionRetries: number = 0;
@@ -50,10 +49,8 @@ class VisionService {
     const userDataPath = app.getPath('userData');
     this.connectionsPath = path.join(userDataPath, 'vision-connections.json');
     
-    // Set up MCP server paths
-    const homeDir = os.homedir();
-    this.mcpInstallPath = path.join(homeDir, 'mcp-servers', 'anava-vision');
-    this.mcpServerPath = path.join(this.mcpInstallPath, 'node_modules', '@anava', 'mcp-server', 'dist', 'index.js');
+    // Set up MCP server paths - use bundled version
+    this.mcpServerPath = path.join(app.getAppPath(), 'resources', 'mcp-server', 'dist', 'index.js');
     
     // this.healthChecker = new HealthCheckService();
     
@@ -88,15 +85,30 @@ class VisionService {
 
   async checkMCPServerInstalled(): Promise<{ installed: boolean; path?: string }> {
     try {
-      // Check if MCP server is installed in the expected location
-      if (fs.existsSync(this.mcpServerPath)) {
-        return { installed: true, path: this.mcpServerPath };
+      // In production, MCP server is bundled with the app
+      const bundledPath = path.join(app.getAppPath(), 'resources', 'mcp-server', 'dist', 'index.js');
+      
+      // In development, check multiple locations
+      if (process.env.NODE_ENV === 'development') {
+        // Development paths
+        const devPaths = [
+          bundledPath,
+          path.join(__dirname, '../../resources/mcp-server/dist/index.js'),
+          path.join(os.homedir(), 'anava-mcp-server', 'dist', 'index.js'),
+        ];
+        
+        for (const p of devPaths) {
+          if (fs.existsSync(p)) {
+            return { installed: true, path: p };
+          }
+        }
+        
+        return { installed: false };
       }
       
-      // Check if the anava-mcp-server directory exists in the local project
-      const localMCPPath = path.join(os.homedir(), 'anava-mcp-server');
-      if (fs.existsSync(localMCPPath)) {
-        return { installed: false, path: localMCPPath };
+      // Production - check bundled location
+      if (fs.existsSync(bundledPath)) {
+        return { installed: true, path: bundledPath };
       }
       
       return { installed: false };
@@ -107,62 +119,39 @@ class VisionService {
   }
 
   async installMCPServer(): Promise<{ success: boolean; error?: string }> {
-    try {
-      // Create installation directory
-      if (!fs.existsSync(this.mcpInstallPath)) {
-        fs.mkdirSync(this.mcpInstallPath, { recursive: true });
-      }
-
-      // Check if we have a local copy of the MCP server
-      const localMCPPath = path.join(os.homedir(), 'anava-mcp-server');
-      const distPath = path.join(localMCPPath, 'dist');
-      
-      if (fs.existsSync(distPath)) {
-        // Copy the local MCP server to the installation directory
-        console.log('Installing MCP server from local directory...');
-        
-        // Create package.json in installation directory
-        const packageJson = {
-          name: 'anava-vision-mcp-installation',
-          version: '1.0.0',
-          private: true,
-          dependencies: {
-            '@anava/mcp-server': `file:${localMCPPath}`
-          }
-        };
-        
-        fs.writeFileSync(
-          path.join(this.mcpInstallPath, 'package.json'),
-          JSON.stringify(packageJson, null, 2)
-        );
-        
-        // Install using npm
-        const { stdout, stderr } = await execAsync(
-          'npm install',
-          { cwd: this.mcpInstallPath }
-        );
-        
-        console.log('Installation output:', stdout);
-        if (stderr) console.error('Installation warnings:', stderr);
-        
-        // Verify installation
-        if (fs.existsSync(this.mcpServerPath)) {
-          return { success: true };
-        } else {
-          throw new Error('Installation completed but MCP server not found at expected path');
-        }
-      } else {
-        // For now, we'll use the local directory directly
-        // In production, this would download from npm or a release
-        throw new Error('MCP server source not found. Please ensure ~/anava-mcp-server exists');
-      }
-    } catch (error: any) {
-      console.error('Failed to install MCP server:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Installation failed' 
-      };
+    // In production, MCP server is bundled - no installation needed
+    const checkResult = await this.checkMCPServerInstalled();
+    
+    if (checkResult.installed) {
+      return { success: true };
     }
+    
+    // In development, we might need to bundle it first
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        console.log('Running MCP server bundling script...');
+        const { stdout, stderr } = await execAsync(
+          'node scripts/bundle-mcp-server.js',
+          { cwd: app.getAppPath() }
+        );
+        
+        console.log('Bundle output:', stdout);
+        if (stderr) console.error('Bundle warnings:', stderr);
+        
+        // Check again after bundling
+        const recheckResult = await this.checkMCPServerInstalled();
+        if (recheckResult.installed) {
+          return { success: true };
+        }
+      } catch (error: any) {
+        console.error('Failed to bundle MCP server:', error);
+      }
+    }
+    
+    return { 
+      success: false, 
+      error: 'MCP server is not available. Please ensure the application was built correctly.' 
+    };
   }
 
   async startMCPServer(config: MCPServerConfig): Promise<{ success: boolean; error?: string }> {
@@ -210,24 +199,7 @@ class VisionService {
         env.DEFAULT_VOICE_ID = config.voiceId;
       }
 
-      // Spawn the MCP server process
-      this.mcpProcess = spawn('node', [mcpServerPath], {
-        env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-
-      // Set up process event handlers
-      this.mcpProcess.on('error', (error) => {
-        console.error('MCP server process error:', error);
-        this.cleanup();
-      });
-
-      this.mcpProcess.on('exit', (code, signal) => {
-        console.log(`MCP server exited with code ${code} and signal ${signal}`);
-        this.cleanup();
-      });
-
-      // Create MCP client
+      // Create MCP client transport (this will spawn the process)
       const transport = new StdioClientTransport({
         command: 'node',
         args: [mcpServerPath],
@@ -246,13 +218,17 @@ class VisionService {
       });
 
       // Connect the client
+      console.log('Connecting MCP client to server...');
       await this.mcpClient.connect(transport);
+      console.log('MCP client connected successfully');
 
       // Wait for the server to be ready
+      console.log('Waiting for MCP server to be ready...');
+      this.isConnected = true; // Set this before waiting so waitForServerReady can check
       await this.waitForServerReady();
+      console.log('MCP server is ready!');
 
       this.isConnecting = false;
-      this.isConnected = true;
       return { success: true };
     } catch (error: any) {
       console.error('Failed to start MCP server:', error);
@@ -268,6 +244,9 @@ class VisionService {
   }
 
   private cleanup() {
+    this.isConnected = false;
+    this.isConnecting = false;
+    
     if (this.mcpClient) {
       try {
         this.mcpClient.close();
@@ -277,29 +256,21 @@ class VisionService {
       this.mcpClient = null;
     }
 
-    if (this.mcpProcess) {
-      try {
-        this.mcpProcess.kill('SIGTERM');
-      } catch (error) {
-        console.error('Error killing MCP process:', error);
-      }
-      this.mcpProcess = null;
-    }
+    // The process is managed by StdioClientTransport, so we don't need to kill it
+    this.mcpProcess = null;
   }
 
   private async findMCPServerPath(): Promise<string | null> {
     // Try multiple possible locations
     const possiblePaths = [
-      // Installed MCP server path (primary location)
-      this.mcpServerPath,
-      // Local node_modules in the app
-      path.join(app.getAppPath(), 'node_modules', '@anava', 'mcp-server', 'dist', 'index.js'),
-      // Global npm installation
-      path.join(os.homedir(), '.npm', 'node_modules', '@anava', 'mcp-server', 'dist', 'index.js'),
+      // Bundled with the app (primary location for production)
+      path.join(app.getAppPath(), 'resources', 'mcp-server', 'dist', 'index.js'),
+      // Development bundled location
+      path.join(__dirname, '../../resources/mcp-server/dist/index.js'),
       // Local development path
       path.join(os.homedir(), 'anava-mcp-server', 'dist', 'index.js'),
-      // Bundled with the app
-      path.join(app.getAppPath(), 'resources', 'mcp-server', 'dist', 'index.js'),
+      // Installed MCP server path
+      this.mcpServerPath,
     ];
 
     for (const p of possiblePaths) {
@@ -311,7 +282,7 @@ class VisionService {
     return null;
   }
 
-  private async waitForServerReady(timeout: number = 5000): Promise<void> {
+  private async waitForServerReady(timeout: number = 10000): Promise<void> {
     const startTime = Date.now();
     
     while (Date.now() - startTime < timeout) {

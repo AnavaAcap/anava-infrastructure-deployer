@@ -8,7 +8,8 @@
     "dev:renderer": "vite --config vite.config.ts",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
-    "build": "npm run build:main && npm run build:renderer",
+    "build": "npm run bundle:mcp && npm run build:main && npm run build:renderer",
+    "bundle:mcp": "node scripts/bundle-mcp-server.js",
     "start": "electron .",
     "postinstall": "electron-builder install-app-deps",
     "dist": "npm run build && electron-builder",
@@ -67,6 +68,10 @@
       {
         "from": "firestore-rules",
         "to": "firestore-rules"
+      },
+      {
+        "from": "resources/mcp-server",
+        "to": "resources/mcp-server"
       }
     ],
     "mac": {
