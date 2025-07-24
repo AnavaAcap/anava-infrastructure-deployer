@@ -17,6 +17,7 @@ import {
   Step,
   StepLabel,
   StepContent,
+  TextField,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -24,13 +25,28 @@ import {
   CloudUpload as CloudUploadIcon,
   Settings as SettingsIcon,
   Videocam as VideocamIcon,
+  ArrowBack as ArrowBackIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
 
 interface Camera {
   id: string;
   ip: string;
+  port?: number;
+  type?: string;
   model: string;
+  manufacturer?: string;
+  mac?: string | null;
+  capabilities?: string[];
+  discoveredAt?: string;
+  status?: 'accessible' | 'requires_auth';
   authenticated?: boolean;
+  credentials?: {
+    username: string;
+    password: string;
+  };
+  rtspUrl?: string;
+  httpUrl?: string;
 }
 
 interface DeploymentStatus {
@@ -43,13 +59,28 @@ interface ACAPDeploymentPageProps {
   cameras: Camera[];
   deploymentConfig: any;
   onComplete: () => void;
+  onBack?: () => void;
+}
+
+interface CameraCredentials {
+  [cameraId: string]: {
+    username: string;
+    password: string;
+  };
+}
+
+interface ManualCamera extends Camera {
+  isManual?: boolean;
 }
 
 export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
-  cameras,
+  cameras: initialCameras,
   deploymentConfig,
   onComplete,
+  onBack,
 }) => {
+  console.log('ACAPDeploymentPage render:', { cameras: initialCameras, deploymentConfig });
+  const [cameras, setCameras] = useState<ManualCamera[]>(initialCameras);
   const [activeStep, setActiveStep] = useState(0);
   const [deploymentStatus, setDeploymentStatus] = useState<Map<string, DeploymentStatus>>(
     new Map(cameras.map(c => [c.id, { cameraId: c.id, status: 'pending' }]))
@@ -57,6 +88,20 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
   const [configuring, setConfiguring] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCredentialsDialog, setShowCredentialsDialog] = useState(false);
+  const [credentials, setCredentials] = useState<CameraCredentials>(
+    cameras.reduce((acc, cam) => ({
+      ...acc,
+      [cam.id]: { username: cam.credentials?.username || 'root', password: cam.credentials?.password || '' }
+    }), {})
+  );
+  const [deploymentLog, setDeploymentLog] = useState<string[]>([]);
+  const [cameraIPs, setCameraIPs] = useState<{ [cameraId: string]: string }>(
+    cameras.reduce((acc, cam) => ({
+      ...acc,
+      [cam.id]: cam.ip
+    }), {})
+  );
 
   const steps = [
     {
@@ -76,53 +121,196 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
   const configureCameras = async () => {
     setConfiguring(true);
     setError(null);
+    setDeploymentLog([]);
 
     try {
-      // In a real implementation, this would configure each camera
-      // with the API Gateway URL, API key, and other credentials
-      // For now, we'll simulate this
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      addLog('Starting camera configuration...');
+      
+      for (const camera of cameras) {
+        const currentIP = cameraIPs[camera.id] || camera.ip;
+        addLog(`\n--- Configuring ${camera.model} (${currentIP}) ---`);
+        
+        try {
+          // Create camera object with credentials and updated IP
+          const cameraWithCreds = {
+            ...camera,
+            ip: cameraIPs[camera.id] || camera.ip,
+            credentials: credentials[camera.id]
+          };
+          
+          const currentIP = cameraIPs[camera.id] || camera.ip;
+          addLog(`Connecting to ${currentIP}...`);
+          addLog(`Sending GCP configuration to camera...`);
+          addLog(`POST http://${currentIP}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`);
+          
+          const result = await window.electronAPI.configureCamera(cameraWithCreds, deploymentConfig);
+          
+          if (result.success) {
+            addLog(`✓ Configuration uploaded successfully`);
+            addLog(`✓ Camera ${camera.model} configured with GCP credentials`);
+          } else {
+            throw new Error(result.error || 'Configuration failed');
+          }
+        } catch (error: any) {
+          addLog(`✗ ERROR: ${error.message}`);
+          addLog(`✗ Failed to configure ${camera.model}`);
+          throw error;
+        }
+      }
+      
+      addLog(`\n=== Configuration completed ===`);
+      addLog(`Successfully configured ${cameras.length} camera${cameras.length !== 1 ? 's' : ''}`);
       
       setActiveStep(1);
     } catch (err: any) {
       setError(`Configuration failed: ${err.message}`);
+      addLog(`\nERROR: ${err.message}`);
     } finally {
       setConfiguring(false);
     }
   };
 
+  const handleDeployClick = () => {
+    // Check if any cameras have missing credentials
+    const missingCreds = cameras.filter(cam => 
+      !credentials[cam.id]?.username || !credentials[cam.id]?.password
+    );
+    
+    if (missingCreds.length > 0) {
+      setError('Please enter credentials for all cameras');
+      setShowCredentialsDialog(true);
+    } else {
+      deployACAP();
+    }
+  };
+
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setDeploymentLog(prev => [...prev, `[${timestamp}] ${message}`]);
+  };
+
+  const addManualCamera = () => {
+    const newCamera: ManualCamera = {
+      id: `manual-${Date.now()}`,
+      ip: '192.168.1.100',
+      port: 80,
+      type: 'Axis Camera',
+      model: 'Manual Camera',
+      manufacturer: 'Axis Communications',
+      mac: null,
+      capabilities: ['HTTP', 'ACAP', 'VAPIX', 'RTSP'],
+      discoveredAt: new Date().toISOString(),
+      status: 'accessible',
+      httpUrl: 'http://192.168.1.100',
+      authenticated: false,
+      isManual: true
+    };
+    
+    setCameras(prev => [...prev, newCamera]);
+    setCameraIPs(prev => ({ ...prev, [newCamera.id]: newCamera.ip }));
+    setCredentials(prev => ({ 
+      ...prev, 
+      [newCamera.id]: { username: 'root', password: '' }
+    }));
+    setDeploymentStatus(prev => {
+      const newMap = new Map(prev);
+      newMap.set(newCamera.id, { cameraId: newCamera.id, status: 'pending' });
+      return newMap;
+    });
+  };
+
   const deployACAP = async () => {
     setDeploying(true);
     setError(null);
+    setDeploymentLog([]);
 
     try {
+      addLog('Starting ACAP deployment process...');
+      
+      // First check if we have any downloaded ACAP files
+      addLog('Checking for downloaded ACAP packages...');
+      const releases = await window.electronAPI.acap.getReleases();
+      const downloadedRelease = releases.find(r => r.isDownloaded);
+      
+      if (!downloadedRelease) {
+        setError('No ACAP package downloaded. Please download an ACAP package first.');
+        addLog('ERROR: No ACAP package found. Please go to ACAP Manager to download.');
+        return;
+      }
+      
+      addLog(`Found ACAP package: ${downloadedRelease.name}`);
+      
+      // Get the local path of the downloaded ACAP
+      const acapPath = await window.electronAPI.acap.getLocalPath(downloadedRelease.filename);
+      addLog(`ACAP file location: ${acapPath}`);
+      
       for (const camera of cameras) {
+        const currentIP = cameraIPs[camera.id] || camera.ip;
+        addLog(`\n--- Deploying to ${camera.model} (${currentIP}) ---`);
+        
         setDeploymentStatus(prev => {
           const newMap = new Map(prev);
           newMap.set(camera.id, { cameraId: camera.id, status: 'deploying' });
           return newMap;
         });
 
-        // In a real implementation, this would deploy the ACAP
-        // For now, we'll simulate deployment
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
-        const success = Math.random() > 0.1; // 90% success rate for simulation
-        
-        setDeploymentStatus(prev => {
-          const newMap = new Map(prev);
-          newMap.set(camera.id, {
-            cameraId: camera.id,
-            status: success ? 'success' : 'error',
-            message: success ? 'ACAP deployed successfully' : 'Deployment failed',
+        try {
+          // Create camera object with credentials and updated IP
+          const cameraWithCreds = {
+            ...camera,
+            ip: cameraIPs[camera.id] || camera.ip,
+            credentials: credentials[camera.id]
+          };
+          
+          const currentIP = cameraIPs[camera.id] || camera.ip;
+          addLog(`Connecting to ${currentIP} with user '${credentials[camera.id].username}'...`);
+          addLog(`Testing camera connection...`);
+          
+          // Actually deploy the ACAP
+          addLog(`Uploading ACAP package to camera...`);
+          addLog(`POST http://${currentIP}/axis-cgi/applications/upload.cgi`);
+          
+          const result = await window.electronAPI.deployACAP(cameraWithCreds, acapPath);
+          
+          if (result.success) {
+            addLog(`✓ Upload successful`);
+            addLog(`✓ ACAP installation completed`);
+            addLog(`✓ ${camera.model} deployment successful!`);
+            
+            setDeploymentStatus(prev => {
+              const newMap = new Map(prev);
+              newMap.set(camera.id, {
+                cameraId: camera.id,
+                status: 'success',
+                message: `ACAP deployed successfully`,
+              });
+              return newMap;
+            });
+          } else {
+            throw new Error(result.error || 'Deployment failed');
+          }
+        } catch (error: any) {
+          addLog(`✗ ERROR: ${error.message}`);
+          addLog(`✗ Failed to deploy to ${camera.model}`);
+          
+          setDeploymentStatus(prev => {
+            const newMap = new Map(prev);
+            newMap.set(camera.id, {
+              cameraId: camera.id,
+              status: 'error',
+              message: error.message,
+            });
+            return newMap;
           });
-          return newMap;
-        });
+        }
       }
 
+      addLog(`\n=== Deployment completed ===`);
+      addLog(`Successfully deployed to ${cameras.filter(c => deploymentStatus.get(c.id)?.status === 'success').length} of ${cameras.length} cameras`);
       setActiveStep(2);
     } catch (err: any) {
       setError(`Deployment failed: ${err.message}`);
+      addLog(`\nERROR: ${err.message}`);
     } finally {
       setDeploying(false);
     }
@@ -148,18 +336,71 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                   API Gateway URL
                 </Typography>
                 <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                  {deploymentConfig.apiGatewayUrl}
+                  {deploymentConfig?.apiGatewayUrl || 'Not configured'}
                 </Typography>
               </CardContent>
             </Card>
+            {!deploymentConfig?.apiGatewayUrl ? (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  GCP infrastructure not deployed yet. You need to deploy the cloud infrastructure first.
+                </Typography>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => window.location.hash = '#gcp-setup'}
+                >
+                  Go to GCP Infrastructure Setup
+                </Button>
+              </Alert>
+            ) : (
+              <Button
+                variant="contained"
+                onClick={configureCameras}
+                disabled={configuring}
+                startIcon={configuring ? <CircularProgress size={20} /> : <SettingsIcon />}
+              >
+                {configuring ? 'Configuring...' : 'Configure Cameras'}
+              </Button>
+            )}
             <Button
-              variant="contained"
-              onClick={configureCameras}
-              disabled={configuring}
-              startIcon={configuring ? <CircularProgress size={20} /> : <SettingsIcon />}
+              variant="text"
+              onClick={() => setActiveStep(1)}
+              sx={{ ml: 2 }}
             >
-              {configuring ? 'Configuring...' : 'Configure Cameras'}
+              Skip to ACAP Deployment
             </Button>
+            
+            {/* Configuration Log */}
+            {deploymentLog.length > 0 && (
+              <Card 
+                variant="outlined" 
+                sx={{ 
+                  mt: 2, 
+                  bgcolor: '#f5f5f5',
+                  maxHeight: 300,
+                  overflow: 'auto'
+                }}
+              >
+                <CardContent>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Configuration Log
+                  </Typography>
+                  <Box 
+                    component="pre" 
+                    sx={{ 
+                      fontFamily: 'monospace',
+                      fontSize: '0.8rem',
+                      whiteSpace: 'pre-wrap',
+                      wordWrap: 'break-word',
+                      m: 0
+                    }}
+                  >
+                    {deploymentLog.join('\n')}
+                  </Box>
+                </CardContent>
+              </Card>
+            )}
           </Box>
         );
 
@@ -169,6 +410,72 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
             <Typography variant="body2" paragraph>
               Deploy the Anava authentication application to each camera:
             </Typography>
+            
+            {/* Credentials Section */}
+            <Card variant="outlined" sx={{ mb: 2 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Camera Credentials
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Enter the IP address, username and password for your Axis cameras
+                    </Typography>
+                  </Box>
+                  <Button
+                    size="small"
+                    startIcon={<AddIcon />}
+                    onClick={addManualCamera}
+                    variant="outlined"
+                  >
+                    Add Camera
+                  </Button>
+                </Box>
+                {cameras.map(camera => (
+                  <Box key={camera.id} sx={{ mb: 3 }}>
+                    <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
+                      {camera.model}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                      <TextField
+                        size="small"
+                        label="IP Address"
+                        value={cameraIPs[camera.id] || ''}
+                        onChange={(e) => setCameraIPs(prev => ({
+                          ...prev,
+                          [camera.id]: e.target.value
+                        }))}
+                        sx={{ flex: 1 }}
+                      />
+                      <TextField
+                        size="small"
+                        label="Username"
+                        value={credentials[camera.id]?.username || ''}
+                        onChange={(e) => setCredentials(prev => ({
+                          ...prev,
+                          [camera.id]: { ...prev[camera.id], username: e.target.value }
+                        }))}
+                        sx={{ flex: 1 }}
+                      />
+                      <TextField
+                        size="small"
+                        label="Password"
+                        type="password"
+                        value={credentials[camera.id]?.password || ''}
+                        onChange={(e) => setCredentials(prev => ({
+                          ...prev,
+                          [camera.id]: { ...prev[camera.id], password: e.target.value }
+                        }))}
+                        sx={{ flex: 1 }}
+                      />
+                    </Box>
+                  </Box>
+                ))}
+              </CardContent>
+            </Card>
+            
+            {/* Deployment Status */}
             <List>
               {cameras.map(camera => {
                 const status = deploymentStatus.get(camera.id);
@@ -207,13 +514,44 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
             </List>
             <Button
               variant="contained"
-              onClick={deployACAP}
+              onClick={handleDeployClick}
               disabled={deploying || activeStep !== 1}
               startIcon={deploying ? <CircularProgress size={20} /> : <CloudUploadIcon />}
               sx={{ mt: 2 }}
             >
               {deploying ? 'Deploying...' : 'Deploy ACAP'}
             </Button>
+            
+            {/* Deployment Log */}
+            {deploymentLog.length > 0 && (
+              <Card 
+                variant="outlined" 
+                sx={{ 
+                  mt: 2, 
+                  bgcolor: '#f5f5f5',
+                  maxHeight: 300,
+                  overflow: 'auto'
+                }}
+              >
+                <CardContent>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Deployment Log
+                  </Typography>
+                  <Box 
+                    component="pre" 
+                    sx={{ 
+                      fontFamily: 'monospace',
+                      fontSize: '0.8rem',
+                      whiteSpace: 'pre-wrap',
+                      wordWrap: 'break-word',
+                      m: 0
+                    }}
+                  >
+                    {deploymentLog.join('\n')}
+                  </Box>
+                </CardContent>
+              </Card>
+            )}
           </Box>
         );
 
@@ -241,11 +579,30 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
     }
   };
 
+  // Ensure we always return something
+  if (!cameras || cameras.length === 0) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h5">No cameras provided</Typography>
+        <Button onClick={onBack} sx={{ mt: 2 }}>Back to Camera Discovery</Button>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Camera Configuration
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          onClick={onBack}
+          sx={{ mr: 2 }}
+        >
+          Back
+        </Button>
+        <Typography variant="h4">
+          Camera Configuration
+        </Typography>
+      </Box>
       
       <Typography variant="body1" color="text.secondary" paragraph>
         Configure {cameras.length} camera{cameras.length !== 1 ? 's' : ''} to use the deployed infrastructure.

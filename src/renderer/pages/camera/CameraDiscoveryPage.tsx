@@ -28,6 +28,7 @@ import {
   VpnKey as VpnKeyIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
+  ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 
 interface Camera {
@@ -47,11 +48,15 @@ interface Camera {
 interface CameraDiscoveryPageProps {
   onCamerasSelected: (cameras: Camera[]) => void;
   deploymentConfig?: any;
+  onSkip?: () => void;
+  onBack?: () => void;
 }
 
 export const CameraDiscoveryPage: React.FC<CameraDiscoveryPageProps> = ({ 
   onCamerasSelected,
-  deploymentConfig 
+  deploymentConfig,
+  onSkip,
+  onBack 
 }) => {
   const [scanning, setScanning] = useState(false);
   const [cameras, setCameras] = useState<Camera[]>([]);
@@ -60,10 +65,17 @@ export const CameraDiscoveryPage: React.FC<CameraDiscoveryPageProps> = ({
   const [authDialog, setAuthDialog] = useState<Camera | null>(null);
   const [credentials, setCredentials] = useState({ username: 'root', password: '' });
   const [error, setError] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState<string>('');
 
   const scanForCameras = async () => {
     setScanning(true);
     setError(null);
+    setScanProgress('Starting network scan...');
+    
+    // Set up progress listener
+    const removeListener = window.electronAPI.onCameraScanProgress((data) => {
+      setScanProgress(`Scanning ${data.ip}...`);
+    });
     
     try {
       const discoveredCameras = await window.electronAPI.scanNetworkCameras();
@@ -76,6 +88,8 @@ export const CameraDiscoveryPage: React.FC<CameraDiscoveryPageProps> = ({
       setError(`Failed to scan network: ${err.message}`);
     } finally {
       setScanning(false);
+      setScanProgress('');
+      removeListener(); // Clean up listener
     }
   };
 
@@ -147,9 +161,18 @@ export const CameraDiscoveryPage: React.FC<CameraDiscoveryPageProps> = ({
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Camera Discovery
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          onClick={onBack}
+          sx={{ mr: 2 }}
+        >
+          Back
+        </Button>
+        <Typography variant="h4">
+          Camera Discovery
+        </Typography>
+      </Box>
       
       <Typography variant="body1" color="text.secondary" paragraph>
         Find and configure Axis cameras on your network for deployment.
@@ -177,6 +200,20 @@ export const CameraDiscoveryPage: React.FC<CameraDiscoveryPageProps> = ({
               >
                 {scanning ? 'Scanning...' : 'Scan Network'}
               </Button>
+              {scanning && scanProgress && (
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    display: 'block', 
+                    mt: 1, 
+                    color: 'text.secondary',
+                    fontFamily: 'monospace',
+                    fontSize: '0.75rem'
+                  }}
+                >
+                  {scanProgress}
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -212,6 +249,21 @@ export const CameraDiscoveryPage: React.FC<CameraDiscoveryPageProps> = ({
         <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
+      )}
+
+      {cameras.length === 0 && !scanning && (
+        <Box sx={{ mt: 3, textAlign: 'center' }}>
+          <Typography variant="body1" color="text.secondary" paragraph>
+            No cameras discovered yet. You can scan for cameras or skip this step.
+          </Typography>
+          <Button
+            variant="outlined"
+            onClick={onSkip}
+            size="large"
+          >
+            Skip Camera Setup
+          </Button>
+        </Box>
       )}
 
       {cameras.length > 0 && (
@@ -267,13 +319,20 @@ export const CameraDiscoveryPage: React.FC<CameraDiscoveryPageProps> = ({
             ))}
           </List>
           
-          <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+          <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={onSkip}
+              sx={{ flex: 1 }}
+            >
+              Skip Camera Setup
+            </Button>
             <Button
               variant="contained"
               color="primary"
               onClick={handleProceed}
               disabled={selectedCameras.size === 0}
-              fullWidth
+              sx={{ flex: 2 }}
             >
               Configure Selected Cameras ({selectedCameras.size})
             </Button>
