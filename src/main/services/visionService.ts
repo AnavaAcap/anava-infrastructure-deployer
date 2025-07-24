@@ -1,11 +1,14 @@
-import { ChildProcess, spawn } from 'child_process';
+import { ChildProcess, spawn, exec } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { app } from 'electron';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { promisify } from 'util';
 // import { HealthCheckService } from './healthCheckService';
+
+const execAsync = promisify(exec);
 
 interface CameraConnection {
   id: string;
@@ -34,6 +37,8 @@ class VisionService {
   private mcpProcess: ChildProcess | null = null;
   private mcpClient: Client | null = null;
   private connectionsPath: string;
+  private mcpServerPath: string;
+  private mcpInstallPath: string;
   // private healthChecker: HealthCheckService;
   private isConnecting: boolean = false;
   // private connectionRetries: number = 0;
@@ -44,6 +49,12 @@ class VisionService {
     // Store connections in app data directory
     const userDataPath = app.getPath('userData');
     this.connectionsPath = path.join(userDataPath, 'vision-connections.json');
+    
+    // Set up MCP server paths
+    const homeDir = os.homedir();
+    this.mcpInstallPath = path.join(homeDir, 'mcp-servers', 'anava-vision');
+    this.mcpServerPath = path.join(this.mcpInstallPath, 'node_modules', '@anava', 'mcp-server', 'dist', 'index.js');
+    
     // this.healthChecker = new HealthCheckService();
     
     // Ensure connections file exists
@@ -72,6 +83,85 @@ class VisionService {
     } catch (error) {
       console.error('Failed to save connections:', error);
       throw error;
+    }
+  }
+
+  async checkMCPServerInstalled(): Promise<{ installed: boolean; path?: string }> {
+    try {
+      // Check if MCP server is installed in the expected location
+      if (fs.existsSync(this.mcpServerPath)) {
+        return { installed: true, path: this.mcpServerPath };
+      }
+      
+      // Check if the anava-mcp-server directory exists in the local project
+      const localMCPPath = path.join(os.homedir(), 'anava-mcp-server');
+      if (fs.existsSync(localMCPPath)) {
+        return { installed: false, path: localMCPPath };
+      }
+      
+      return { installed: false };
+    } catch (error) {
+      console.error('Error checking MCP server installation:', error);
+      return { installed: false };
+    }
+  }
+
+  async installMCPServer(): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Create installation directory
+      if (!fs.existsSync(this.mcpInstallPath)) {
+        fs.mkdirSync(this.mcpInstallPath, { recursive: true });
+      }
+
+      // Check if we have a local copy of the MCP server
+      const localMCPPath = path.join(os.homedir(), 'anava-mcp-server');
+      const distPath = path.join(localMCPPath, 'dist');
+      
+      if (fs.existsSync(distPath)) {
+        // Copy the local MCP server to the installation directory
+        console.log('Installing MCP server from local directory...');
+        
+        // Create package.json in installation directory
+        const packageJson = {
+          name: 'anava-vision-mcp-installation',
+          version: '1.0.0',
+          private: true,
+          dependencies: {
+            '@anava/mcp-server': `file:${localMCPPath}`
+          }
+        };
+        
+        fs.writeFileSync(
+          path.join(this.mcpInstallPath, 'package.json'),
+          JSON.stringify(packageJson, null, 2)
+        );
+        
+        // Install using npm
+        const { stdout, stderr } = await execAsync(
+          'npm install',
+          { cwd: this.mcpInstallPath }
+        );
+        
+        console.log('Installation output:', stdout);
+        if (stderr) console.error('Installation warnings:', stderr);
+        
+        // Verify installation
+        if (fs.existsSync(this.mcpServerPath)) {
+          return { success: true };
+        } else {
+          throw new Error('Installation completed but MCP server not found at expected path');
+        }
+      } else {
+        // For now, we'll use the local directory directly
+        // In production, this would download from npm or a release
+        throw new Error('MCP server source not found. Please ensure ~/anava-mcp-server exists');
+      }
+    } catch (error: any) {
+      console.error('Failed to install MCP server:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Installation failed' 
+      };
     }
   }
 
@@ -200,6 +290,8 @@ class VisionService {
   private async findMCPServerPath(): Promise<string | null> {
     // Try multiple possible locations
     const possiblePaths = [
+      // Installed MCP server path (primary location)
+      this.mcpServerPath,
       // Local node_modules in the app
       path.join(app.getAppPath(), 'node_modules', '@anava', 'mcp-server', 'dist', 'index.js'),
       // Global npm installation

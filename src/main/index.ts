@@ -289,6 +289,14 @@ ipcMain.handle('vision:saveConnections', async (_, connections: any[]) => {
   return visionService.saveConnections(connections);
 });
 
+ipcMain.handle('vision:checkMCPServerInstalled', async () => {
+  return visionService.checkMCPServerInstalled();
+});
+
+ipcMain.handle('vision:installMCPServer', async () => {
+  return visionService.installMCPServer();
+});
+
 ipcMain.handle('vision:startMCPServer', async (_, config: any) => {
   return visionService.startMCPServer(config);
 });

@@ -62,6 +62,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   vision: {
     loadConnections: () => ipcRenderer.invoke('vision:loadConnections'),
     saveConnections: (connections: any[]) => ipcRenderer.invoke('vision:saveConnections', connections),
+    checkMCPServerInstalled: () => ipcRenderer.invoke('vision:checkMCPServerInstalled'),
+    installMCPServer: () => ipcRenderer.invoke('vision:installMCPServer'),
     startMCPServer: (config: any) => ipcRenderer.invoke('vision:startMCPServer', config),
     stopMCPServer: () => ipcRenderer.invoke('vision:stopMCPServer'),
     captureImage: () => ipcRenderer.invoke('vision:captureImage'),
