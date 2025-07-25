@@ -15,6 +15,12 @@ import {
   Stepper,
   Step,
   StepLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress,
+  ListItemIcon,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -24,6 +30,8 @@ import {
   Add,
   Download,
   ArrowBack,
+  PlayCircle,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
 import { DeploymentResult } from '../../types';
 import TopBar from '../components/TopBar';
@@ -40,6 +48,9 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   const [showApiKey, setShowApiKey] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
+  const [validationOpen, setValidationOpen] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<any>(null);
 
   const handleCopy = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -99,6 +110,35 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
 
   const handleChecklistComplete = () => {
     setActiveStep(2); // Move to final step
+  };
+
+  const handleValidate = async () => {
+    if (!result.apiGatewayUrl || !result.apiKey || !result.firebaseConfig?.apiKey) {
+      alert('Missing required configuration. Please ensure Firebase API key is available.');
+      return;
+    }
+
+    setValidating(true);
+    setValidationResult(null);
+    setValidationOpen(true);
+
+    try {
+      const validationResult = await window.electronAPI!.validateDeployment({
+        apiGatewayUrl: result.apiGatewayUrl,
+        apiKey: result.apiKey,
+        firebaseApiKey: result.firebaseConfig.apiKey
+      });
+
+      setValidationResult(validationResult);
+    } catch (error: any) {
+      setValidationResult({
+        success: false,
+        steps: [],
+        error: error.message || 'Validation failed'
+      });
+    } finally {
+      setValidating(false);
+    }
   };
 
   return (
@@ -325,7 +365,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             Use the exported configuration file to set up your Anava cameras:
           </Typography>
           
-          <Stack direction="row" spacing={2} justifyContent="center">
+          <Stack direction="row" spacing={2} justifyContent="center" sx={{ mb: 2 }}>
             <Button
               variant="contained"
               startIcon={<Download />}
@@ -342,8 +382,131 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
               New Deployment
             </Button>
           </Stack>
+          
+          <Box sx={{ mt: 2, textAlign: 'center' }}>
+            <Button
+              variant="outlined"
+              color="success"
+              startIcon={<PlayCircle />}
+              onClick={handleValidate}
+              disabled={!result.firebaseConfig?.apiKey}
+            >
+              Test Deployment
+            </Button>
+            {!result.firebaseConfig?.apiKey && (
+              <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
+                Firebase API key required for testing
+              </Typography>
+            )}
+          </Box>
         </Box>
       )}
+      
+      {/* Validation Dialog */}
+      <Dialog
+        open={validationOpen}
+        onClose={() => !validating && setValidationOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <PlayCircle color="primary" />
+            <Typography variant="h6">Testing Deployment</Typography>
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          {validating && !validationResult && (
+            <Box textAlign="center" py={4}>
+              <CircularProgress size={48} />
+              <Typography variant="body1" sx={{ mt: 2 }}>
+                Running authentication workflow test...
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                This simulates the complete camera authentication flow
+              </Typography>
+            </Box>
+          )}
+          
+          {validationResult && (
+            <>
+              {validationResult.error && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {validationResult.error}
+                </Alert>
+              )}
+              
+              <List>
+                {validationResult.steps?.map((step: any, index: number) => (
+                  <ListItem key={index}>
+                    <ListItemIcon>
+                      {step.success ? (
+                        <CheckCircle color="success" />
+                      ) : (
+                        <ErrorIcon color="error" />
+                      )}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={step.name}
+                      secondary={
+                        <>
+                          <Typography variant="body2">{step.message}</Typography>
+                          {step.details && (
+                            <Typography variant="caption" component="div" sx={{ mt: 1, fontFamily: 'monospace' }}>
+                              {Object.entries(step.details).map(([key, value]) => (
+                                <div key={key}>{key}: {String(value)}</div>
+                              ))}
+                            </Typography>
+                          )}
+                        </>
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+              
+              {validationResult.success && validationResult.summary && (
+                <Alert severity="success" sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Deployment Validated Successfully!
+                  </Typography>
+                  <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>
+                    {validationResult.summary}
+                  </Typography>
+                </Alert>
+              )}
+              
+              {!validationResult.success && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2">
+                    Validation Failed
+                  </Typography>
+                  <Typography variant="body2">
+                    Please check the deployment configuration and ensure all services are properly configured.
+                  </Typography>
+                </Alert>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setValidationOpen(false)} 
+            disabled={validating}
+          >
+            Close
+          </Button>
+          {!validating && !validationResult?.success && (
+            <Button
+              onClick={handleValidate}
+              variant="contained"
+              startIcon={<PlayCircle />}
+            >
+              Retry Test
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 };

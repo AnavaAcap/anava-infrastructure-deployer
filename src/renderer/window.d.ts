@@ -31,6 +31,21 @@ declare global {
         apiKey: string;
       }) => Promise<{ success: boolean; userId?: string; error?: string }>;
       openExternal: (url: string) => Promise<void>;
+      validateDeployment: (params: {
+        apiGatewayUrl: string;
+        apiKey: string;
+        firebaseApiKey: string;
+      }) => Promise<{
+        success: boolean;
+        steps: {
+          name: string;
+          success: boolean;
+          message: string;
+          details?: any;
+        }[];
+        summary?: string;
+        error?: string;
+      }>;
     };
   }
 }
