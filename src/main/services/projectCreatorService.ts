@@ -2,6 +2,9 @@ import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { GCPOAuthService } from './gcpOAuthService';
 import { ipcMain } from 'electron';
+import path from 'path';
+import { app } from 'electron';
+import fs from 'fs/promises';
 
 export class ProjectCreatorService {
   constructor(private gcpOAuthService: GCPOAuthService) {
@@ -236,6 +239,86 @@ export class ProjectCreatorService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  private async getOAuthProjectId(): Promise<string | null> {
+    try {
+      // Try to read the OAuth config to get the project ID
+      const possiblePaths = [
+        path.join(process.resourcesPath, 'oauth-config.json'),
+        path.join(app.getAppPath(), 'oauth-config.json'),
+        path.join(__dirname, '../../../oauth-config.json'),
+        path.join(process.cwd(), 'oauth-config.json')
+      ];
+      
+      for (const configPath of possiblePaths) {
+        try {
+          const configData = await fs.readFile(configPath, 'utf8');
+          const config = JSON.parse(configData);
+          return config.installed?.project_id || null;
+        } catch (error) {
+          // Continue to next path
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error reading OAuth config:', error);
+      return null;
+    }
+  }
+
+  private async ensureBillingApiEnabled(): Promise<void> {
+    try {
+      const auth = await this.getAuthClient();
+      
+      // Try to get quota project from OAuth client, or fall back to OAuth config
+      let quotaProjectId = auth.quotaProjectId || await this.getOAuthProjectId();
+      
+      if (!quotaProjectId) {
+        console.log('No quota project ID available, skipping billing API enablement');
+        return;
+      }
+
+      console.log(`Ensuring Cloud Billing API is enabled in OAuth project: ${quotaProjectId}`);
+
+      const serviceUsage = google.serviceusage({
+        version: 'v1',
+        auth
+      });
+
+      // Check if API is already enabled
+      const parent = `projects/${quotaProjectId}`;
+      const apiName = 'cloudbilling.googleapis.com';
+
+      try {
+        const { data } = await serviceUsage.services.get({
+          name: `${parent}/services/${apiName}`
+        });
+
+        if (data.state === 'ENABLED') {
+          console.log('Cloud Billing API is already enabled');
+          return;
+        }
+      } catch (error) {
+        // API not found, continue to enable it
+        console.log('Cloud Billing API not found, enabling...');
+      }
+
+      // Enable the API
+      await serviceUsage.services.enable({
+        name: `${parent}/services/${apiName}`
+      });
+
+      console.log('Cloud Billing API enabled successfully');
+      
+      // Wait a bit for the API to be fully available
+      await this.sleep(3000);
+      
+    } catch (error: any) {
+      console.error('Error enabling Cloud Billing API:', error);
+      // Don't throw - let the billing list attempt proceed and handle the error there
+    }
+  }
+
   async listOrganizations(): Promise<{ organizations: any[], error?: string }> {
     try {
       const auth = await this.getAuthClient();
@@ -280,6 +363,10 @@ export class ProjectCreatorService {
   async listBillingAccounts(): Promise<{ accounts: any[], error?: string }> {
     try {
       const auth = await this.getAuthClient();
+      
+      // First, ensure the Cloud Billing API is enabled
+      await this.ensureBillingApiEnabled();
+      
       const cloudBilling = google.cloudbilling({
         version: 'v1',
         auth
@@ -304,7 +391,7 @@ export class ProjectCreatorService {
           error.message?.includes('disabled')) {
         return { 
           accounts: [], 
-          error: 'Cloud Billing API is not enabled. You can enable billing accounts manually later or enable the API first.'
+          error: 'Failed to automatically enable Cloud Billing API. You can create the project without billing and enable it manually later.'
         };
       }
       
