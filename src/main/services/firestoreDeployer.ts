@@ -455,7 +455,7 @@ export class FirestoreDeployer {
   async enableFirebaseAuthentication(
     projectId: string,
     logCallback?: (message: string) => void
-  ): Promise<void> {
+  ): Promise<boolean> {
     const log = (message: string) => {
       console.log(message);
       logCallback?.(message);
@@ -464,96 +464,125 @@ export class FirestoreDeployer {
     log('=== Enabling Firebase Authentication ===');
     
     try {
-      // First enable the Identity Toolkit API using Service Usage API
+      // Step 0: Enable required APIs
       const serviceusage = google.serviceusage('v1');
       
-      log('Enabling Identity Toolkit API...');
+      log('Enabling required APIs...');
       
-      try {
-        await serviceusage.services.enable({
-          name: `projects/${projectId}/services/identitytoolkit.googleapis.com`,
-          auth: this.auth
-        });
-        
-        log('Identity Toolkit API enabled successfully');
-        
-        // Wait for API to be fully available
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-      } catch (enableError: any) {
-        if (enableError.code === 409 || enableError.message?.includes('already enabled')) {
-          log('Identity Toolkit API is already enabled');
-        } else {
-          log(`Warning: Could not enable Identity Toolkit API: ${enableError.message}`);
-          // Continue anyway - it might already be enabled
+      const requiredApis = [
+        'firebase.googleapis.com',
+        'identitytoolkit.googleapis.com'
+      ];
+      
+      for (const api of requiredApis) {
+        try {
+          await serviceusage.services.enable({
+            name: `projects/${projectId}/services/${api}`,
+            auth: this.auth
+          });
+          log(`✅ ${api} enabled`);
+        } catch (enableError: any) {
+          if (enableError.code === 409 || enableError.message?.includes('already enabled')) {
+            log(`✅ ${api} already enabled`);
+          } else {
+            log(`⚠️  Warning: Could not enable ${api}: ${enableError.message}`);
+          }
         }
       }
       
-      // Now configure Firebase Auth using direct API calls
-      log('Configuring Firebase Authentication with Email/Password provider...');
+      // Wait for APIs to be fully available
+      await new Promise(resolve => setTimeout(resolve, 5000));
       
       const accessToken = await this.auth.getAccessToken();
       
-      // Update Identity Toolkit configuration to enable email/password
-      const configUrl = `https://identitytoolkit.googleapis.com/admin/v2/projects/${projectId}/config`;
+      // Step 1: Add Firebase to the GCP Project
+      log('Step 1: Adding Firebase to GCP project...');
       
       try {
-        await axios.patch(configUrl, {
-          signIn: {
-            email: {
-              enabled: true,
-              passwordRequired: true
-            }
-          }
-        }, {
+        const addFirebaseUrl = `https://firebase.googleapis.com/v1beta1/projects/${projectId}:addFirebase`;
+        
+        await axios.post(addFirebaseUrl, {}, {
           headers: {
             'Authorization': `Bearer ${accessToken.token}`,
             'Content-Type': 'application/json'
           }
         });
         
-        log('✅ Firebase Authentication enabled with Email/Password provider');
+        log('✅ Firebase added to GCP project successfully');
         
-      } catch (configError: any) {
-        if (configError.response?.status === 404) {
-          // Try the v1 API instead
-          log('Trying v1 API for Firebase Auth configuration...');
-          
-          const configUrlV1 = `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/config`;
-          
-          try {
-            await axios.patch(configUrlV1, {
-              signIn: {
-                email: {
-                  enabled: true,
-                  passwordRequired: true
-                }
-              }
-            }, {
-              headers: {
-                'Authorization': `Bearer ${accessToken.token}`,
-                'Content-Type': 'application/json'
-              }
-            });
-            
-            log('✅ Firebase Authentication enabled with Email/Password provider (v1 API)');
-            
-          } catch (v1Error: any) {
-            log(`❌ Could not configure Firebase Auth via API: ${v1Error.message}`);
-            log('⚠️  Firebase Authentication API may need to be configured manually in Firebase Console');
-            log('⚠️  The identity toolkit service is enabled, but email/password provider may need manual setup');
-            // Don't throw - the API is enabled, just configuration might need manual work
-          }
+        // Wait for Firebase project setup to complete
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+      } catch (addFirebaseError: any) {
+        if (addFirebaseError.response?.status === 409 || addFirebaseError.message?.includes('already exists')) {
+          log('✅ Project already has Firebase enabled');
         } else {
-          log(`❌ Error configuring Firebase Authentication: ${configError.message}`);
-          log('⚠️  Firebase Authentication API is enabled, but configuration may need manual setup');
-          // Don't throw - the API is enabled
+          log(`❌ Failed to add Firebase to project: ${addFirebaseError.response?.status || addFirebaseError.message}`);
+          throw addFirebaseError;
         }
       }
       
+      // Step 2: Initialize Firebase Authentication
+      log('Step 2: Initializing Firebase Authentication...');
+      
+      try {
+        const initAuthUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}:initializeAuth`;
+        
+        await axios.post(initAuthUrl, {}, {
+          headers: {
+            'Authorization': `Bearer ${accessToken.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        log('✅ Firebase Authentication initialized successfully');
+        
+        // Wait for initialization to complete
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+      } catch (initAuthError: any) {
+        if (initAuthError.response?.status === 409 || initAuthError.message?.includes('already exists')) {
+          log('✅ Firebase Authentication already initialized');
+        } else {
+          log(`❌ Failed to initialize Firebase Auth: ${initAuthError.response?.status || initAuthError.message}`);
+          throw initAuthError;
+        }
+      }
+      
+      // Step 3: Enable Email/Password Provider
+      log('Step 3: Enabling Email/Password authentication provider...');
+      
+      const configUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/config`;
+      const updateMask = 'signIn.email.enabled,signIn.email.passwordRequired';
+      
+      await axios.patch(`${configUrl}?updateMask=${updateMask}`, {
+        signIn: {
+          email: {
+            enabled: true,
+            passwordRequired: true
+          }
+        }
+      }, {
+        headers: {
+          'Authorization': `Bearer ${accessToken.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      log('✅ Email/Password authentication provider enabled successfully');
+      log('🎉 Firebase Authentication is now fully configured and ready to use!');
+      
+      return true;
+      
     } catch (error: any) {
-      log(`❌ Error enabling Firebase Authentication: ${error.message}`);
-      throw new Error(`Firebase Authentication error: ${error.message}`);
+      log(`❌ Error enabling Firebase Authentication: ${error.response?.status || error.message}`);
+      log('⚠️  IMPORTANT: Firebase Authentication could not be configured programmatically');
+      log('⚠️  You will need to manually enable Email/Password authentication in Firebase Console');
+      log('⚠️  Go to: https://console.firebase.google.com/project/' + projectId + '/authentication/providers');
+      log('⚠️  Enable Email/Password under Sign-in method tab');
+      
+      // Return false instead of throwing to allow deployment to continue
+      return false;
     }
   }
 

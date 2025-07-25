@@ -326,6 +326,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             firebaseConfig={result.firebaseConfig}
             onComplete={handleChecklistComplete}
             onFirebaseSetupComplete={setFirebaseSetupComplete}
+            authConfigured={result.resources?.setupFirestore?.authConfigured !== false}
           />
           <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
             <Button
