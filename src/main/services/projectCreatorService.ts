@@ -9,8 +9,20 @@ export class ProjectCreatorService {
   }
 
   private setupIPC() {
-    ipcMain.handle('create-project', async (_event, projectName: string) => {
-      return this.createProject(projectName);
+    ipcMain.handle('create-project', async (_event, config: {
+      projectName: string;
+      organizationId?: string;
+      billingAccountId?: string;
+    }) => {
+      return this.createProject(config);
+    });
+    
+    ipcMain.handle('list-organizations', async () => {
+      return this.listOrganizations();
+    });
+    
+    ipcMain.handle('list-billing-accounts', async () => {
+      return this.listBillingAccounts();
     });
   }
 
@@ -29,7 +41,11 @@ export class ProjectCreatorService {
     return this.gcpOAuthService.oauth2Client;
   }
 
-  async createProject(projectName: string): Promise<{ success: boolean; projectId?: string; error?: string }> {
+  async createProject(config: {
+    projectName: string;
+    organizationId?: string;
+    billingAccountId?: string;
+  }): Promise<{ success: boolean; projectId?: string; error?: string }> {
     try {
       const auth = await this.getAuthClient();
       const cloudResourceManager = google.cloudresourcemanager({
@@ -38,17 +54,24 @@ export class ProjectCreatorService {
       });
 
       // Generate a unique project ID from the name
-      const projectId = this.generateProjectId(projectName);
+      const projectId = this.generateProjectId(config.projectName);
 
-      console.log(`Creating project: ${projectName} with ID: ${projectId}`);
+      console.log(`Creating project: ${config.projectName} with ID: ${projectId}`);
+
+      // Build the request body
+      const requestBody: any = {
+        projectId,
+        displayName: config.projectName
+      };
+
+      // Add parent organization if specified
+      if (config.organizationId) {
+        requestBody.parent = `organizations/${config.organizationId}`;
+      }
 
       // Create the project
       const { data: operation } = await cloudResourceManager.projects.create({
-        requestBody: {
-          projectId,
-          displayName: projectName
-          // Omit parent to create without organization
-        }
+        requestBody
       });
 
       // Wait for the operation to complete
@@ -57,12 +80,21 @@ export class ProjectCreatorService {
       if (projectCreated) {
         console.log(`Project ${projectId} created successfully`);
         
-        // Enable billing if available (optional - will silently fail if no billing account)
-        try {
-          await this.enableBilling(projectId);
-        } catch (error) {
-          console.log('Could not enable billing (no billing account or permissions)');
+        // Enable billing if billing account was provided
+        if (config.billingAccountId) {
+          try {
+            await this.enableBilling(projectId, config.billingAccountId);
+            console.log(`Billing enabled for project ${projectId}`);
+          } catch (error) {
+            console.error('Warning: Could not enable billing:', error);
+            // Continue anyway - user can enable billing manually
+          }
+        } else {
+          console.log('No billing account provided - project created without billing');
         }
+        
+        // Wait for project to be fully ready
+        await this.waitForProjectReady(projectId);
 
         return { success: true, projectId };
       } else {
@@ -147,7 +179,105 @@ export class ProjectCreatorService {
     throw new Error('Operation timed out');
   }
 
-  private async enableBilling(projectId: string): Promise<void> {
+  private async enableBilling(projectId: string, billingAccountId: string): Promise<void> {
+    const auth = await this.getAuthClient();
+    const cloudBilling = google.cloudbilling({
+      version: 'v1',
+      auth
+    });
+
+    // Link the billing account to the project
+    await cloudBilling.projects.updateBillingInfo({
+      name: `projects/${projectId}`,
+      requestBody: {
+        billingAccountName: billingAccountId
+      }
+    });
+  }
+
+  private async waitForProjectReady(projectId: string): Promise<void> {
+    console.log(`Waiting for project ${projectId} to be fully ready...`);
+    
+    const auth = await this.getAuthClient();
+    const cloudResourceManager = google.cloudresourcemanager({
+      version: 'v3',
+      auth
+    });
+
+    // Wait up to 30 seconds for project to be fully ready
+    const maxAttempts = 15;
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        // Try to get the project - if successful, it's ready
+        const { data } = await cloudResourceManager.projects.get({
+          name: `projects/${projectId}`
+        });
+        
+        if (data.state === 'ACTIVE') {
+          console.log('Project is active and ready!');
+          
+          // Additional wait to ensure all systems are ready
+          await this.sleep(3000);
+          return;
+        } else {
+          console.log(`Project state: ${data.state}, waiting...`);
+        }
+      } catch (error: any) {
+        console.log(`Project not ready yet (attempt ${i + 1}/${maxAttempts})`);
+      }
+      
+      await this.sleep(2000);
+    }
+    
+    throw new Error('Project creation timed out - project may not be fully ready');
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async listOrganizations(): Promise<{ organizations: any[], error?: string }> {
+    try {
+      const auth = await this.getAuthClient();
+      const cloudResourceManager = google.cloudresourcemanager({
+        version: 'v1',
+        auth
+      });
+
+      const { data } = await cloudResourceManager.organizations.search({});
+      
+      // Also get the user's email to show "No organization" option
+      const oauth2 = google.oauth2({ version: 'v2', auth });
+      const { data: userInfo } = await oauth2.userinfo.get();
+      
+      return {
+        organizations: [
+          { 
+            id: null, 
+            displayName: `No organization (${userInfo.email})`,
+            isPersonal: true 
+          },
+          ...(data.organizations || []).map(org => ({
+            id: org.name?.replace('organizations/', ''),
+            displayName: org.displayName || org.name,
+            isPersonal: false
+          }))
+        ]
+      };
+    } catch (error: any) {
+      console.error('Error listing organizations:', error);
+      return { 
+        organizations: [{ 
+          id: null, 
+          displayName: 'No organization (Personal account)',
+          isPersonal: true 
+        }],
+        error: error.message 
+      };
+    }
+  }
+
+  async listBillingAccounts(): Promise<{ accounts: any[], error?: string }> {
     try {
       const auth = await this.getAuthClient();
       const cloudBilling = google.cloudbilling({
@@ -155,40 +285,20 @@ export class ProjectCreatorService {
         auth
       });
 
-      // List billing accounts
       const { data } = await cloudBilling.billingAccounts.list();
       
-      if (!data.billingAccounts || data.billingAccounts.length === 0) {
-        console.log('No billing accounts available');
-        return;
-      }
-
-      // Use the first open billing account
-      const billingAccount = data.billingAccounts.find(
-        account => account.open && account.name
-      );
-
-      if (!billingAccount) {
-        console.log('No open billing accounts found');
-        return;
-      }
-
-      // Link the billing account to the project
-      await cloudBilling.projects.updateBillingInfo({
-        name: `projects/${projectId}`,
-        requestBody: {
-          billingAccountName: billingAccount.name
-        }
-      });
-
-      console.log(`Billing enabled for project ${projectId}`);
-    } catch (error) {
-      console.error('Error enabling billing:', error);
-      // Silently fail - billing is optional
+      return {
+        accounts: (data.billingAccounts || [])
+          .filter(account => account.open)
+          .map(account => ({
+            id: account.name,
+            displayName: account.displayName || account.name,
+            name: account.name
+          }))
+      };
+    } catch (error: any) {
+      console.error('Error listing billing accounts:', error);
+      return { accounts: [], error: error.message };
     }
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
