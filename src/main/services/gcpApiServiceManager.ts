@@ -61,7 +61,12 @@ export class GCPApiServiceManager {
         const billingStatus = await this.checkProjectBilling(projectId);
         if (!billingStatus.enabled) {
           throw new Error(
-            `Billing is required to enable ${apiName}. Please enable billing for project ${projectId} in the Google Cloud Console.`
+            `Billing is required to enable ${apiName}. Please enable billing for project ${projectId} in the Google Cloud Console.\n\n` +
+            `To enable billing:\n` +
+            `1. Go to https://console.cloud.google.com/billing\n` +
+            `2. Select or create a billing account\n` +
+            `3. Link it to project ${projectId}\n` +
+            `4. Try the deployment again`
           );
         }
       }
