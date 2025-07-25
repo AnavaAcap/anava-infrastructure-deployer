@@ -63,13 +63,21 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ]
     },
+    "afterSign": "scripts/notarize.js",
     "win": {
       "target": "nsis",
       "icon": "assets/icon.png"
@@ -80,11 +88,12 @@
     }
   },
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
+    "@types/archiver": "^6.0.3",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.15",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "@types/archiver": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.37.0",
     "@typescript-eslint/parser": "^8.37.0",
     "@vitejs/plugin-react": "^4.7.0",

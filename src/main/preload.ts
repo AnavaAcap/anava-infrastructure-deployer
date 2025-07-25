@@ -35,4 +35,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createFirebaseUser: (params: { projectId: string; email: string; password: string; apiKey: string }) => 
     ipcRenderer.invoke('firebase:create-user', params),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  validateDeployment: (params: {
+    apiGatewayUrl: string;
+    apiKey: string;
+    firebaseApiKey: string;
+  }) => ipcRenderer.invoke('deployment:validate', params),
 });

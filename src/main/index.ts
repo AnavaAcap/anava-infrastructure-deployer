@@ -263,3 +263,33 @@ ipcMain.handle('open-external', async (_, url: string) => {
   const { shell } = await import('electron');
   await shell.openExternal(url);
 });
+
+ipcMain.handle('deployment:validate', async (_, params: {
+  apiGatewayUrl: string;
+  apiKey: string;
+  firebaseApiKey: string;
+}) => {
+  try {
+    if (!gcpOAuthService.oauth2Client) {
+      throw new Error('Not authenticated');
+    }
+    
+    const { DeploymentValidator } = await import('./services/deploymentValidator');
+    const validator = new DeploymentValidator();
+    
+    const result = await validator.validateDeployment(
+      params.apiGatewayUrl,
+      params.apiKey,
+      params.firebaseApiKey
+    );
+    
+    return result;
+  } catch (error: any) {
+    logger.error('Validation failed:', error);
+    return {
+      success: false,
+      steps: [],
+      error: error.message || 'Validation failed'
+    };
+  }
+});
