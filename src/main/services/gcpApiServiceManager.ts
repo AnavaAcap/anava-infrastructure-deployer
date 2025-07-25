@@ -3,6 +3,18 @@ import { OAuth2Client } from 'google-auth-library';
 import { GCPOAuthService } from './gcpOAuthService';
 
 export class GCPApiServiceManager {
+  private billingRequired = new Set([
+    'compute.googleapis.com',
+    'cloudfunctions.googleapis.com',
+    'apigateway.googleapis.com',
+    'servicemanagement.googleapis.com',
+    'servicecontrol.googleapis.com',
+    'artifactregistry.googleapis.com',
+    'cloudbuild.googleapis.com',
+    'run.googleapis.com',
+    'aiplatform.googleapis.com'
+  ]);
+
   constructor(private gcpOAuthService: GCPOAuthService) {}
 
   private async getAuthClient(): Promise<OAuth2Client> {
@@ -42,6 +54,16 @@ export class GCPApiServiceManager {
       if (isEnabled) {
         console.log(`API ${apiName} is already enabled`);
         return;
+      }
+
+      // Check if this API requires billing
+      if (this.billingRequired.has(apiName)) {
+        const billingStatus = await this.checkProjectBilling(projectId);
+        if (!billingStatus.enabled) {
+          throw new Error(
+            `Billing is required to enable ${apiName}. Please enable billing for project ${projectId} in the Google Cloud Console.`
+          );
+        }
       }
 
       // Enable the API
@@ -381,5 +403,27 @@ export class GCPApiServiceManager {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async checkProjectBilling(projectId: string): Promise<{ enabled: boolean; accountName?: string }> {
+    try {
+      const auth = await this.getAuthClient();
+      const cloudBilling = google.cloudbilling({
+        version: 'v1',
+        auth
+      });
+
+      const { data } = await cloudBilling.projects.getBillingInfo({
+        name: `projects/${projectId}`
+      });
+
+      return {
+        enabled: !!data.billingEnabled,
+        accountName: data.billingAccountName || undefined
+      };
+    } catch (error) {
+      console.error('Error checking billing:', error);
+      return { enabled: false };
+    }
   }
 }

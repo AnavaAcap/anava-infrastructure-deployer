@@ -40,7 +40,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     apiKey: string;
     firebaseApiKey: string;
   }) => ipcRenderer.invoke('deployment:validate', params),
-  createProject: (projectName: string) => ipcRenderer.invoke('create-project', projectName),
+  createProject: (config: {
+    projectName: string;
+    organizationId?: string;
+    billingAccountId?: string;
+  }) => ipcRenderer.invoke('create-project', config),
+  listOrganizations: () => ipcRenderer.invoke('list-organizations'),
+  listBillingAccounts: () => ipcRenderer.invoke('list-billing-accounts'),
   testAuthStep: (params: any) => ipcRenderer.invoke('test-auth-step', params),
   // Camera-related APIs
   scanNetworkCameras: () => ipcRenderer.invoke('scan-network-cameras'),

@@ -46,7 +46,13 @@ declare global {
         summary?: string;
         error?: string;
       }>;
-      createProject: (projectName: string) => Promise<{ success: boolean; projectId?: string; error?: string }>;
+      createProject: (config: {
+        projectName: string;
+        organizationId?: string;
+        billingAccountId?: string;
+      }) => Promise<{ success: boolean; projectId?: string; error?: string }>;
+      listOrganizations: () => Promise<{ organizations: any[]; error?: string }>;
+      listBillingAccounts: () => Promise<{ accounts: any[]; error?: string }>;
       testAuthStep: (params: any) => Promise<any>;
       // Camera-related APIs
       scanNetworkCameras: () => Promise<any[]>;
