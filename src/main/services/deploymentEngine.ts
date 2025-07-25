@@ -783,30 +783,51 @@ export class DeploymentEngine extends EventEmitter {
     if (!this.firestoreDeployer) {
       throw new Error('Firestore deployer not initialized');
     }
-
-    this.emitProgress({
-      currentStep: 'setupFirestore',
-      stepProgress: 0,
-      totalProgress: 87.5,
-      message: 'Setting up Firestore...',
-    });
-
-    // Deploy security rules for both Firestore and Storage
+    
     const logCallback = (message: string) => {
       this.emitLog(message);
       console.log(message);
     };
 
-    await this.firestoreDeployer.deploySecurityRules(state.projectId, logCallback);
+    // Step 1: Enable Firebase Authentication (25%)
+    this.emitProgress({
+      currentStep: 'setupFirestore',
+      stepProgress: 0,
+      totalProgress: 87.5,
+      message: 'Enabling Firebase Authentication...',
+    });
+    
+    await this.firestoreDeployer.enableFirebaseAuthentication(state.projectId, logCallback);
+    this.stateManager.updateStepResource('setupFirestore', 'authEnabled', true);
 
+    // Step 2: Enable Firebase Storage (50%)
+    this.emitProgress({
+      currentStep: 'setupFirestore',
+      stepProgress: 25,
+      totalProgress: 87.5,
+      message: 'Enabling Firebase Storage...',
+    });
+    
+    const storageBucket = await this.firestoreDeployer.enableFirebaseStorage(state.projectId, logCallback);
+    this.stateManager.updateStepResource('setupFirestore', 'storageBucket', storageBucket);
+
+    // Step 3: Deploy security rules for both Firestore and Storage (100%)
+    this.emitProgress({
+      currentStep: 'setupFirestore',
+      stepProgress: 50,
+      totalProgress: 87.5,
+      message: 'Deploying security rules...',
+    });
+    
+    await this.firestoreDeployer.deploySecurityRules(state.projectId, logCallback);
     this.stateManager.updateStepResource('setupFirestore', 'databaseId', '(default)');
     this.stateManager.updateStepResource('setupFirestore', 'rulesDeployed', true);
-
+    
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 100,
       totalProgress: 87.5,
-      message: 'Firestore setup complete',
+      message: 'Firebase setup complete - Auth, Storage, and security rules configured',
     });
   }
 

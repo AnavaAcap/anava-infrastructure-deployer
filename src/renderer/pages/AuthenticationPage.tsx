@@ -34,6 +34,8 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [preparingProject, setPreparingProject] = useState(false);
+  const [preparingProjectId, setPreparingProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuthentication();
@@ -83,14 +85,63 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   };
 
   const handleProjectCreated = async (projectId: string) => {
-    // Refresh the project list
-    await handleRefreshProjects();
-    
-    // Select the new project
-    setSelectedProject(projectId);
-    
-    // Close dialog
-    setCreateDialogOpen(false);
+    try {
+      // Close dialog first
+      setCreateDialogOpen(false);
+      
+      // Show preparing state
+      setPreparingProject(true);
+      setPreparingProjectId(projectId);
+      
+      // Give the project a moment to fully initialize
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Refresh the project list to get the full project info
+      const projectList = await window.electronAPI.auth.getProjects();
+      setProjects(projectList);
+      
+      // Find the newly created project
+      const newProject = projectList.find(p => p.projectId === projectId);
+      
+      if (newProject) {
+        // Proceed directly to deployment with the new project
+        setPreparingProject(false);
+        setPreparingProjectId(null);
+        onProjectSelected(newProject);
+      } else {
+        // Project not found yet, retry a few times
+        let retries = 0;
+        const maxRetries = 5;
+        
+        while (retries < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          const retryProjectList = await window.electronAPI.auth.getProjects();
+          const foundProject = retryProjectList.find(p => p.projectId === projectId);
+          
+          if (foundProject) {
+            setProjects(retryProjectList);
+            setPreparingProject(false);
+            setPreparingProjectId(null);
+            onProjectSelected(foundProject);
+            return;
+          }
+          
+          retries++;
+        }
+        
+        // Fallback: set it as selected and let user click Next
+        setProjects(projectList);
+        setSelectedProject(projectId);
+        setPreparingProject(false);
+        setPreparingProjectId(null);
+        setError('Project created successfully but may take a few minutes to appear in the list. You can proceed with deployment.');
+      }
+    } catch (error) {
+      console.error('Error preparing project:', error);
+      setPreparingProject(false);
+      setPreparingProjectId(null);
+      setError('Project created but failed to prepare for deployment. Please refresh and select it manually.');
+    }
   };
 
   if (loading) {
@@ -98,6 +149,31 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
       <Paper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
         <CircularProgress />
         <Typography sx={{ mt: 2 }}>Checking authentication...</Typography>
+      </Paper>
+    );
+  }
+
+  if (preparingProject) {
+    return (
+      <Paper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
+        <TopBar 
+          title="Google Cloud Authentication" 
+          showLogout={authStatus?.authenticated && !!onLogout}
+          onLogout={onLogout}
+        />
+        
+        <Box sx={{ mt: 4 }}>
+          <CircularProgress size={48} />
+          <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
+            Preparing Project
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Setting up project {preparingProjectId} for deployment...
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This will only take a moment.
+          </Typography>
+        </Box>
       </Paper>
     );
   }

@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
+import axios from 'axios';
 
 export class FirestoreDeployer {
   private firebaserules = google.firebaserules('v1');
@@ -76,7 +77,7 @@ export class FirestoreDeployer {
   ): Promise<void> {
     log('Deploying Firebase Storage security rules...');
     
-    // First ensure storage bucket exists
+    // First ensure storage bucket exists and configure CORS
     await this.ensureStorageBucketExists(projectId, log);
     
     // Read Storage rules template
@@ -226,7 +227,7 @@ export class FirestoreDeployer {
   private async ensureStorageBucketExists(
     projectId: string,
     log: (message: string) => void
-  ): Promise<void> {
+  ): Promise<string> {
     log('Checking if Firebase Storage bucket exists...');
     
     const storage = google.storage({ version: 'v1', auth: this.auth });
@@ -247,7 +248,8 @@ export class FirestoreDeployer {
         });
         
         log(`Firebase Storage bucket already exists: ${bucket.name}`);
-        return; // Bucket exists, we're done
+        await this.configureBucketCORS(bucketName, projectId, log);
+        return bucketName;
       } catch (error: any) {
         if (error.code !== 404) {
           log(`Error checking bucket ${bucketName}: ${error.message}`);
@@ -264,7 +266,8 @@ export class FirestoreDeployer {
       });
       
       log(`Custom Firebase Storage bucket already exists: ${bucket.name}`);
-      return;
+      await this.configureBucketCORS(customBucketName, projectId, log);
+      return customBucketName;
     } catch (error: any) {
       if (error.code === 404) {
         // Create custom bucket - this doesn't require domain verification
@@ -294,6 +297,11 @@ export class FirestoreDeployer {
           
           // Wait a bit for bucket to be ready
           await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // Configure CORS for the new bucket
+          await this.configureBucketCORS(customBucketName, projectId, log);
+          
+          return customBucketName;
           
         } catch (createError: any) {
           log(`Failed to create storage bucket: ${createError.message}`);
@@ -390,6 +398,184 @@ export class FirestoreDeployer {
       }
       
       log('Waiting for database creation to complete...');
+    }
+  }
+
+  private async configureBucketCORS(
+    bucketName: string,
+    projectId: string,
+    log: (message: string) => void
+  ): Promise<void> {
+    log(`Configuring CORS policy for Firebase Storage bucket: ${bucketName}`);
+    
+    const storage = google.storage({ version: 'v1', auth: this.auth });
+    
+    // Define CORS configuration that matches the shell script
+    const corsConfiguration = [
+      {
+        origin: [
+          'http://localhost:3000',                    // Development
+          `https://${projectId}.web.app`,             // Firebase Hosting
+          `https://${projectId}.firebaseapp.com`,     // Firebase Hosting (legacy)
+          'https://localhost:3000',                   // HTTPS development
+          'https://127.0.0.1:3000'                    // Local HTTPS
+        ],
+        method: ['GET', 'HEAD'],
+        responseHeader: ['Content-Type', 'Access-Control-Allow-Origin'],
+        maxAgeSeconds: 3600
+      }
+    ];
+
+    try {
+      // Update bucket CORS configuration
+      await storage.buckets.patch({
+        bucket: bucketName,
+        requestBody: {
+          cors: corsConfiguration
+        },
+        auth: this.auth
+      });
+
+      log(`✅ CORS policy configured successfully for bucket: ${bucketName}`);
+      log(`   Allowed origins: http://localhost:3000, https://${projectId}.web.app, https://${projectId}.firebaseapp.com`);
+      log(`   Allowed methods: GET, HEAD`);
+      log(`   Max age: 3600 seconds (1 hour)`);
+      
+    } catch (error: any) {
+      log(`⚠️  Warning: Failed to configure CORS for bucket ${bucketName}: ${error.message}`);
+      log(`⚠️  You may need to configure CORS manually in the Google Cloud Console:`);
+      log(`⚠️  1. Go to Cloud Storage → Buckets → ${bucketName}`);
+      log(`⚠️  2. Click "Permissions" tab → "CORS" section → "Edit"`);
+      log(`⚠️  3. Add origins: http://localhost:3000, https://${projectId}.web.app`);
+      log(`⚠️  4. Add methods: GET, HEAD`);
+      // Don't throw - this is not critical enough to fail the entire deployment
+    }
+  }
+
+  async enableFirebaseAuthentication(
+    projectId: string,
+    logCallback?: (message: string) => void
+  ): Promise<void> {
+    const log = (message: string) => {
+      console.log(message);
+      logCallback?.(message);
+    };
+
+    log('=== Enabling Firebase Authentication ===');
+    
+    try {
+      // First enable the Identity Toolkit API using Service Usage API
+      const serviceusage = google.serviceusage('v1');
+      
+      log('Enabling Identity Toolkit API...');
+      
+      try {
+        await serviceusage.services.enable({
+          name: `projects/${projectId}/services/identitytoolkit.googleapis.com`,
+          auth: this.auth
+        });
+        
+        log('Identity Toolkit API enabled successfully');
+        
+        // Wait for API to be fully available
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+      } catch (enableError: any) {
+        if (enableError.code === 409 || enableError.message?.includes('already enabled')) {
+          log('Identity Toolkit API is already enabled');
+        } else {
+          log(`Warning: Could not enable Identity Toolkit API: ${enableError.message}`);
+          // Continue anyway - it might already be enabled
+        }
+      }
+      
+      // Now configure Firebase Auth using direct API calls
+      log('Configuring Firebase Authentication with Email/Password provider...');
+      
+      const accessToken = await this.auth.getAccessToken();
+      
+      // Update Identity Toolkit configuration to enable email/password
+      const configUrl = `https://identitytoolkit.googleapis.com/admin/v2/projects/${projectId}/config`;
+      
+      try {
+        await axios.patch(configUrl, {
+          signIn: {
+            email: {
+              enabled: true,
+              passwordRequired: true
+            }
+          }
+        }, {
+          headers: {
+            'Authorization': `Bearer ${accessToken.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        log('✅ Firebase Authentication enabled with Email/Password provider');
+        
+      } catch (configError: any) {
+        if (configError.response?.status === 404) {
+          // Try the v1 API instead
+          log('Trying v1 API for Firebase Auth configuration...');
+          
+          const configUrlV1 = `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/config`;
+          
+          try {
+            await axios.patch(configUrlV1, {
+              signIn: {
+                email: {
+                  enabled: true,
+                  passwordRequired: true
+                }
+              }
+            }, {
+              headers: {
+                'Authorization': `Bearer ${accessToken.token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            log('✅ Firebase Authentication enabled with Email/Password provider (v1 API)');
+            
+          } catch (v1Error: any) {
+            log(`❌ Could not configure Firebase Auth via API: ${v1Error.message}`);
+            log('⚠️  Firebase Authentication API may need to be configured manually in Firebase Console');
+            log('⚠️  The identity toolkit service is enabled, but email/password provider may need manual setup');
+            // Don't throw - the API is enabled, just configuration might need manual work
+          }
+        } else {
+          log(`❌ Error configuring Firebase Authentication: ${configError.message}`);
+          log('⚠️  Firebase Authentication API is enabled, but configuration may need manual setup');
+          // Don't throw - the API is enabled
+        }
+      }
+      
+    } catch (error: any) {
+      log(`❌ Error enabling Firebase Authentication: ${error.message}`);
+      throw new Error(`Firebase Authentication error: ${error.message}`);
+    }
+  }
+
+  async enableFirebaseStorage(
+    projectId: string,
+    logCallback?: (message: string) => void
+  ): Promise<string> {
+    const log = (message: string) => {
+      console.log(message);
+      logCallback?.(message);
+    };
+
+    log('=== Enabling Firebase Storage ===');
+    
+    try {
+      // Firebase Storage is essentially a GCS bucket with special configuration
+      // We'll create/ensure the default Firebase storage bucket exists
+      return await this.ensureStorageBucketExists(projectId, log);
+      
+    } catch (error: any) {
+      log(`❌ Failed to enable Firebase Storage: ${error.message}`);
+      throw new Error(`Firebase Storage enablement failed: ${error.message}`);
     }
   }
 }

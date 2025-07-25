@@ -45,9 +45,16 @@ export class AuthTestService {
       }
     } catch (error: any) {
       console.error(`Auth test error at step ${params.step}:`, error);
+      
+      // Log more details for 400 errors
+      if (error.response) {
+        console.error('Error response status:', error.response.status);
+        console.error('Error response data:', error.response.data);
+      }
+      
       return {
         success: false,
-        error: error.message || 'Test failed'
+        error: error.response?.data?.error?.message || error.message || 'Test failed'
       };
     }
   }
