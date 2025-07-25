@@ -46,6 +46,23 @@ declare global {
         summary?: string;
         error?: string;
       }>;
+      createProject: (projectName: string) => Promise<{ success: boolean; projectId?: string; error?: string }>;
+      testAuthStep: (params: any) => Promise<any>;
+      // Camera-related APIs
+      scanNetworkCameras: () => Promise<any[]>;
+      onCameraScanProgress: (callback: (data: { ip: string; status: string }) => void) => () => void;
+      quickScanCamera: (ip: string, username: string, password: string) => Promise<any[]>;
+      testCameraCredentials: (cameraId: string, ip: string, username: string, password: string) => Promise<any>;
+      deployACAP: (camera: any, acapPath: string) => Promise<any>;
+      uninstallACAP: (camera: any, appName: string) => Promise<any>;
+      listInstalledACAPs: (camera: any) => Promise<string[]>;
+      configureCamera: (camera: any, config: any) => Promise<any>;
+      // ACAP download APIs
+      acap: {
+        getReleases: () => Promise<any[]>;
+        download: (release: any) => Promise<any>;
+        getLocalPath: (filename: string) => Promise<string>;
+      };
     };
   }
 }
