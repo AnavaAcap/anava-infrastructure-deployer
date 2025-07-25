@@ -40,4 +40,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     apiKey: string;
     firebaseApiKey: string;
   }) => ipcRenderer.invoke('deployment:validate', params),
+  createProject: (projectName: string) => ipcRenderer.invoke('create-project', projectName),
+  testAuthStep: (params: any) => ipcRenderer.invoke('test-auth-step', params),
+  // Camera-related APIs
+  scanNetworkCameras: () => ipcRenderer.invoke('scan-network-cameras'),
+  onCameraScanProgress: (callback: (data: { ip: string; status: string }) => void) => {
+    ipcRenderer.on('camera-scan-progress', (_, data) => callback(data));
+    // Return cleanup function
+    return () => ipcRenderer.removeAllListeners('camera-scan-progress');
+  },
+  quickScanCamera: (ip: string, username: string, password: string) => 
+    ipcRenderer.invoke('quick-scan-camera', ip, username, password),
+  testCameraCredentials: (cameraId: string, ip: string, username: string, password: string) =>
+    ipcRenderer.invoke('test-camera-credentials', cameraId, ip, username, password),
+  deployACAP: (camera: any, acapPath: string) => ipcRenderer.invoke('deploy-acap', camera, acapPath),
+  uninstallACAP: (camera: any, appName: string) => ipcRenderer.invoke('uninstall-acap', camera, appName),
+  listInstalledACAPs: (camera: any) => ipcRenderer.invoke('list-installed-acaps', camera),
+  configureCamera: (camera: any, config: any) => ipcRenderer.invoke('configure-camera', camera, config),
+  // ACAP download APIs
+  acap: {
+    getReleases: () => ipcRenderer.invoke('acap:get-releases'),
+    download: (release: any) => ipcRenderer.invoke('acap:download', release),
+    getLocalPath: (filename: string) => ipcRenderer.invoke('acap:get-local-path', filename),
+  },
 });
