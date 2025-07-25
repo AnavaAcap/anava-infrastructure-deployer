@@ -46,8 +46,8 @@ export class ProjectCreatorService {
       const { data: operation } = await cloudResourceManager.projects.create({
         requestBody: {
           projectId,
-          displayName: projectName,
-          parent: 'organizations/0' // Creates in "No organization"
+          displayName: projectName
+          // Omit parent to create without organization
         }
       });
 
