@@ -37,8 +37,7 @@ export class AuthTestService {
         
         case 'verify':
           return await this.verifyGcpToken(
-            params.gcpToken,
-            params.projectId
+            params.gcpToken
           );
         
         default:
@@ -132,7 +131,7 @@ export class AuthTestService {
     }
   }
 
-  private async verifyGcpToken(gcpToken: string, projectId: string) {
+  private async verifyGcpToken(gcpToken: string) {
     console.log('[AuthTest] Step 4: Verifying GCP token...');
     
     // Test the token by getting token info
