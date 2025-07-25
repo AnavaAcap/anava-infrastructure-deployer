@@ -42,6 +42,7 @@ interface PostDeploymentChecklistProps {
   firebaseConfig?: any;
   onComplete: () => void;
   onFirebaseSetupComplete?: (isComplete: boolean) => void;
+  authConfigured?: boolean;
 }
 
 const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
@@ -49,6 +50,7 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
   firebaseConfig,
   onComplete,
   onFirebaseSetupComplete,
+  authConfigured = true,
 }) => {
   const [checkedItems, setCheckedItems] = React.useState<string[]>([]);
   const [createUserOpen, setCreateUserOpen] = React.useState(false);
@@ -60,13 +62,20 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
 
   // Track Firebase setup completion
   React.useEffect(() => {
-    // Only the 'create-user' step is required now (auth and storage are automated)
-    const allComplete = userCreated;
+    let allComplete = false;
+    
+    if (authConfigured) {
+      // Auth is automated, only need user creation
+      allComplete = userCreated;
+    } else {
+      // Auth needs manual setup, need both auth checkbox and user creation
+      allComplete = checkedItems.includes('enable-auth') && userCreated;
+    }
     
     if (onFirebaseSetupComplete) {
       onFirebaseSetupComplete(allComplete);
     }
-  }, [userCreated, onFirebaseSetupComplete]);
+  }, [authConfigured, checkedItems, userCreated, onFirebaseSetupComplete]);
 
   const handleToggle = (item: string) => {
     setCheckedItems(prev => 
@@ -113,24 +122,43 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
   const firebaseStorageUrl = `https://console.firebase.google.com/project/${projectId}/storage`;
   const firebaseUsersUrl = `https://console.firebase.google.com/project/${projectId}/authentication/users`;
 
+  const authItem = authConfigured ? {
+    id: 'auth-enabled',
+    icon: <Security />,
+    primary: 'Firebase Authentication Enabled',
+    secondary: '✅ Email/Password authentication is now active',
+    required: false,
+    completed: true,
+    action: (
+      <Chip 
+        icon={<CheckCircle />} 
+        label="Automated" 
+        color="success" 
+        variant="outlined"
+        size="small"
+      />
+    ),
+  } : {
+    id: 'enable-auth',
+    icon: <Security />,
+    primary: 'Enable Email/Password Authentication',
+    secondary: 'Enable Email/Password in Authentication > Sign-in method',
+    required: true,
+    completed: false,
+    action: (
+      <Button
+        size="small"
+        variant="outlined"
+        endIcon={<OpenInNew />}
+        onClick={() => window.electronAPI.openExternal(firebaseConsoleUrl)}
+      >
+        Open Auth Console
+      </Button>
+    ),
+  };
+
   const checklistItems = [
-    {
-      id: 'auth-enabled',
-      icon: <Security />,
-      primary: 'Firebase Authentication Enabled',
-      secondary: '✅ Email/Password authentication is now active',
-      required: false,
-      completed: true,
-      action: (
-        <Chip 
-          icon={<CheckCircle />} 
-          label="Automated" 
-          color="success" 
-          variant="outlined"
-          size="small"
-        />
-      ),
-    },
+    authItem,
     {
       id: 'storage-enabled',
       icon: <CloudUpload />,
@@ -162,7 +190,7 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
           color={userCreated ? "success" : "primary"}
           endIcon={userCreated ? <CheckCircle /> : <Add />}
           onClick={() => setCreateUserOpen(true)}
-          disabled={userCreated}
+          disabled={userCreated || (!authConfigured && !checkedItems.includes('enable-auth'))}
         >
           {userCreated ? 'User Created' : 'Create User'}
         </Button>
@@ -182,12 +210,15 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
           🚀 Infrastructure Deployed Successfully!
         </Typography>
         
-        <Alert severity="success" sx={{ mb: 3 }}>
+        <Alert severity={authConfigured ? "success" : "warning"} sx={{ mb: 3 }}>
           <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-            Firebase Setup Complete!
+            {authConfigured ? "Firebase Setup Complete!" : "Firebase Setup Partially Complete"}
           </Typography>
           <Typography variant="body2">
-            Firebase Authentication and Storage have been automatically configured. Only one final step remains - create your admin user below.
+            {authConfigured 
+              ? "Firebase Authentication and Storage have been automatically configured. Only one final step remains - create your admin user below."
+              : "Firebase Storage has been configured automatically, but Authentication needs manual setup. Complete the steps below to finish the configuration."
+            }
           </Typography>
         </Alert>
 

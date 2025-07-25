@@ -797,8 +797,9 @@ export class DeploymentEngine extends EventEmitter {
       message: 'Enabling Firebase Authentication...',
     });
     
-    await this.firestoreDeployer.enableFirebaseAuthentication(state.projectId, logCallback);
-    this.stateManager.updateStepResource('setupFirestore', 'authEnabled', true);
+    const authConfigured = await this.firestoreDeployer.enableFirebaseAuthentication(state.projectId, logCallback);
+    this.stateManager.updateStepResource('setupFirestore', 'authEnabled', authConfigured);
+    this.stateManager.updateStepResource('setupFirestore', 'authConfigured', authConfigured);
 
     // Step 2: Enable Firebase Storage (50%)
     this.emitProgress({
