@@ -298,7 +298,24 @@ export class ProjectCreatorService {
       };
     } catch (error: any) {
       console.error('Error listing billing accounts:', error);
-      return { accounts: [], error: error.message };
+      
+      // Handle specific Cloud Billing API errors
+      if (error.message?.includes('Cloud Billing API has not been used') || 
+          error.message?.includes('disabled')) {
+        return { 
+          accounts: [], 
+          error: 'Cloud Billing API is not enabled. You can enable billing accounts manually later or enable the API first.'
+        };
+      }
+      
+      if (error.code === 403 || error.status === 403) {
+        return {
+          accounts: [],
+          error: 'No permission to access billing accounts. You may need billing administrator role.'
+        };
+      }
+      
+      return { accounts: [], error: 'Could not load billing accounts. You can create the project without billing and add it later.' };
     }
   }
 }

@@ -47,6 +47,7 @@ export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [loadingOrgs, setLoadingOrgs] = useState(false);
   const [loadingBilling, setLoadingBilling] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
   const steps = ['Project Details', 'Organization & Billing', 'Create Project'];
 
@@ -78,10 +79,12 @@ export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({
 
     // Load billing accounts
     setLoadingBilling(true);
+    setBillingError(null);
     try {
       const { accounts, error } = await window.electronAPI.listBillingAccounts();
       if (error) {
         console.error('Error loading billing accounts:', error);
+        setBillingError(error);
       }
       setBillingAccounts(accounts || []);
       // Select first billing account if available
@@ -90,6 +93,7 @@ export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({
       }
     } catch (error) {
       console.error('Failed to load billing accounts:', error);
+      setBillingError('Failed to load billing accounts');
     } finally {
       setLoadingBilling(false);
     }
@@ -144,6 +148,7 @@ export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({
     setSelectedOrganization(null);
     setSelectedBillingAccount(null);
     setError(null);
+    setBillingError(null);
     onClose();
   };
 
@@ -241,10 +246,33 @@ export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({
               </FormHelperText>
             </FormControl>
 
-            {billingAccounts.length === 0 && !loadingBilling && (
+            {billingError && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Billing Account Access Issue
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  {billingError}
+                </Typography>
+                <Typography variant="body2">
+                  You can still create the project without billing. To enable billing later:
+                </Typography>
+                <ol style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                  <li>Go to Google Cloud Console → Billing</li>  
+                  <li>Create or link a billing account</li>
+                  <li>Enable the Cloud Billing API if needed</li>
+                </ol>
+              </Alert>
+            )}
+
+            {billingAccounts.length === 0 && !loadingBilling && !billingError && (
               <Alert severity="info" sx={{ mt: 2 }}>
-                No billing accounts found. You'll need to set up billing in the Google Cloud Console 
-                to use paid services like Compute Engine and API Gateway.
+                <Typography variant="subtitle2" gutterBottom>
+                  No billing accounts found
+                </Typography>
+                <Typography variant="body2">
+                  You can create the project without billing and add it later in the Google Cloud Console.
+                </Typography>
               </Alert>
             )}
           </Box>
