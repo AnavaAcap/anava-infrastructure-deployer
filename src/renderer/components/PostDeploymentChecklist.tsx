@@ -41,12 +41,14 @@ interface PostDeploymentChecklistProps {
   projectId: string;
   firebaseConfig?: any;
   onComplete: () => void;
+  onFirebaseSetupComplete?: (isComplete: boolean) => void;
 }
 
 const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
   projectId,
   firebaseConfig,
   onComplete,
+  onFirebaseSetupComplete,
 }) => {
   const [checkedItems, setCheckedItems] = React.useState<string[]>([]);
   const [createUserOpen, setCreateUserOpen] = React.useState(false);
@@ -55,6 +57,16 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
   const [creatingUser, setCreatingUser] = React.useState(false);
   const [userCreated, setUserCreated] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // Track Firebase setup completion
+  React.useEffect(() => {
+    // Only the 'create-user' step is required now (auth and storage are automated)
+    const allComplete = userCreated;
+    
+    if (onFirebaseSetupComplete) {
+      onFirebaseSetupComplete(allComplete);
+    }
+  }, [userCreated, onFirebaseSetupComplete]);
 
   const handleToggle = (item: string) => {
     setCheckedItems(prev => 
@@ -103,37 +115,37 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
 
   const checklistItems = [
     {
-      id: 'init-storage',
-      icon: <CloudUpload />,
-      primary: 'Initialize Firebase Storage',
-      secondary: 'Click "Get Started" in Firebase Console to enable Storage',
-      required: true,
+      id: 'auth-enabled',
+      icon: <Security />,
+      primary: 'Firebase Authentication Enabled',
+      secondary: '✅ Email/Password authentication is now active',
+      required: false,
+      completed: true,
       action: (
-        <Button
-          size="small"
+        <Chip 
+          icon={<CheckCircle />} 
+          label="Automated" 
+          color="success" 
           variant="outlined"
-          endIcon={<OpenInNew />}
-          onClick={() => window.electronAPI.openExternal(firebaseStorageUrl)}
-        >
-          Open Storage Console
-        </Button>
+          size="small"
+        />
       ),
     },
     {
-      id: 'enable-auth',
-      icon: <Security />,
-      primary: 'Enable Email/Password Authentication',
-      secondary: 'Enable Email/Password in Authentication > Sign-in method',
-      required: true,
+      id: 'storage-enabled',
+      icon: <CloudUpload />,
+      primary: 'Firebase Storage Initialized',
+      secondary: '✅ Storage bucket created and configured with CORS',
+      required: false,
+      completed: true,
       action: (
-        <Button
-          size="small"
+        <Chip 
+          icon={<CheckCircle />} 
+          label="Automated" 
+          color="success" 
           variant="outlined"
-          endIcon={<OpenInNew />}
-          onClick={() => window.electronAPI.openExternal(firebaseConsoleUrl)}
-        >
-          Open Auth Console
-        </Button>
+          size="small"
+        />
       ),
     },
     {
@@ -142,6 +154,7 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
       primary: 'Create First Admin User',
       secondary: userCreated ? '✅ Admin user created successfully!' : 'Add an admin user for camera authentication',
       required: true,
+      completed: userCreated,
       action: (
         <Button
           size="small"
@@ -149,7 +162,7 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
           color={userCreated ? "success" : "primary"}
           endIcon={userCreated ? <CheckCircle /> : <Add />}
           onClick={() => setCreateUserOpen(true)}
-          disabled={userCreated || !checkedItems.includes('enable-auth')}
+          disabled={userCreated}
         >
           {userCreated ? 'User Created' : 'Create User'}
         </Button>
@@ -159,7 +172,7 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
 
   const requiredItems = checklistItems.filter(item => item.required);
   const allRequiredChecked = requiredItems.every(item => 
-    checkedItems.includes(item.id) || (item.id === 'create-user' && userCreated)
+    item.completed || checkedItems.includes(item.id) || (item.id === 'create-user' && userCreated)
   );
 
   return (
@@ -169,21 +182,21 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
           🚀 Infrastructure Deployed Successfully!
         </Typography>
         
-        <Alert severity="warning" sx={{ mb: 3 }}>
+        <Alert severity="success" sx={{ mb: 3 }}>
           <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-            Important: Manual Setup Required
+            Firebase Setup Complete!
           </Typography>
           <Typography variant="body2">
-            Firebase requires some initial setup through their console. Please complete ALL steps below before exporting the configuration.
+            Firebase Authentication and Storage have been automatically configured. Only one final step remains - create your admin user below.
           </Typography>
         </Alert>
 
         <Typography variant="h6" gutterBottom sx={{ mt: 4, mb: 2 }}>
-          Required Setup Steps
+          Setup Status
         </Typography>
         
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Complete these steps in order. The system will not work until all are completed.
+          Firebase services are automatically configured. Create an admin user to complete the setup.
         </Typography>
 
         <List>
@@ -191,7 +204,7 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
             <React.Fragment key={item.id}>
               <ListItem
                 sx={{
-                  bgcolor: checkedItems.includes(item.id) || (item.id === 'create-user' && userCreated) 
+                  bgcolor: item.completed || checkedItems.includes(item.id) || (item.id === 'create-user' && userCreated) 
                     ? 'action.hover' 
                     : 'transparent',
                   borderRadius: 1,
@@ -201,9 +214,9 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
                 <ListItemIcon>
                   <Checkbox
                     edge="start"
-                    checked={checkedItems.includes(item.id) || (item.id === 'create-user' && userCreated)}
+                    checked={item.completed || checkedItems.includes(item.id) || (item.id === 'create-user' && userCreated)}
                     onChange={() => handleToggle(item.id)}
-                    disabled={item.id === 'create-user' && userCreated}
+                    disabled={item.completed || (item.id === 'create-user' && userCreated)}
                   />
                 </ListItemIcon>
                 <ListItemText
