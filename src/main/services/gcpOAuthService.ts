@@ -480,8 +480,16 @@ export class GCPOAuthService {
       
       const response = await Promise.race([listPromise, timeoutPromise]) as any;
       
-      const projects = response.data.projects || [];
-      log.info(`Found ${projects.length} projects`);
+      const rawProjects = response.data.projects || [];
+      log.info(`Found ${rawProjects.length} projects`);
+      
+      // Map the API response to our GCPProject interface
+      const projects = rawProjects.map(project => ({
+        projectId: project.projectId || '',
+        projectNumber: project.projectNumber || '',
+        displayName: project.name || project.projectId || '', // API returns 'name', we need 'displayName'
+        state: project.lifecycleState || 'ACTIVE'
+      }));
       
       return projects;
     } catch (error: any) {
@@ -496,7 +504,15 @@ export class GCPOAuthService {
             pageSize: 100,
             filter: 'lifecycleState:ACTIVE'
           });
-          return response.data.projects || [];
+          
+          // Map the API response to our GCPProject interface
+          const rawProjects = response.data.projects || [];
+          return rawProjects.map(project => ({
+            projectId: project.projectId || '',
+            projectNumber: project.projectNumber || '',
+            displayName: project.name || project.projectId || '', // API returns 'name', we need 'displayName'
+            state: project.lifecycleState || 'ACTIVE'
+          }));
         } catch (refreshError) {
           log.error('Failed to refresh token and retry:', refreshError);
           throw new Error('Authentication expired. Please sign in again.');
