@@ -48,6 +48,9 @@ export class DeploymentEngine extends EventEmitter {
   async startDeployment(config: DeploymentConfig): Promise<void> {
     this.isPaused = false;
     
+    // Initialize deployment timer
+    this.deploymentTimer = new DeploymentTimer();
+    
     // Ensure deployers are initialized
     this.initializeDeployers();
     
@@ -137,6 +140,15 @@ export class DeploymentEngine extends EventEmitter {
           console.log('\n🔐 All authentication infrastructure deployed!');
           console.log('📱 Ready for camera authentication!\n');
           
+          // End deployment timer and show summary
+          this.deploymentTimer?.endDeployment();
+          if (this.deploymentTimer) {
+            console.log(this.deploymentTimer.getSummary());
+            
+            // Emit timing report
+            this.emit('timing-report', this.deploymentTimer.getDetailedReport());
+          }
+          
           this.emitComplete({
             success: true,
             apiGatewayUrl: gatewayUrl,
@@ -158,6 +170,10 @@ export class DeploymentEngine extends EventEmitter {
 
   private async executeStep(stepName: string): Promise<void> {
     console.log(`\n======== EXECUTING STEP: ${stepName} ========`);
+    
+    // Start timing this step
+    this.deploymentTimer?.startStep(stepName);
+    
     try {
       this.stateManager.updateStep(stepName, { status: 'in_progress' });
       
@@ -194,9 +210,11 @@ export class DeploymentEngine extends EventEmitter {
       }
       
       this.stateManager.updateStep(stepName, { status: 'completed' });
+      this.deploymentTimer?.endStep(stepName, true);
       console.log(`✓ Step ${stepName} completed successfully`);
     } catch (error) {
       console.error(`✗ Step ${stepName} failed:`, error);
+      this.deploymentTimer?.endStep(stepName, false);
       this.stateManager.updateStep(stepName, { 
         status: 'failed',
         error: (error as Error).message 
