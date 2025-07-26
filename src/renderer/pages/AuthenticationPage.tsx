@@ -37,6 +37,16 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   const [preparingProject, setPreparingProject] = useState(false);
   const [preparingProjectId, setPreparingProjectId] = useState<string | null>(null);
 
+  // Helper function to format project display name
+  const formatProjectName = (project: GCPProject): string => {
+    // Truncate display name if too long (max 40 characters)
+    const truncatedName = project.displayName.length > 40 
+      ? project.displayName.substring(0, 37) + '...' 
+      : project.displayName;
+    
+    return `${truncatedName} - ${project.projectId}`;
+  };
+
   useEffect(() => {
     checkAuthentication();
   }, []);
@@ -209,6 +219,10 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
                 onChange={(e) => setSelectedProject(e.target.value)}
                 label="Project"
                 disabled={refreshing}
+                renderValue={(value) => {
+                  const project = projects.find(p => p.projectId === value);
+                  return project ? formatProjectName(project) : value;
+                }}
               >
                 {projects.length === 0 ? (
                   <MenuItem disabled>
@@ -219,10 +233,9 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
                 ) : (
                   projects.map((project) => (
                     <MenuItem key={project.projectId} value={project.projectId}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Typography>{project.displayName}</Typography>
-                        <Chip label={project.projectId} size="small" />
-                      </Box>
+                      <Typography>
+                        {formatProjectName(project)}
+                      </Typography>
                     </MenuItem>
                   ))
                 )}
