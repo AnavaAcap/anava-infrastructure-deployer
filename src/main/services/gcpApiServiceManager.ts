@@ -283,7 +283,7 @@ export class GCPApiServiceManager {
 
     const member = memberEmail.includes('@') ? `serviceAccount:${memberEmail}` : memberEmail;
 
-    // Retry logic for eventual consistency
+    // Retry logic for eventual consistency and concurrent modifications
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         // Get current IAM policy
@@ -327,9 +327,16 @@ export class GCPApiServiceManager {
                                        error.message?.includes('not found') ||
                                        error.code === 404;
         
-        if (isServiceAccountNotExist && attempt < maxRetries - 1) {
-          const waitTime = Math.pow(2, attempt) * 2000; // Exponential backoff: 2s, 4s, 8s, 16s
-          console.log(`Service account not yet available for IAM role assignment, retrying in ${waitTime/1000}s... (${attempt + 1}/${maxRetries})`);
+        const isConcurrentModification = error.message?.includes('concurrent policy changes') ||
+                                       error.message?.includes('ETag') ||
+                                       error.code === 409;
+        
+        if ((isServiceAccountNotExist || isConcurrentModification) && attempt < maxRetries - 1) {
+          const waitTime = isConcurrentModification 
+            ? Math.random() * 1000 + Math.pow(2, attempt) * 1000 // Add jitter for concurrent modifications
+            : Math.pow(2, attempt) * 2000; // Regular exponential backoff
+          
+          console.log(`${isConcurrentModification ? 'Concurrent modification detected' : 'Service account not yet available'}, retrying in ${waitTime/1000}s... (${attempt + 1}/${maxRetries})`);
           await this.sleep(waitTime);
           continue;
         }
@@ -344,24 +351,38 @@ export class GCPApiServiceManager {
     projectId: string,
     roleAssignments: Array<{ memberEmail: string; role: string }>
   ): Promise<void> {
-    console.log(`Assigning ${roleAssignments.length} IAM roles in parallel...`);
+    console.log(`Assigning ${roleAssignments.length} IAM roles with controlled concurrency...`);
     const startTime = Date.now();
     
-    const tasks = roleAssignments.map(({ memberEmail, role }) => ({
-      name: `${memberEmail} -> ${role}`,
-      fn: () => this.assignIamRole(projectId, memberEmail, role),
-      critical: true // IAM roles are critical
+    // Group assignments by member to reduce conflicts
+    const assignmentsByMember = new Map<string, Array<{ memberEmail: string; role: string }>>();
+    for (const assignment of roleAssignments) {
+      const existing = assignmentsByMember.get(assignment.memberEmail) || [];
+      existing.push(assignment);
+      assignmentsByMember.set(assignment.memberEmail, existing);
+    }
+    
+    // Process each member's roles together to minimize conflicts
+    const memberGroups = Array.from(assignmentsByMember.entries()).map(([memberEmail, assignments]) => ({
+      name: memberEmail,
+      fn: async () => {
+        // Assign all roles for this member sequentially
+        for (const { role } of assignments) {
+          await this.assignIamRole(projectId, memberEmail, role, 8); // More retries for concurrent modifications
+        }
+      },
+      critical: true
     }));
 
-    const results = await ParallelExecutor.executeBatch(tasks, {
-      maxConcurrency: 5, // Limit concurrent IAM operations
+    const results = await ParallelExecutor.executeBatch(memberGroups, {
+      maxConcurrency: 2, // Reduced concurrency to minimize ETag conflicts
       stopOnError: true
     });
 
     // Check for failures
     const failures = results.filter(r => !r.success);
     if (failures.length > 0) {
-      throw new Error(`Failed to assign IAM roles: ${failures.map(f => f.name).join(', ')}`);
+      throw new Error(`Failed to assign IAM roles for members: ${failures.map(f => f.name).join(', ')}`);
     }
 
     const elapsed = Date.now() - startTime;
