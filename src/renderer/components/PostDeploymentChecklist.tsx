@@ -43,6 +43,7 @@ interface PostDeploymentChecklistProps {
   onComplete: () => void;
   onFirebaseSetupComplete?: (isComplete: boolean) => void;
   authConfigured?: boolean;
+  adminEmail?: string;
 }
 
 const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
@@ -51,6 +52,7 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
   onComplete,
   onFirebaseSetupComplete,
   authConfigured = true,
+  adminEmail,
 }) => {
   const [checkedItems, setCheckedItems] = React.useState<string[]>([]);
   const [createUserOpen, setCreateUserOpen] = React.useState(false);
@@ -126,7 +128,7 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
     id: 'auth-enabled',
     icon: <Security />,
     primary: 'Firebase Authentication Enabled',
-    secondary: '✅ Email/Password authentication is now active',
+    secondary: '✅ Email/Password and Google Sign-In are now active',
     required: false,
     completed: true,
     action: (
@@ -176,17 +178,38 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
         />
       ),
     },
+    ...(adminEmail ? [{
+      id: 'admin-configured',
+      icon: <Person />,
+      primary: 'Admin User Configured',
+      secondary: `✅ ${adminEmail} can sign in with Google`,
+      required: false,
+      completed: true,
+      action: (
+        <Chip 
+          icon={<CheckCircle />} 
+          label="Ready" 
+          color="success" 
+          variant="outlined"
+          size="small"
+        />
+      ),
+    }] : []),
     {
       id: 'create-user',
       icon: <Person />,
-      primary: 'Create First Admin User',
-      secondary: userCreated ? '✅ Admin user created successfully!' : 'Add an admin user for camera authentication',
-      required: true,
-      completed: userCreated,
+      primary: adminEmail ? 'Create Additional Admin User (Optional)' : 'Create First Admin User',
+      secondary: userCreated 
+        ? '✅ Additional admin user created successfully!' 
+        : adminEmail 
+          ? 'Optionally add another admin user for camera authentication'
+          : 'Add an admin user for camera authentication',
+      required: !adminEmail,
+      completed: userCreated || !!adminEmail,
       action: (
         <Button
           size="small"
-          variant={userCreated ? "outlined" : "contained"}
+          variant={userCreated ? "outlined" : (adminEmail ? "text" : "contained")}
           color={userCreated ? "success" : "primary"}
           endIcon={userCreated ? <CheckCircle /> : <Add />}
           onClick={() => setCreateUserOpen(true)}
