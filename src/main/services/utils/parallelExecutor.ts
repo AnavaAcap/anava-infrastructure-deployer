@@ -91,13 +91,13 @@ export class ParallelExecutor {
             shouldStop = true;
           }
         } finally {
-          inProgress.delete(promise);
           completed++;
           onProgress?.(completed, tasks.length);
         }
       })();
 
       inProgress.add(promise);
+      promise.finally(() => inProgress.delete(promise));
     }
 
     // Wait for all remaining tasks

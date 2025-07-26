@@ -35,8 +35,7 @@ export class CloudFunctionsAPIDeployer {
     const startTime = Date.now();
     const results: Record<string, string> = {};
     
-    // Get project number once for all functions
-    const projectNumber = await this.getProjectNumber(projectId);
+    // Get project number once for all functions (used inside deployFunction)
     
     const tasks = configs.map(({ config, sourceDir }) => ({
       name: config.name,
