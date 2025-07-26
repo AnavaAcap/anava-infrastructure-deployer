@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { GCPOAuthService } from './gcpOAuthService';
+import { ParallelExecutor } from './utils/parallelExecutor';
 
 export class GCPApiServiceManager {
   private billingRequired = new Set([
@@ -86,6 +87,88 @@ export class GCPApiServiceManager {
     }
   }
 
+  async enableApis(projectId: string, apis: string[]): Promise<void> {
+    console.log(`Enabling ${apis.length} APIs in parallel...`);
+    const startTime = Date.now();
+    
+    try {
+      const auth = await this.getAuthClient();
+      const serviceUsage = google.serviceusage({
+        version: 'v1',
+        auth
+      });
+
+      // Check which APIs are already enabled
+      const parent = `projects/${projectId}`;
+      const { data } = await serviceUsage.services.list({
+        parent,
+        filter: `state:ENABLED`,
+        pageSize: 200
+      });
+
+      const enabledApis = new Set(
+        data.services?.map(service => service.name?.split('/').pop()) || []
+      );
+
+      const apisToEnable = apis.filter(api => !enabledApis.has(api));
+      
+      if (apisToEnable.length === 0) {
+        console.log('All APIs are already enabled');
+        return;
+      }
+
+      console.log(`Need to enable ${apisToEnable.length} APIs: ${apisToEnable.join(', ')}`);
+
+      // Check billing for APIs that require it
+      const billingRequiredApis = apisToEnable.filter(api => this.billingRequired.has(api));
+      if (billingRequiredApis.length > 0) {
+        const billingStatus = await this.checkProjectBilling(projectId);
+        if (!billingStatus.enabled) {
+          throw new Error(
+            `Billing is required to enable these APIs: ${billingRequiredApis.join(', ')}.\n` +
+            `Please enable billing for project ${projectId} in the Google Cloud Console.`
+          );
+        }
+      }
+
+      // Enable APIs in parallel with controlled concurrency
+      const tasks = apisToEnable.map(api => ({
+        name: api,
+        fn: async () => {
+          await serviceUsage.services.enable({
+            name: `${parent}/services/${api}`
+          });
+          console.log(`Enabled API: ${api}`);
+        },
+        critical: false // Continue even if one fails
+      }));
+
+      const results = await ParallelExecutor.executeBatch(tasks, {
+        maxConcurrency: 5, // Limit concurrent API calls
+        stopOnError: false
+      });
+
+      // Check for failures
+      const failures = results.filter(r => !r.success);
+      if (failures.length > 0) {
+        console.error(`Failed to enable ${failures.length} APIs:`, failures.map(f => f.name));
+        throw new Error(`Failed to enable APIs: ${failures.map(f => f.name).join(', ')}`);
+      }
+
+      const elapsed = Date.now() - startTime;
+      console.log(`Successfully enabled ${apisToEnable.length} APIs in ${elapsed}ms`);
+      
+      // Brief wait for APIs to propagate
+      console.log('Waiting for APIs to propagate...');
+      await this.sleep(3000);
+    } catch (error: any) {
+      if (error.message?.includes('billing')) {
+        throw new Error(`Billing must be enabled for project ${projectId}. Please enable billing in the GCP Console.`);
+      }
+      throw error;
+    }
+  }
+
   async createServiceAccount(projectId: string, accountId: string, displayName: string): Promise<string> {
     const email = `${accountId}@${projectId}.iam.gserviceaccount.com`;
     
@@ -127,6 +210,41 @@ export class GCPApiServiceManager {
     } catch (error: any) {
       throw new Error(`Failed to create service account ${accountId}: ${error.message}`);
     }
+  }
+
+  async createServiceAccounts(
+    projectId: string, 
+    accounts: Array<{ name: string; displayName: string }>
+  ): Promise<Record<string, string>> {
+    console.log(`Creating ${accounts.length} service accounts in parallel...`);
+    const startTime = Date.now();
+    const results: Record<string, string> = {};
+    
+    const tasks = accounts.map(account => ({
+      name: account.name,
+      fn: async () => {
+        const email = await this.createServiceAccount(projectId, account.name, account.displayName);
+        results[account.name] = email;
+        return email;
+      },
+      critical: true // Service accounts are critical
+    }));
+
+    const parallelResults = await ParallelExecutor.executeBatch(tasks, {
+      maxConcurrency: 4, // Create up to 4 accounts simultaneously
+      stopOnError: true
+    });
+
+    // Check for failures
+    const failures = parallelResults.filter(r => !r.success);
+    if (failures.length > 0) {
+      throw new Error(`Failed to create service accounts: ${failures.map(f => f.name).join(', ')}`);
+    }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`Created ${accounts.length} service accounts in ${elapsed}ms`);
+    
+    return results;
   }
 
   async verifyServiceAccountExists(projectId: string, email: string, maxRetries: number = 10): Promise<void> {
@@ -220,6 +338,34 @@ export class GCPApiServiceManager {
         throw new Error(`Failed to assign IAM role ${role} to ${memberEmail}: ${error.message}`);
       }
     }
+  }
+
+  async assignIamRoles(
+    projectId: string,
+    roleAssignments: Array<{ memberEmail: string; role: string }>
+  ): Promise<void> {
+    console.log(`Assigning ${roleAssignments.length} IAM roles in parallel...`);
+    const startTime = Date.now();
+    
+    const tasks = roleAssignments.map(({ memberEmail, role }) => ({
+      name: `${memberEmail} -> ${role}`,
+      fn: () => this.assignIamRole(projectId, memberEmail, role),
+      critical: true // IAM roles are critical
+    }));
+
+    const results = await ParallelExecutor.executeBatch(tasks, {
+      maxConcurrency: 5, // Limit concurrent IAM operations
+      stopOnError: true
+    });
+
+    // Check for failures
+    const failures = results.filter(r => !r.success);
+    if (failures.length > 0) {
+      throw new Error(`Failed to assign IAM roles: ${failures.map(f => f.name).join(', ')}`);
+    }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`Assigned ${roleAssignments.length} IAM roles in ${elapsed}ms`);
   }
 
   async assignServiceAccountUser(projectId: string, serviceAccountEmail: string, memberEmail: string, maxRetries: number = 5): Promise<void> {

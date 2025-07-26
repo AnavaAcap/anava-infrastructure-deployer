@@ -8,6 +8,8 @@ import { FirestoreDeployer } from './firestoreDeployer';
 import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
 import { FirebaseAppDeployer } from './firebaseAppDeployer';
 import { DeploymentConfig, DeploymentProgress, DeploymentResult } from '../../types';
+import { ParallelExecutor } from './utils/parallelExecutor';
+import { DeploymentTimer } from './utils/deploymentTimer';
 import path from 'path';
 import { app } from 'electron';
 import fs from 'fs/promises';
@@ -24,6 +26,7 @@ export class DeploymentEngine extends EventEmitter {
   private workloadIdentityDeployer?: WorkloadIdentityDeployer;
   private firebaseAppDeployer?: FirebaseAppDeployer;
   private isPaused = false;
+  private deploymentTimer?: DeploymentTimer;
 
   constructor(stateManager: StateManager, gcpAuth: GCPOAuthService) {
     super();
@@ -244,11 +247,16 @@ export class DeploymentEngine extends EventEmitter {
   }
 
   private async stepEnableApis(): Promise<void> {
-    const apis = [
+    // Critical APIs that must be enabled first
+    const criticalApis = [
       'serviceusage.googleapis.com',
       'iam.googleapis.com',
       'cloudresourcemanager.googleapis.com',
       'compute.googleapis.com', // This creates the default compute service account
+    ];
+    
+    // Other APIs that can be enabled in parallel
+    const otherApis = [
       'storage.googleapis.com',
       'cloudfunctions.googleapis.com',
       'cloudbuild.googleapis.com',
@@ -269,38 +277,50 @@ export class DeploymentEngine extends EventEmitter {
     ];
 
     const state = this.stateManager.getState()!;
+    const startTime = Date.now();
     
-    for (let i = 0; i < apis.length; i++) {
-      if (this.isPaused) return;
-      
-      this.emitProgress({
-        currentStep: 'enableApis',
-        stepProgress: (i / apis.length) * 100,
-        totalProgress: 12.5 + (12.5 * (i / apis.length)),
-        message: `Enabling ${apis[i]}...`,
-      });
+    this.emitProgress({
+      currentStep: 'enableApis',
+      stepProgress: 0,
+      totalProgress: 12.5,
+      message: 'Enabling critical APIs...',
+    });
 
-      await this.gcpService.enableApi(state.projectId, apis[i]);
-    }
-
-    this.stateManager.updateStepResource('enableApis', 'apis', apis);
+    // Enable critical APIs first (these are dependencies)
+    console.log('Enabling critical APIs...');
+    await this.gcpService.enableApis(state.projectId, criticalApis);
     
-    // Wait for critical APIs to be fully ready
-    console.log('Waiting 15 seconds for APIs to be fully ready...');
+    this.emitProgress({
+      currentStep: 'enableApis',
+      stepProgress: 30,
+      totalProgress: 16.25,
+      message: 'Enabling remaining APIs in parallel...',
+    });
+
+    // Enable other APIs in parallel
+    console.log('Enabling remaining APIs in parallel...');
+    await this.gcpService.enableApis(state.projectId, otherApis);
+
+    const allApis = [...criticalApis, ...otherApis];
+    this.stateManager.updateStepResource('enableApis', 'apis', allApis);
+    
+    const elapsed = Date.now() - startTime;
+    console.log(`All APIs enabled in ${elapsed}ms`);
+    
     this.emitProgress({
       currentStep: 'enableApis',
       stepProgress: 100,
       totalProgress: 25,
-      message: 'Waiting for APIs to be fully ready...',
+      message: 'APIs enabled successfully',
     });
-    await new Promise(resolve => setTimeout(resolve, 15000));
   }
 
   private async stepCreateServiceAccounts(): Promise<void> {
     const state = this.stateManager.getState()!;
+    const startTime = Date.now();
     
     // Load any previously created accounts when resuming
-    const createdAccounts: Record<string, string> = this.getResourceValue('createServiceAccounts', 'accounts') || {};
+    const existingAccounts: Record<string, string> = this.getResourceValue('createServiceAccounts', 'accounts') || {};
     
     const serviceAccounts = [
       { name: 'vertex-ai-sa', displayName: 'Vertex AI Service Account' },
@@ -309,46 +329,44 @@ export class DeploymentEngine extends EventEmitter {
       { name: 'apigw-invoker-sa', displayName: 'API Gateway Invoker' },
     ];
 
-    for (let i = 0; i < serviceAccounts.length; i++) {
-      if (this.isPaused) return;
-      
-      // Skip if already created
-      if (createdAccounts[serviceAccounts[i].name]) {
-        continue;
-      }
-      
-      this.emitProgress({
-        currentStep: 'createServiceAccounts',
-        stepProgress: (i / serviceAccounts.length) * 100,
-        totalProgress: 25 + (12.5 * (i / serviceAccounts.length)),
-        message: `Creating ${serviceAccounts[i].displayName}...`,
-      });
-
-      const email = await this.gcpService.createServiceAccount(
-        state.projectId,
-        serviceAccounts[i].name,
-        serviceAccounts[i].displayName
-      );
-      
-      createdAccounts[serviceAccounts[i].name] = email;
-      
-      // Save state after each account is created to handle pauses/failures
-      this.stateManager.updateStepResource('createServiceAccounts', 'accounts', createdAccounts);
-    }
+    // Filter out already created accounts
+    const accountsToCreate = serviceAccounts.filter(sa => !existingAccounts[sa.name]);
     
-    // Add a brief delay for IAM propagation across all Google Cloud regions
-    console.log('Waiting 10 seconds for service accounts to propagate globally...');
+    if (accountsToCreate.length === 0) {
+      console.log('All service accounts already exist');
+      return;
+    }
+
+    this.emitProgress({
+      currentStep: 'createServiceAccounts',
+      stepProgress: 0,
+      totalProgress: 25,
+      message: `Creating ${accountsToCreate.length} service accounts in parallel...`,
+    });
+
+    // Create all service accounts in parallel
+    const createdAccounts = await this.gcpService.createServiceAccounts(
+      state.projectId,
+      accountsToCreate
+    );
+    
+    // Merge with existing accounts
+    const allAccounts = { ...existingAccounts, ...createdAccounts };
+    this.stateManager.updateStepResource('createServiceAccounts', 'accounts', allAccounts);
+    
+    const elapsed = Date.now() - startTime;
+    console.log(`Service accounts created in ${elapsed}ms`);
+    
     this.emitProgress({
       currentStep: 'createServiceAccounts',
       stepProgress: 100,
       totalProgress: 37.5,
-      message: 'Waiting for service accounts to propagate...',
+      message: 'Service accounts created successfully',
     });
-    await new Promise(resolve => setTimeout(resolve, 10000));
     
     // Grant the current user permission to act as the API Gateway invoker service account
     // This is required for the API Gateway config to be created with the correct service account
-    if (createdAccounts['apigw-invoker-sa']) {
+    if (allAccounts['apigw-invoker-sa']) {
       console.log('Granting actAs permission for API Gateway service account...');
       try {
         // Get current authenticated user
@@ -359,10 +377,10 @@ export class DeploymentEngine extends EventEmitter {
         const currentUser = data.email;
         
         if (currentUser) {
-          console.log(`Granting serviceAccountUser role to ${currentUser} for ${createdAccounts['apigw-invoker-sa']}`);
+          console.log(`Granting serviceAccountUser role to ${currentUser} for ${allAccounts['apigw-invoker-sa']}`);
           await this.gcpService.assignServiceAccountUser(
             state.projectId,
-            createdAccounts['apigw-invoker-sa'],
+            allAccounts['apigw-invoker-sa'],
             `user:${currentUser}`
           );
           console.log(`Successfully granted actAs permission to ${currentUser}`);
@@ -379,6 +397,7 @@ export class DeploymentEngine extends EventEmitter {
     console.log('Starting IAM role assignments...');
     const state = this.stateManager.getState()!;
     const accounts = this.getResourceValue('createServiceAccounts', 'accounts');
+    const startTime = Date.now();
     
     console.log('Service accounts found:', accounts);
     
@@ -386,70 +405,57 @@ export class DeploymentEngine extends EventEmitter {
       throw new Error('No service accounts found. The createServiceAccounts step may have failed or been skipped.');
     }
     
-    // First, grant Cloud Build service account necessary permissions
+    this.emitProgress({
+      currentStep: 'assignIamRoles',
+      stepProgress: 0,
+      totalProgress: 37.5,
+      message: 'Preparing IAM role assignments...',
+    });
+    
+    // Get project number and compute SA first
     const projectNumber = await this.getProjectNumber(state.projectId);
     const cloudBuildSA = `${projectNumber}@cloudbuild.gserviceaccount.com`;
     
-    // Grant compute service account Storage Object Viewer for gcf-sources bucket
     // Wait for the compute SA to be created after enabling Compute API
     const computeSA = await this.gcpService.waitForComputeServiceAccount(
       state.projectId,
       projectNumber.toString()
     );
     
-    await this.gcpService.assignIamRole(
-      state.projectId,
-      computeSA,
-      'roles/storage.objectViewer'
-    );
+    this.emitProgress({
+      currentStep: 'assignIamRoles',
+      stepProgress: 10,
+      totalProgress: 38.75,
+      message: 'Assigning IAM roles in parallel...',
+    });
     
-    // Grant compute service account Logs Writer permission for Cloud Build
-    await this.gcpService.assignIamRole(
-      state.projectId,
-      computeSA,
-      'roles/logging.logWriter'
-    );
+    // Prepare all IAM role assignments
+    const roleAssignments = [
+      // Compute SA roles (critical for Cloud Functions v2)
+      { memberEmail: computeSA, role: 'roles/storage.objectViewer' },
+      { memberEmail: computeSA, role: 'roles/logging.logWriter' },
+      { memberEmail: computeSA, role: 'roles/artifactregistry.admin' },
+      
+      // Cloud Build SA roles
+      { memberEmail: cloudBuildSA, role: 'roles/cloudfunctions.developer' },
+      { memberEmail: cloudBuildSA, role: 'roles/storage.objectAdmin' },
+      { memberEmail: cloudBuildSA, role: 'roles/cloudbuild.builds.editor' },
+      { memberEmail: cloudBuildSA, role: 'roles/artifactregistry.admin' },
+      
+      // Service account specific roles
+      { memberEmail: accounts['vertex-ai-sa'], role: 'roles/aiplatform.user' },
+      { memberEmail: accounts['vertex-ai-sa'], role: 'roles/storage.objectAdmin' },
+      { memberEmail: accounts['vertex-ai-sa'], role: 'roles/logging.logWriter' },
+      { memberEmail: accounts['vertex-ai-sa'], role: 'roles/datastore.user' },
+      { memberEmail: accounts['device-auth-sa'], role: 'roles/firebase.sdkAdminServiceAgent' },
+      { memberEmail: accounts['device-auth-sa'], role: 'roles/firebasedatabase.admin' },
+      { memberEmail: accounts['device-auth-sa'], role: 'roles/iam.serviceAccountTokenCreator' },
+      { memberEmail: accounts['tvm-sa'], role: 'roles/iam.serviceAccountTokenCreator' },
+      { memberEmail: accounts['apigw-invoker-sa'], role: 'roles/run.invoker' },
+    ];
     
-    // Grant Cloud Build service account necessary permissions
-    await this.gcpService.assignIamRole(
-      state.projectId,
-      cloudBuildSA,
-      'roles/cloudfunctions.developer'
-    );
-    
-    await this.gcpService.assignIamRole(
-      state.projectId,
-      cloudBuildSA,
-      'roles/storage.objectAdmin'
-    );
-    
-    await this.gcpService.assignIamRole(
-      state.projectId,
-      cloudBuildSA,
-      'roles/cloudbuild.builds.editor'
-    );
-    
-    // Grant comprehensive Artifact Registry permissions for Cloud Functions v2
-    await this.gcpService.assignIamRole(
-      state.projectId,
-      cloudBuildSA,
-      'roles/artifactregistry.admin'
-    );
-    
-    // Grant compute service account permissions needed for Cloud Functions v2
-    // The compute SA is what actually runs the Cloud Build for functions!
-    await this.gcpService.assignIamRole(
-      state.projectId,
-      computeSA,
-      'roles/storage.objectViewer'
-    );
-    
-    // Compute SA needs artifactregistry.admin for Cloud Functions v2 builds
-    await this.gcpService.assignIamRole(
-      state.projectId,
-      computeSA,
-      'roles/artifactregistry.admin'
-    );
+    // Assign all roles in parallel
+    await this.gcpService.assignIamRoles(state.projectId, roleAssignments);
     
     // Grant Cloud Build SA permission to act as the function service accounts
     for (const sa of ['device-auth-sa', 'tvm-sa']) {
@@ -523,6 +529,7 @@ export class DeploymentEngine extends EventEmitter {
     console.log('Starting Cloud Functions deployment...');
     const state = this.stateManager.getState()!;
     const accounts = this.getResourceValue('createServiceAccounts', 'accounts');
+    const startTime = Date.now();
     
     console.log('Service accounts for functions:', accounts);
     
@@ -587,47 +594,87 @@ export class DeploymentEngine extends EventEmitter {
       }
     ];
 
-    const deployedFunctions: Record<string, string> = {};
-
-    for (let i = 0; i < functions.length; i++) {
-      if (this.isPaused) return;
+    // Check for existing functions to handle resume
+    const existingFunctions: Record<string, string> = this.getResourceValue('deployCloudFunctions', 'functions') || {};
+    
+    // Prepare source code for all functions first
+    const functionConfigs = await Promise.all(functions.map(async (func) => {
+      // Skip if function already deployed
+      if (existingFunctions[func.name]) {
+        console.log(`Function ${func.name} already deployed, skipping...`);
+        return null;
+      }
       
-      this.emitProgress({
-        currentStep: 'deployCloudFunctions',
-        stepProgress: (i / functions.length) * 100,
-        totalProgress: 50 + (12.5 * (i / functions.length)),
-        message: `Deploying ${functions[i].name} function...`,
-      });
-
       // Create source directory with inline code
       const sourceDir = await this.createFunctionSourceCode(
-        functions[i].name,
-        functions[i].entryPoint,
-        functions[i].runtime
+        func.name,
+        func.entryPoint,
+        func.runtime
       );
+      
+      return {
+        config: {
+          name: func.name,
+          entryPoint: func.entryPoint,
+          runtime: func.runtime,
+          region: state.region,
+          serviceAccount: func.serviceAccount,
+          environmentVariables: func.envVars,
+          maxInstances: 5
+        },
+        sourceDir
+      };
+    }));
+    
+    // Filter out nulls (already deployed functions)
+    const functionsToProcess = functionConfigs.filter(f => f !== null) as Array<{
+      config: typeof functions[0] & { region: string, maxInstances: number };
+      sourceDir: string;
+    }>;
+    
+    if (functionsToProcess.length === 0) {
+      console.log('All functions already deployed');
+      this.stateManager.updateStepResource('deployCloudFunctions', 'functions', existingFunctions);
+      return;
+    }
 
-      try {
-        // Use API-based deployer
-        const functionUrl = await this.cloudFunctionsAPIDeployer!.deployFunction(
-          state.projectId,
-          {
-            name: functions[i].name,
-            entryPoint: functions[i].entryPoint,
-            runtime: functions[i].runtime,
-            region: state.region,
-            serviceAccount: functions[i].serviceAccount,
-            environmentVariables: functions[i].envVars,
-            maxInstances: 5
-          },
-          sourceDir
-        );
-        
-        deployedFunctions[functions[i].name] = functionUrl;
-      } finally {
-        // Clean up temp directory
-        await fs.rm(sourceDir, { recursive: true, force: true });
-      }
-      this.stateManager.updateStepResource('deployCloudFunctions', 'functions', deployedFunctions);
+    this.emitProgress({
+      currentStep: 'deployCloudFunctions',
+      stepProgress: 0,
+      totalProgress: 50,
+      message: `Deploying ${functionsToProcess.length} Cloud Functions in parallel...`,
+    });
+
+    try {
+      // Deploy all functions in parallel
+      const deployedFunctions = await this.cloudFunctionsAPIDeployer!.deployFunctions(
+        state.projectId,
+        functionsToProcess,
+        (completed: number, total: number) => {
+          const progress = (completed / total) * 100;
+          this.emitProgress({
+            currentStep: 'deployCloudFunctions',
+            stepProgress: progress,
+            totalProgress: 50 + (12.5 * (progress / 100)),
+            message: `Deployed ${completed}/${total} functions...`,
+          });
+        }
+      );
+      
+      // Merge with existing functions
+      const allFunctions = { ...existingFunctions, ...deployedFunctions };
+      this.stateManager.updateStepResource('deployCloudFunctions', 'functions', allFunctions);
+      
+      const elapsed = Date.now() - startTime;
+      console.log(`Cloud Functions deployed in ${elapsed}ms`);
+      
+    } finally {
+      // Clean up all temp directories
+      await Promise.all(
+        functionsToProcess.map(({ sourceDir }) =>
+          fs.rm(sourceDir, { recursive: true, force: true })
+        )
+      );
     }
     
     // Grant Cloud Run invoker permissions to API Gateway service account
@@ -649,24 +696,40 @@ export class DeploymentEngine extends EventEmitter {
     const { CloudRunIAMManager } = await import('./cloudRunIAMManager');
     const auth = await this.getAuthClient();
     const cloudRunIAMManager = new CloudRunIAMManager(auth);
+    const startTime = Date.now();
     
-    for (const [functionName] of Object.entries(functions)) {
-      try {
-        await cloudRunIAMManager.grantInvokerPermission(
-          projectId,
-          region,
-          functionName,
-          apiGatewayInvokerSA
-        );
-      } catch (error) {
-        console.error(`Failed to grant invoker permission for ${functionName}:`, error);
-        // Continue with other functions even if one fails
-      }
+    console.log(`Granting Cloud Run invoker permissions for ${Object.keys(functions).length} functions in parallel...`);
+    
+    // Create tasks for parallel execution
+    const tasks = Object.entries(functions).map(([functionName]) => ({
+      name: functionName,
+      fn: () => cloudRunIAMManager.grantInvokerPermission(
+        projectId,
+        region,
+        functionName,
+        apiGatewayInvokerSA
+      ),
+      critical: false // Continue even if one fails
+    }));
+    
+    const results = await ParallelExecutor.executeBatch(tasks, {
+      maxConcurrency: 3,
+      stopOnError: false
+    });
+    
+    // Report any failures
+    const failures = results.filter(r => !r.success);
+    if (failures.length > 0) {
+      console.error(`Failed to grant invoker permissions for ${failures.length} functions:`, 
+        failures.map(f => f.name).join(', '));
     }
     
-    // Wait for IAM permissions to propagate
-    console.log('Waiting 30 seconds for IAM permissions to propagate...');
-    await new Promise(resolve => setTimeout(resolve, 30000));
+    const elapsed = Date.now() - startTime;
+    console.log(`Granted Cloud Run invoker permissions in ${elapsed}ms`);
+    
+    // Wait for IAM permissions to propagate (reduced from 30s to 10s with smart retry)
+    console.log('Waiting 10 seconds for IAM permissions to propagate...');
+    await new Promise(resolve => setTimeout(resolve, 10000));
   }
 
   private async stepCreateApiGateway(): Promise<void> {
