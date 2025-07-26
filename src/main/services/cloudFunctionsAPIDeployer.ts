@@ -239,21 +239,33 @@ export class CloudFunctionsAPIDeployer {
         bucket: bucketName,
         auth: this.auth
       });
+      return; // Bucket exists
     } catch (error: any) {
-      if (error.code === 404) {
-        // Create bucket - map region to GCS location
-        const location = this.mapRegionToGCSLocation(region);
-        await this.storage.buckets.insert({
-          project: projectId,
-          requestBody: {
-            name: bucketName,
-            location: location
-          },
-          auth: this.auth
-        });
-      } else {
-        throw error;
+      if (error.code !== 404) {
+        throw error; // Unexpected error
       }
+      // Bucket doesn't exist, try to create it
+    }
+    
+    // Try to create the bucket, handling race conditions
+    try {
+      const location = this.mapRegionToGCSLocation(region);
+      await this.storage.buckets.insert({
+        project: projectId,
+        requestBody: {
+          name: bucketName,
+          location: location
+        },
+        auth: this.auth
+      });
+      console.log(`Created bucket ${bucketName}`);
+    } catch (error: any) {
+      // Handle race condition where another process created the bucket
+      if (error.code === 409 && error.message?.includes('you already own it')) {
+        console.log(`Bucket ${bucketName} already exists (created by parallel process)`);
+        return; // That's fine, bucket exists now
+      }
+      throw error; // Some other error
     }
   }
 
