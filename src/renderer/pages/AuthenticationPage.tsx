@@ -41,13 +41,15 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
 
   // Helper function to format project display name
   const formatProjectName = (project: GCPProject): string => {
-    // Handle missing or empty display name
-    const displayName = project.displayName || project.projectId;
+    // If no display name or display name is same as project ID, just return project ID
+    if (!project.displayName || project.displayName === project.projectId) {
+      return project.projectId;
+    }
     
     // Truncate display name if too long (max 40 characters)
-    const truncatedName = displayName.length > 40 
-      ? displayName.substring(0, 37) + '...' 
-      : displayName;
+    const truncatedName = project.displayName.length > 40 
+      ? project.displayName.substring(0, 37) + '...' 
+      : project.displayName;
     
     return `${truncatedName} - ${project.projectId}`;
   };
