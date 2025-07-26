@@ -3,6 +3,7 @@ import { OAuth2Client } from 'google-auth-library';
 import archiver from 'archiver';
 import fs from 'fs';
 import path from 'path';
+import { ParallelExecutor } from './utils/parallelExecutor';
 
 export interface CloudFunctionConfig {
   name: string;
@@ -23,6 +24,46 @@ export class CloudFunctionsAPIDeployer {
 
   constructor(auth: OAuth2Client) {
     this.auth = auth;
+  }
+
+  async deployFunctions(
+    projectId: string,
+    configs: Array<{ config: CloudFunctionConfig; sourceDir: string }>,
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<Record<string, string>> {
+    console.log(`Deploying ${configs.length} Cloud Functions in parallel...`);
+    const startTime = Date.now();
+    const results: Record<string, string> = {};
+    
+    // Get project number once for all functions
+    const projectNumber = await this.getProjectNumber(projectId);
+    
+    const tasks = configs.map(({ config, sourceDir }) => ({
+      name: config.name,
+      fn: async () => {
+        const url = await this.deployFunction(projectId, config, sourceDir);
+        results[config.name] = url;
+        return url;
+      },
+      critical: true // All functions are critical
+    }));
+
+    const parallelResults = await ParallelExecutor.executeBatch(tasks, {
+      maxConcurrency: 2, // Deploy up to 2 functions simultaneously
+      stopOnError: true,
+      onProgress
+    });
+
+    // Check for failures
+    const failures = parallelResults.filter(r => !r.success);
+    if (failures.length > 0) {
+      throw new Error(`Failed to deploy functions: ${failures.map(f => f.name).join(', ')}`);
+    }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`Deployed ${configs.length} functions in ${elapsed}ms`);
+    
+    return results;
   }
 
   async deployFunction(
