@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { StateManager } from './stateManager';
 import { GCPApiServiceManager } from './gcpApiServiceManager';
 import { GCPOAuthService } from './gcpOAuthService';
-import { CloudFunctionsAPIDeployer } from './cloudFunctionsAPIDeployer';
+import { CloudFunctionsAPIDeployer, CloudFunctionConfig } from './cloudFunctionsAPIDeployer';
 import { ApiGatewayDeployer } from './apiGatewayDeployer';
 import { FirestoreDeployer } from './firestoreDeployer';
 import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
@@ -386,7 +386,6 @@ export class DeploymentEngine extends EventEmitter {
     console.log('Starting IAM role assignments...');
     const state = this.stateManager.getState()!;
     const accounts = this.getResourceValue('createServiceAccounts', 'accounts');
-    const startTime = Date.now();
     
     console.log('Service accounts found:', accounts);
     
@@ -617,7 +616,7 @@ export class DeploymentEngine extends EventEmitter {
     
     // Filter out nulls (already deployed functions)
     const functionsToProcess = functionConfigs.filter(f => f !== null) as Array<{
-      config: typeof functions[0] & { region: string, maxInstances: number };
+      config: CloudFunctionConfig;
       sourceDir: string;
     }>;
     
@@ -668,10 +667,11 @@ export class DeploymentEngine extends EventEmitter {
     
     // Grant Cloud Run invoker permissions to API Gateway service account
     console.log('Granting Cloud Run invoker permissions to API Gateway service account...');
+    const allFunctionsForPermissions = this.getResourceValue('deployCloudFunctions', 'functions') || {};
     await this.grantCloudRunInvokerPermissions(
       state.projectId,
       state.region,
-      deployedFunctions,
+      allFunctionsForPermissions,
       accounts['apigw-invoker-sa']
     );
   }
