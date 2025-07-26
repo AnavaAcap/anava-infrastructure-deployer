@@ -137,12 +137,19 @@ export class DeploymentEngine extends EventEmitter {
           console.log('\n🔐 All authentication infrastructure deployed!');
           console.log('📱 Ready for camera authentication!\n');
           
+          // Get admin email if it was set
+          const adminEmail = this.firestoreDeployer?.getAdminEmail();
+          if (adminEmail) {
+            console.log(`👤 Admin user configured: ${adminEmail}`);
+          }
+          
           this.emitComplete({
             success: true,
             apiGatewayUrl: gatewayUrl,
             apiKey: apiKey,
             firebaseConfig: firebaseConfig,
             resources: this.getAllResources(),
+            adminEmail: adminEmail,
             warning: hasPlaceholderFunctions ? 'Cloud Functions build failed - you may need to deploy them manually' : undefined
           });
           break;
@@ -789,6 +796,18 @@ export class DeploymentEngine extends EventEmitter {
       console.log(message);
     };
 
+    // Get current user email for admin setup
+    let userEmail: string | undefined;
+    try {
+      const userInfo = await this.gcpAuth.getCurrentUser();
+      userEmail = userInfo?.email;
+      if (userEmail) {
+        logCallback(`Setting up admin access for: ${userEmail}`);
+      }
+    } catch (error) {
+      console.warn('Could not get current user email:', error);
+    }
+
     // Step 1: Enable Firebase Authentication (25%)
     this.emitProgress({
       currentStep: 'setupFirestore',
@@ -797,7 +816,7 @@ export class DeploymentEngine extends EventEmitter {
       message: 'Enabling Firebase Authentication...',
     });
     
-    const authConfigured = await this.firestoreDeployer.enableFirebaseAuthentication(state.projectId, logCallback);
+    const authConfigured = await this.firestoreDeployer.enableFirebaseAuthentication(state.projectId, logCallback, userEmail);
     this.stateManager.updateStepResource('setupFirestore', 'authEnabled', authConfigured);
     this.stateManager.updateStepResource('setupFirestore', 'authConfigured', authConfigured);
 

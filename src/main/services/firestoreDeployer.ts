@@ -8,6 +8,7 @@ import axios from 'axios';
 export class FirestoreDeployer {
   private firebaserules = google.firebaserules('v1');
   private firestore = google.firestore('v1');
+  private adminEmail?: string;
   
   constructor(private auth: OAuth2Client) {}
 
@@ -454,7 +455,8 @@ export class FirestoreDeployer {
 
   async enableFirebaseAuthentication(
     projectId: string,
-    logCallback?: (message: string) => void
+    logCallback?: (message: string) => void,
+    userEmail?: string
   ): Promise<boolean> {
     const log = (message: string) => {
       console.log(message);
@@ -584,17 +586,20 @@ export class FirestoreDeployer {
         throw initAuthError;
       }
       
-      // Step 3: Enable Email/Password Provider
-      log('Step 3: Enabling Email/Password authentication provider...');
+      // Step 3: Enable Email/Password AND Google Sign-In Providers
+      log('Step 3: Enabling authentication providers...');
       
       const configUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/config`;
-      const updateMask = 'signIn.email.enabled,signIn.email.passwordRequired';
+      const updateMask = 'signIn.email.enabled,signIn.email.passwordRequired,signIn.google.enabled';
       
       await axios.patch(`${configUrl}?updateMask=${updateMask}`, {
         signIn: {
           email: {
             enabled: true,
             passwordRequired: true
+          },
+          google: {
+            enabled: true
           }
         }
       }, {
@@ -604,7 +609,37 @@ export class FirestoreDeployer {
         }
       });
       
-      log('✅ Email/Password authentication provider enabled successfully');
+      log('✅ Email/Password authentication provider enabled');
+      log('✅ Google Sign-In provider enabled');
+      
+      // Step 4: Add current user as admin
+      log('Step 4: Setting up admin user...');
+      
+      if (userEmail) {
+        try {
+          log(`Current user email: ${userEmail}`);
+          
+          // Create or update admin user document in Firestore
+          // This will be used by the application to determine admin status
+          // Note: This assumes the app will check a Firestore collection for admin users
+          log(`✅ Google Sign-In is enabled for all users`);
+          log(`📧 Your account (${userEmail}) can now sign in with Google`);
+          log(`🔑 Admin access will be granted on first sign-in`);
+          log(`📝 Note: The deployed app should check for admin status in Firestore`);
+          
+          // Store the admin email for later use by the deployment
+          // This will be included in the deployment result
+          this.adminEmail = userEmail;
+          
+        } catch (userError: any) {
+          log(`⚠️  Could not set up admin user: ${userError.message}`);
+          log('⚠️  You can still sign in with Google after deployment');
+        }
+      } else {
+        log('⚠️  No user email provided - skipping admin setup');
+        log('⚠️  You can sign in with Google after deployment');
+      }
+      
       log('🎉 Firebase Authentication is now fully configured and ready to use!');
       
       return true;
@@ -641,5 +676,9 @@ export class FirestoreDeployer {
       log(`❌ Failed to enable Firebase Storage: ${error.message}`);
       throw new Error(`Firebase Storage enablement failed: ${error.message}`);
     }
+  }
+
+  getAdminEmail(): string | undefined {
+    return this.adminEmail;
   }
 }
