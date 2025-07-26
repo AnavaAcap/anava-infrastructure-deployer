@@ -14,6 +14,7 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  TextField,
 } from '@mui/material';
 import { CheckCircle, ArrowBack, ArrowForward, Refresh, Add } from '@mui/icons-material';
 import { AuthStatus, GCPProject } from '../../types';
@@ -36,13 +37,17 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [preparingProject, setPreparingProject] = useState(false);
   const [preparingProjectId, setPreparingProjectId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Helper function to format project display name
   const formatProjectName = (project: GCPProject): string => {
+    // Handle missing or empty display name
+    const displayName = project.displayName || project.projectId;
+    
     // Truncate display name if too long (max 40 characters)
-    const truncatedName = project.displayName.length > 40 
-      ? project.displayName.substring(0, 37) + '...' 
-      : project.displayName;
+    const truncatedName = displayName.length > 40 
+      ? displayName.substring(0, 37) + '...' 
+      : displayName;
     
     return `${truncatedName} - ${project.projectId}`;
   };
@@ -60,10 +65,28 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
       setAuthStatus(status);
       
       if (status.authenticated) {
+        console.log('Getting project list...');
         const projectList = await window.electronAPI.auth.getProjects();
-        setProjects(projectList);
+        console.log(`Received ${projectList.length} projects`);
+        
+        // Validate project data
+        const validProjects = projectList.filter(p => {
+          if (!p || typeof p !== 'object') {
+            console.error('Invalid project object:', p);
+            return false;
+          }
+          if (!p.projectId) {
+            console.error('Project missing projectId:', p);
+            return false;
+          }
+          return true;
+        });
+        
+        console.log(`${validProjects.length} valid projects after filtering`);
+        setProjects(validProjects);
       }
     } catch (err) {
+      console.error('Authentication check error:', err);
       setError((err as Error).message);
     } finally {
       setLoading(false);
@@ -211,6 +234,17 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
             </Stack>
           </Box>
           
+          {projects.length > 10 && (
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search projects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              sx={{ mb: 2 }}
+            />
+          )}
+          
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 4 }}>
             <FormControl fullWidth>
               <InputLabel>Project</InputLabel>
@@ -231,13 +265,42 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
                     </Typography>
                   </MenuItem>
                 ) : (
-                  projects.map((project) => (
-                    <MenuItem key={project.projectId} value={project.projectId}>
-                      <Typography>
-                        {formatProjectName(project)}
-                      </Typography>
-                    </MenuItem>
-                  ))
+                  (() => {
+                    const filteredProjects = projects.filter((project) => {
+                      if (!searchQuery) return true;
+                      const query = searchQuery.toLowerCase();
+                      const displayName = (project.displayName || '').toLowerCase();
+                      const projectId = project.projectId.toLowerCase();
+                      return displayName.includes(query) || projectId.includes(query);
+                    });
+                    
+                    const displayProjects = filteredProjects.slice(0, 50);
+                    const hasMore = filteredProjects.length > 50;
+                    
+                    return [
+                      ...displayProjects.map((project) => {
+                        try {
+                          return (
+                            <MenuItem key={project.projectId} value={project.projectId}>
+                              <Typography>
+                                {formatProjectName(project)}
+                              </Typography>
+                            </MenuItem>
+                          );
+                        } catch (err) {
+                          console.error('Error rendering project:', project, err);
+                          return null;
+                        }
+                      }).filter(Boolean),
+                      ...(hasMore ? [
+                        <MenuItem key="__more__" disabled>
+                          <Typography color="text.secondary" variant="caption">
+                            {filteredProjects.length - 50} more projects... Use search to filter
+                          </Typography>
+                        </MenuItem>
+                      ] : [])
+                    ];
+                  })()
                 )}
               </Select>
             </FormControl>
