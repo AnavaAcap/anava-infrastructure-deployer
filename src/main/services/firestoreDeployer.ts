@@ -522,31 +522,66 @@ export class FirestoreDeployer {
         }
       }
       
-      // Step 2: Initialize Firebase Authentication
+      // Step 2: Initialize Firebase Authentication by creating initial config
       log('Step 2: Initializing Firebase Authentication...');
       
       try {
-        const initAuthUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}:initializeAuth`;
+        // First check if auth is already configured
+        const configUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/config`;
         
-        await axios.post(initAuthUrl, {}, {
-          headers: {
-            'Authorization': `Bearer ${accessToken.token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        log('✅ Firebase Authentication initialized successfully');
-        
-        // Wait for initialization to complete
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-      } catch (initAuthError: any) {
-        if (initAuthError.response?.status === 409 || initAuthError.message?.includes('already exists')) {
+        try {
+          await axios.get(configUrl, {
+            headers: {
+              'Authorization': `Bearer ${accessToken.token}`
+            }
+          });
           log('✅ Firebase Authentication already initialized');
-        } else {
-          log(`❌ Failed to initialize Firebase Auth: ${initAuthError.response?.status || initAuthError.message}`);
-          throw initAuthError;
+        } catch (getError: any) {
+          if (getError.response?.status === 404) {
+            // Config doesn't exist - create it with PATCH
+            log('Creating initial authentication configuration...');
+            
+            const updateMask = 'signIn.email.enabled,signIn.anonymous.enabled,notification.sendEmail.resetPasswordTemplate,notification.sendEmail.verifyEmailTemplate';
+            const requestBody = {
+              signIn: {
+                email: {
+                  enabled: false
+                },
+                anonymous: {
+                  enabled: false
+                }
+              },
+              notification: {
+                sendEmail: {
+                  resetPasswordTemplate: {},
+                  verifyEmailTemplate: {}
+                }
+              }
+            };
+            
+            await axios.patch(
+              `${configUrl}?updateMask=${updateMask}`,
+              requestBody,
+              {
+                headers: {
+                  'Authorization': `Bearer ${accessToken.token}`,
+                  'Content-Type': 'application/json'
+                }
+              }
+            );
+            
+            log('✅ Firebase Authentication initialized successfully');
+            
+            // Wait for initialization to complete
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          } else {
+            throw getError;
+          }
         }
+      } catch (initAuthError: any) {
+        log(`❌ Failed to initialize Firebase Auth: ${initAuthError.response?.status || initAuthError.message}`);
+        log(`Response: ${JSON.stringify(initAuthError.response?.data)}`);
+        throw initAuthError;
       }
       
       // Step 3: Enable Email/Password Provider
