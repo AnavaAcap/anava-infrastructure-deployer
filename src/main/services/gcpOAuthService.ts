@@ -484,7 +484,7 @@ export class GCPOAuthService {
       log.info(`Found ${rawProjects.length} projects`);
       
       // Map the API response to our GCPProject interface
-      const projects = rawProjects.map(project => ({
+      const projects = rawProjects.map((project: any) => ({
         projectId: project.projectId || '',
         projectNumber: project.projectNumber || '',
         displayName: project.name || project.projectId || '', // API returns 'name', we need 'displayName'
@@ -507,7 +507,7 @@ export class GCPOAuthService {
           
           // Map the API response to our GCPProject interface
           const rawProjects = response.data.projects || [];
-          return rawProjects.map(project => ({
+          return rawProjects.map((project: any) => ({
             projectId: project.projectId || '',
             projectNumber: project.projectNumber || '',
             displayName: project.name || project.projectId || '', // API returns 'name', we need 'displayName'

@@ -9,7 +9,7 @@ import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
 import { FirebaseAppDeployer } from './firebaseAppDeployer';
 import { DeploymentConfig, DeploymentProgress, DeploymentResult } from '../../types';
 import { ParallelExecutor } from './utils/parallelExecutor';
-import { DeploymentTimer } from './utils/deploymentTimer';
+// import { DeploymentTimer } from './utils/deploymentTimer'; // TODO: Implement timing tracking
 import path from 'path';
 import { app } from 'electron';
 import fs from 'fs/promises';
@@ -26,7 +26,7 @@ export class DeploymentEngine extends EventEmitter {
   private workloadIdentityDeployer?: WorkloadIdentityDeployer;
   private firebaseAppDeployer?: FirebaseAppDeployer;
   private isPaused = false;
-  private deploymentTimer?: DeploymentTimer;
+  // private deploymentTimer?: DeploymentTimer; // TODO: Implement timing tracking
 
   constructor(stateManager: StateManager, gcpAuth: GCPOAuthService) {
     super();
@@ -863,7 +863,7 @@ export class DeploymentEngine extends EventEmitter {
     let userEmail: string | undefined;
     try {
       const userInfo = await this.gcpAuth.getCurrentUser();
-      userEmail = userInfo?.email;
+      userEmail = userInfo?.email || undefined;
       if (userEmail) {
         logCallback(`Setting up admin access for: ${userEmail}`);
       }
@@ -871,30 +871,58 @@ export class DeploymentEngine extends EventEmitter {
       console.warn('Could not get current user email:', error);
     }
 
-    // Step 1: Enable Firebase Authentication (25%)
+    // Enable Firebase Auth and Storage in parallel
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 0,
       totalProgress: 87.5,
-      message: 'Enabling Firebase Authentication...',
+      message: 'Initializing Firebase services in parallel...',
     });
-    
-    const authConfigured = await this.firestoreDeployer.enableFirebaseAuthentication(state.projectId, logCallback, userEmail);
-    this.stateManager.updateStepResource('setupFirestore', 'authEnabled', authConfigured);
-    this.stateManager.updateStepResource('setupFirestore', 'authConfigured', authConfigured);
 
-    // Step 2: Enable Firebase Storage (50%)
-    this.emitProgress({
-      currentStep: 'setupFirestore',
-      stepProgress: 25,
-      totalProgress: 87.5,
-      message: 'Enabling Firebase Storage...',
+    const startTime = Date.now();
+
+    // Execute Firebase Auth and Storage setup in parallel
+    const firebaseSetupTasks = [
+      {
+        name: 'Firebase Authentication',
+        fn: async () => {
+          const authConfigured = await this.firestoreDeployer!.enableFirebaseAuthentication(
+            state.projectId, 
+            logCallback, 
+            userEmail
+          );
+          this.stateManager.updateStepResource('setupFirestore', 'authEnabled', authConfigured);
+          this.stateManager.updateStepResource('setupFirestore', 'authConfigured', authConfigured);
+          return authConfigured;
+        },
+        critical: true
+      },
+      {
+        name: 'Firebase Storage',
+        fn: async () => {
+          const storageBucket = await this.firestoreDeployer!.enableFirebaseStorage(
+            state.projectId, 
+            logCallback
+          );
+          this.stateManager.updateStepResource('setupFirestore', 'storageBucket', storageBucket);
+          return storageBucket;
+        },
+        critical: true
+      }
+    ];
+
+    console.log('Enabling Firebase Authentication and Storage in parallel...');
+    const setupResults = await ParallelExecutor.executeBatch<any>(firebaseSetupTasks, {
+      maxConcurrency: 2,
+      stopOnError: true
     });
-    
-    const storageBucket = await this.firestoreDeployer.enableFirebaseStorage(state.projectId, logCallback);
-    this.stateManager.updateStepResource('setupFirestore', 'storageBucket', storageBucket);
 
-    // Step 3: Deploy security rules for both Firestore and Storage (100%)
+    // Check for failures
+    const setupFailures = setupResults.filter(r => !r.success);
+    if (setupFailures.length > 0) {
+      throw new Error(`Failed to set up Firebase services: ${setupFailures.map(f => f.name).join(', ')}`);
+    }
+
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 50,
@@ -902,9 +930,13 @@ export class DeploymentEngine extends EventEmitter {
       message: 'Deploying security rules...',
     });
     
+    // Deploy security rules (this needs to happen after storage bucket exists)
     await this.firestoreDeployer.deploySecurityRules(state.projectId, logCallback);
     this.stateManager.updateStepResource('setupFirestore', 'databaseId', '(default)');
     this.stateManager.updateStepResource('setupFirestore', 'rulesDeployed', true);
+    
+    const elapsed = Date.now() - startTime;
+    console.log(`Firebase setup completed in ${elapsed}ms`);
     
     this.emitProgress({
       currentStep: 'setupFirestore',
