@@ -504,9 +504,14 @@ export class FirestoreDeployer {
             const member = `serviceAccount:${firebaseStorageSA}`;
             
             const binding = policy.bindings?.find(b => b.role === role);
-            if (binding && !binding.members?.includes(member)) {
-              binding.members.push(member);
-            } else if (!binding) {
+            if (binding) {
+              if (!binding.members) {
+                binding.members = [];
+              }
+              if (!binding.members.includes(member)) {
+                binding.members.push(member);
+              }
+            } else {
               policy.bindings = policy.bindings || [];
               policy.bindings.push({
                 role,
