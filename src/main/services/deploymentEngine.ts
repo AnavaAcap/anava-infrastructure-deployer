@@ -492,20 +492,13 @@ export class DeploymentEngine extends EventEmitter {
     // Cloud Functions service agent (critical for deployments)
     const cloudFunctionsSA = `service-${projectNumber}@gcf-admin-robot.iam.gserviceaccount.com`;
     
-    // Firebase Storage service agent (critical for Firebase Storage)
-    const firebaseStorageSA = `service-${projectNumber}@gcp-sa-firebasestorage.iam.gserviceaccount.com`;
-    
     // Log that we're setting up the service agents
     console.log(`Setting up Cloud Functions service agent: ${cloudFunctionsSA}`);
-    console.log(`Setting up Firebase Storage service agent: ${firebaseStorageSA}`);
     
     // Prepare all IAM role assignments
     const roleAssignments = [
       // Cloud Functions service agent (MUST have artifactregistry.reader)
       { memberEmail: cloudFunctionsSA, role: 'roles/artifactregistry.reader' },
-      
-      // Firebase Storage service agent (MUST have storage.admin for bucket operations)
-      { memberEmail: firebaseStorageSA, role: 'roles/storage.admin' },
       
       // Compute SA roles (critical for Cloud Functions v2)
       { memberEmail: computeSA, role: 'roles/storage.objectViewer' },
