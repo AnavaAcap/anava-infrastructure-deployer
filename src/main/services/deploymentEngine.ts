@@ -1007,11 +1007,17 @@ export class DeploymentEngine extends EventEmitter {
             await fs.writeFile(keyFile, JSON.stringify(keyContent, null, 2));
             logCallback('✅ Service account key created');
             
+            // Get project number for OAuth setup
+            const projectNumber = await this.getProjectNumber(state.projectId);
+            
             // Initialize Firebase Auth with Terraform
             logCallback('Step 3: Running Terraform to initialize Firebase Authentication...');
             logCallback(`  Project ID: ${state.projectId}`);
+            logCallback(`  Project Number: ${projectNumber}`);
+            logCallback(`  Admin Email: ${userEmail}`);
             logCallback(`  Authorized domains: ${state.projectId}.firebaseapp.com, localhost`);
             logCallback('  Enabling email/password and anonymous authentication...');
+            
             
             await this.terraformService.initializeFirebaseAuth(
               state.projectId,
@@ -1021,7 +1027,9 @@ export class DeploymentEngine extends EventEmitter {
                 authorizedDomains: [
                   `${state.projectId}.firebaseapp.com`,
                   'localhost'
-                ]
+                ],
+                adminEmail: userEmail,
+                projectNumber: projectNumber
               }
             );
             
@@ -1032,22 +1040,16 @@ export class DeploymentEngine extends EventEmitter {
             logCallback('✅ Firebase Authentication initialized successfully with Terraform!');
             logCallback('✅ Email/password and anonymous authentication are now enabled');
             
-            // Now set up Google provider and admin user
-            if (this.firebaseAuthSetupService && userEmail) {
-              try {
-                logCallback('');
-                logCallback('Step 4: Setting up Google authentication provider...');
-                await this.firebaseAuthSetupService.setupGoogleProvider(
-                  state.projectId,
-                  userEmail,
-                  logCallback
-                );
-                logCallback('✅ Google provider configuration completed');
-              } catch (providerError: any) {
-                console.error('Failed to set up Google provider:', providerError);
-                logCallback(`⚠️  Could not fully configure Google provider: ${providerError.message}`);
-                logCallback('⚠️  You can enable Google Sign-In manually in Firebase Console');
-              }
+            if (userEmail) {
+              logCallback('');
+              logCallback('ℹ️  To enable Google Sign-In (optional):');
+              logCallback('   1. Go to Firebase Console > Authentication > Sign-in method');
+              logCallback('   2. Click on Google provider and Enable it');
+              logCallback('   3. Configure with your project support email');
+              logCallback(`   4. Add ${userEmail} as an authorized user`);
+              logCallback('');
+              logCallback('   Direct link:');
+              logCallback(`   https://console.firebase.google.com/project/${state.projectId}/authentication/providers`);
             }
             
             this.stateManager.updateStepResource('setupFirestore', 'authEnabled', true);
