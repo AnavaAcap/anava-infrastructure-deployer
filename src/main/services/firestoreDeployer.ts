@@ -291,7 +291,7 @@ export class FirestoreDeployer {
       
       log('Creating default Firebase Storage bucket via Firebase API...');
       
-      const response = await axios.post(addDefaultBucketUrl, {
+      await axios.post(addDefaultBucketUrl, {
         // The API will create the default bucket with the right name
       }, {
         headers: {
