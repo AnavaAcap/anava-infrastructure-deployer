@@ -282,63 +282,94 @@ export class FirestoreDeployer {
       }
     }
     
-    // If no standard buckets exist, check for our custom bucket
-    const customBucketName = bucketPatterns[2];
+    // If no standard buckets exist, try to create the default Firebase Storage bucket
+    log('No existing Firebase Storage bucket found. Creating default bucket...');
+    
     try {
-      const { data: bucket } = await storage.buckets.get({
-        bucket: customBucketName,
-        auth: this.auth
+      const accessToken = await this.auth.getAccessToken();
+      const addDefaultBucketUrl = `https://firebase.googleapis.com/v1beta1/projects/${projectId}/defaultBucket:add`;
+      
+      log('Creating default Firebase Storage bucket via Firebase API...');
+      
+      const response = await axios.post(addDefaultBucketUrl, {
+        // The API will create the default bucket with the right name
+      }, {
+        headers: {
+          'Authorization': `Bearer ${accessToken.token}`,
+          'Content-Type': 'application/json'
+        }
       });
       
-      log(`Custom Firebase Storage bucket already exists: ${bucket.name}`);
-      await this.configureBucketCORS(customBucketName, projectId, log);
-      await this.finalizeFirebaseStorageBucket(projectId, customBucketName, log);
-      return customBucketName;
-    } catch (error: any) {
-      if (error.code === 404) {
-        // Create custom bucket - this doesn't require domain verification
-        log(`Creating custom Firebase Storage bucket: ${customBucketName}...`);
-        
+      // The API creates a bucket with the pattern {projectId}.appspot.com
+      const defaultBucketName = `${projectId}.appspot.com`;
+      log(`✅ Default Firebase Storage bucket created successfully: ${defaultBucketName}`);
+      
+      // Wait for bucket to be ready
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Configure CORS for the new bucket
+      await this.configureBucketCORS(defaultBucketName, projectId, log);
+      
+      // The bucket is already linked to Firebase since we used the defaultBucket:add API
+      // But we still need to set up the service agent permissions
+      await this.finalizeFirebaseStorageBucket(projectId, defaultBucketName, log);
+      
+      return defaultBucketName;
+      
+    } catch (defaultBucketError: any) {
+      if (defaultBucketError.response?.status === 409) {
+        // Bucket might already exist, let's check again
+        const defaultBucketName = `${projectId}.appspot.com`;
         try {
-          await storage.buckets.insert({
-            project: projectId,
-            requestBody: {
-              name: customBucketName,
-              location: 'US', // Multi-region US
-              storageClass: 'STANDARD',
-              iamConfiguration: {
-                uniformBucketLevelAccess: {
-                  enabled: true
-                }
-              },
-              labels: {
-                'firebase-storage': 'true',
-                'created-by': 'anava-installer'
-              }
-            },
+          const { data: bucket } = await storage.buckets.get({
+            bucket: defaultBucketName,
             auth: this.auth
           });
-          
-          log(`Created custom Firebase Storage bucket: ${customBucketName}`);
-          
-          // Wait a bit for bucket to be ready
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          
-          // Configure CORS for the new bucket
-          await this.configureBucketCORS(customBucketName, projectId, log);
-          
-          // Finalize the bucket as the Firebase default
-          await this.finalizeFirebaseStorageBucket(projectId, customBucketName, log);
-          
-          return customBucketName;
-          
-        } catch (createError: any) {
-          log(`Failed to create storage bucket: ${createError.message}`);
-          log(`⚠️  You may need to manually create a Firebase Storage bucket in the Firebase Console`);
-          throw createError;
+          log(`✅ Default Firebase Storage bucket already exists: ${bucket.name}`);
+          await this.configureBucketCORS(defaultBucketName, projectId, log);
+          await this.finalizeFirebaseStorageBucket(projectId, defaultBucketName, log);
+          return defaultBucketName;
+        } catch (checkError: any) {
+          log(`⚠️  Could not verify default bucket after creation: ${checkError.message}`);
         }
-      } else {
-        throw error;
+      }
+      
+      log(`⚠️  Could not create default Firebase Storage bucket: ${defaultBucketError.response?.data?.error?.message || defaultBucketError.message}`);
+      
+      // Fall back to custom bucket as last resort
+      const customBucketName = bucketPatterns[2];
+      log(`Falling back to custom bucket: ${customBucketName}...`);
+      
+      try {
+        await storage.buckets.insert({
+          project: projectId,
+          requestBody: {
+            name: customBucketName,
+            location: 'US',
+            storageClass: 'STANDARD',
+            iamConfiguration: {
+              uniformBucketLevelAccess: {
+                enabled: true
+              }
+            },
+            labels: {
+              'firebase-storage': 'true',
+              'created-by': 'anava-installer'
+            }
+          },
+          auth: this.auth
+        });
+        
+        log(`Created custom Firebase Storage bucket: ${customBucketName}`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        await this.configureBucketCORS(customBucketName, projectId, log);
+        await this.finalizeFirebaseStorageBucket(projectId, customBucketName, log);
+        return customBucketName;
+        
+      } catch (createError: any) {
+        log(`Failed to create any storage bucket: ${createError.message}`);
+        log(`⚠️  You may need to manually create a Firebase Storage bucket in the Firebase Console`);
+        throw createError;
       }
     }
   }
