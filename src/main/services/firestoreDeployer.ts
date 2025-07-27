@@ -482,9 +482,49 @@ export class FirestoreDeployer {
           
           log(`✅ Bucket ${bucketName} successfully linked to Firebase Storage`);
           
-          // Also check Firebase Storage service agent permissions
+          // Now assign Storage Admin role to the Firebase Storage service agent
           const firebaseStorageSA = `service-${projectNumber}@gcp-sa-firebasestorage.iam.gserviceaccount.com`;
-          log(`ℹ️  Ensure Firebase Storage service agent (${firebaseStorageSA}) has Storage Admin role on the bucket`);
+          log(`Assigning Storage Admin role to Firebase Storage service agent: ${firebaseStorageSA}`);
+          
+          try {
+            const { google } = await import('googleapis');
+            const cloudResourceManager = google.cloudresourcemanager({
+              version: 'v1',
+              auth: this.auth
+            });
+            
+            // Get current IAM policy
+            const { data: policy } = await cloudResourceManager.projects.getIamPolicy({
+              resource: projectId,
+              requestBody: {}
+            });
+            
+            // Add Storage Admin role
+            const role = 'roles/storage.admin';
+            const member = `serviceAccount:${firebaseStorageSA}`;
+            
+            const binding = policy.bindings?.find(b => b.role === role);
+            if (binding && !binding.members?.includes(member)) {
+              binding.members.push(member);
+            } else if (!binding) {
+              policy.bindings = policy.bindings || [];
+              policy.bindings.push({
+                role,
+                members: [member]
+              });
+            }
+            
+            // Update IAM policy
+            await cloudResourceManager.projects.setIamPolicy({
+              resource: projectId,
+              requestBody: { policy }
+            });
+            
+            log(`✅ Successfully assigned Storage Admin role to Firebase Storage service agent`);
+          } catch (iamError: any) {
+            log(`⚠️  Could not assign Storage Admin role: ${iamError.message}`);
+            log(`⚠️  You may need to manually grant this permission for Firebase Storage to work properly`);
+          }
           
           return;
           
