@@ -23,6 +23,30 @@ export class FirestoreDeployer {
 
     log('=== Deploying Firestore and Firebase Storage Security Rules ===');
     
+    // Enable required APIs for Storage
+    const serviceusage = google.serviceusage('v1');
+    const storageApis = [
+      'firebasestorage.googleapis.com',
+      'storage-component.googleapis.com',
+      'storage-api.googleapis.com'
+    ];
+    
+    for (const api of storageApis) {
+      try {
+        await serviceusage.services.enable({
+          name: `projects/${projectId}/services/${api}`,
+          auth: this.auth
+        });
+        log(`✅ ${api} enabled`);
+      } catch (error: any) {
+        if (error.code === 409 || error.message?.includes('already enabled')) {
+          log(`✅ ${api} already enabled`);
+        } else {
+          log(`⚠️  Could not enable ${api}: ${error.message}`);
+        }
+      }
+    }
+    
     try {
       // First ensure the database exists
       await this.ensureFirestoreDatabaseExists(projectId, log);
@@ -250,6 +274,7 @@ export class FirestoreDeployer {
         
         log(`Firebase Storage bucket already exists: ${bucket.name}`);
         await this.configureBucketCORS(bucketName, projectId, log);
+        await this.finalizeFirebaseStorageBucket(projectId, bucketName, log);
         return bucketName;
       } catch (error: any) {
         if (error.code !== 404) {
@@ -268,6 +293,7 @@ export class FirestoreDeployer {
       
       log(`Custom Firebase Storage bucket already exists: ${bucket.name}`);
       await this.configureBucketCORS(customBucketName, projectId, log);
+      await this.finalizeFirebaseStorageBucket(projectId, customBucketName, log);
       return customBucketName;
     } catch (error: any) {
       if (error.code === 404) {
@@ -301,6 +327,9 @@ export class FirestoreDeployer {
           
           // Configure CORS for the new bucket
           await this.configureBucketCORS(customBucketName, projectId, log);
+          
+          // Finalize the bucket as the Firebase default
+          await this.finalizeFirebaseStorageBucket(projectId, customBucketName, log);
           
           return customBucketName;
           
@@ -402,6 +431,85 @@ export class FirestoreDeployer {
     }
   }
 
+  private async finalizeFirebaseStorageBucket(
+    projectId: string,
+    bucketName: string,
+    log: (message: string) => void
+  ): Promise<void> {
+    log(`Linking ${bucketName} to Firebase Storage...`);
+    
+    try {
+      const accessToken = await this.auth.getAccessToken();
+      const projectNumber = await this.getProjectNumber(projectId);
+      
+      // Check if this is the default bucket pattern
+      const isDefaultBucket = bucketName.endsWith('.appspot.com');
+      
+      if (isDefaultBucket) {
+        // For default bucket, use the defaultBucket:add API
+        log('Creating default Firebase Storage bucket...');
+        try {
+          const addDefaultBucketUrl = `https://firebase.googleapis.com/v1beta1/projects/${projectId}/defaultBucket:add`;
+          
+          await axios.post(addDefaultBucketUrl, {
+            // The API will create the default bucket with the right name
+          }, {
+            headers: {
+              'Authorization': `Bearer ${accessToken.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          log(`✅ Default Firebase Storage bucket created successfully`);
+          return;
+        } catch (defaultError: any) {
+          if (defaultError.response?.status === 409) {
+            log(`✅ Default Firebase Storage bucket already exists`);
+            return;
+          }
+          log(`⚠️  Could not create default bucket: ${defaultError.response?.data?.error?.message || defaultError.message}`);
+        }
+      } else {
+        // For custom buckets, use buckets:addFirebase API
+        try {
+          const addFirebaseUrl = `https://firebasestorage.googleapis.com/v1beta/projects/${projectId}/buckets/${bucketName}:addFirebase`;
+          
+          await axios.post(addFirebaseUrl, {}, {
+            headers: {
+              'Authorization': `Bearer ${accessToken.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          log(`✅ Bucket ${bucketName} successfully linked to Firebase Storage`);
+          
+          // Also check Firebase Storage service agent permissions
+          const firebaseStorageSA = `service-${projectNumber}@gcp-sa-firebasestorage.iam.gserviceaccount.com`;
+          log(`ℹ️  Ensure Firebase Storage service agent (${firebaseStorageSA}) has Storage Admin role on the bucket`);
+          
+          return;
+          
+        } catch (addFirebaseError: any) {
+          if (addFirebaseError.response?.status === 409) {
+            log(`✅ Bucket ${bucketName} already linked to Firebase Storage`);
+            return;
+          } else if (addFirebaseError.response?.status === 403) {
+            log(`❌ Permission denied linking bucket to Firebase`);
+            log(`⚠️  The Firebase Storage service agent (service-${projectNumber}@gcp-sa-firebasestorage.iam.gserviceaccount.com) needs Storage Admin role`);
+            log(`⚠️  Grant this permission in IAM console or via: gcloud projects add-iam-policy-binding ${projectId} --member="serviceAccount:service-${projectNumber}@gcp-sa-firebasestorage.iam.gserviceaccount.com" --role="roles/storage.admin"`);
+          }
+          
+          log(`⚠️  buckets:addFirebase failed: ${addFirebaseError.response?.data?.error?.message || addFirebaseError.message}`);
+        }
+      }
+      
+    } catch (error: any) {
+      log(`⚠️  Warning: Could not link Firebase Storage bucket: ${error.response?.data?.error?.message || error.message}`);
+      log(`⚠️  The bucket exists but may not be fully integrated with Firebase`);
+      // Don't throw - this is not critical enough to fail the entire deployment
+    }
+  }
+
   private async configureBucketCORS(
     bucketName: string,
     projectId: string,
@@ -466,33 +574,56 @@ export class FirestoreDeployer {
     log('=== Enabling Firebase Authentication ===');
     
     try {
-      // Step 0: Enable required APIs
+      // Step 0: Enable required APIs (CRITICAL for initialization)
       const serviceusage = google.serviceusage('v1');
       
       log('Enabling required APIs...');
       
       const requiredApis = [
         'firebase.googleapis.com',
-        'identitytoolkit.googleapis.com'
+        'identitytoolkit.googleapis.com'  // This MUST be enabled before any Auth config can exist
       ];
       
       for (const api of requiredApis) {
         try {
-          await serviceusage.services.enable({
+          // First check if it's already enabled
+          const serviceStatus = await serviceusage.services.get({
             name: `projects/${projectId}/services/${api}`,
             auth: this.auth
           });
-          log(`✅ ${api} enabled`);
+          
+          if (serviceStatus.data.state === 'ENABLED') {
+            log(`✅ ${api} already enabled`);
+          } else {
+            log(`Enabling ${api}...`);
+            await serviceusage.services.enable({
+              name: `projects/${projectId}/services/${api}`,
+              auth: this.auth
+            });
+            
+            log(`✅ ${api} enable operation started`);
+            
+            // For identitytoolkit, wait longer as it needs to provision the config
+            if (api === 'identitytoolkit.googleapis.com') {
+              log('Waiting for Identity Toolkit service to fully initialize...');
+              await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+          }
         } catch (enableError: any) {
           if (enableError.code === 409 || enableError.message?.includes('already enabled')) {
             log(`✅ ${api} already enabled`);
           } else {
             log(`⚠️  Warning: Could not enable ${api}: ${enableError.message}`);
+            // For identitytoolkit, this is critical
+            if (api === 'identitytoolkit.googleapis.com') {
+              throw new Error(`Failed to enable Identity Toolkit API: ${enableError.message}`);
+            }
           }
         }
       }
       
-      // Wait for APIs to be fully available
+      // Additional wait to ensure APIs are fully propagated
+      log('Waiting for API enablement to propagate...');
       await new Promise(resolve => setTimeout(resolve, 5000));
       
       const accessToken = await this.auth.getAccessToken();
@@ -524,93 +655,97 @@ export class FirestoreDeployer {
         }
       }
       
+      // Step 1.5: Set project default location (CRITICAL for Storage and Auth!)
+      log('Step 1.5: Setting project default location...');
+      
+      try {
+        const locationUrl = `https://firebase.googleapis.com/v1beta1/projects/${projectId}/defaultLocation:finalize`;
+        
+        await axios.post(locationUrl, {
+          locationId: 'us-central' // Use us-central as default, matches most deployments
+        }, {
+          headers: {
+            'Authorization': `Bearer ${accessToken.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        log('✅ Project default location set to us-central');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+      } catch (locationError: any) {
+        if (locationError.response?.status === 409) {
+          log('✅ Project default location already set');
+        } else {
+          log(`⚠️  Warning: Could not set default location: ${locationError.response?.data?.error?.message || locationError.message}`);
+          // Continue anyway - location might already be set
+        }
+      }
+      
       // Step 2: Initialize Firebase Authentication by creating initial config
       log('Step 2: Initializing Firebase Authentication...');
       
+      // Use updateConfig approach as recommended by Gemini - this creates the config if it doesn't exist
+      const configUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/config`;
+      
       try {
-        // First check if auth is already configured
-        const configUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/config`;
-        
+        // Check if config already exists
         try {
           await axios.get(configUrl, {
             headers: {
               'Authorization': `Bearer ${accessToken.token}`
             }
           });
-          log('✅ Firebase Authentication already initialized');
+          log('✅ Firebase Authentication config already exists');
         } catch (getError: any) {
           if (getError.response?.status === 404) {
-            // Config doesn't exist - create it with PATCH
-            log('Creating initial authentication configuration...');
-            
-            const updateMask = 'signIn.email.enabled,signIn.anonymous.enabled,notification.sendEmail.resetPasswordTemplate,notification.sendEmail.verifyEmailTemplate';
-            const requestBody = {
-              signIn: {
-                email: {
-                  enabled: false
-                },
-                anonymous: {
-                  enabled: false
-                }
-              },
-              notification: {
-                sendEmail: {
-                  resetPasswordTemplate: {},
-                  verifyEmailTemplate: {}
-                }
-              }
-            };
-            
-            await axios.patch(
-              `${configUrl}?updateMask=${updateMask}`,
-              requestBody,
-              {
-                headers: {
-                  'Authorization': `Bearer ${accessToken.token}`,
-                  'Content-Type': 'application/json'
-                }
-              }
-            );
-            
-            log('✅ Firebase Authentication initialized successfully');
-            
-            // Wait for initialization to complete
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            log('Authentication config does not exist, will be created with first update');
           } else {
             throw getError;
           }
         }
-      } catch (initAuthError: any) {
-        log(`❌ Failed to initialize Firebase Auth: ${initAuthError.response?.status || initAuthError.message}`);
-        log(`Response: ${JSON.stringify(initAuthError.response?.data)}`);
-        throw initAuthError;
+      } catch (checkError: any) {
+        log(`Warning: Could not check auth config: ${checkError.message}`);
       }
       
       // Step 3: Enable Email/Password AND Google Sign-In Providers
       log('Step 3: Enabling authentication providers...');
       
-      const configUrl = `https://identitytoolkit.googleapis.com/v2/projects/${projectId}/config`;
-      const updateMask = 'signIn.email.enabled,signIn.email.passwordRequired,signIn.google.enabled';
+      // Start with just email/password and anonymous - we'll add Google sign-in separately
+      const updateMask = 'signIn.email.enabled,signIn.email.passwordRequired,signIn.anonymous.enabled';
       
-      await axios.patch(`${configUrl}?updateMask=${updateMask}`, {
-        signIn: {
-          email: {
-            enabled: true,
-            passwordRequired: true
-          },
-          google: {
-            enabled: true
+      try {
+        // Try to create/update the config - use PATCH which works for both create and update
+        await axios.patch(`${configUrl}?updateMask=${updateMask}`, {
+          signIn: {
+            email: {
+              enabled: true,
+              passwordRequired: true
+            },
+            anonymous: {
+              enabled: true
+            }
           }
+        }, {
+          headers: {
+            'Authorization': `Bearer ${accessToken.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        log('✅ Authentication config created/updated successfully');
+        log('✅ Email/Password authentication provider enabled');
+        log('✅ Anonymous authentication provider enabled');
+        log('ℹ️  Note: Google Sign-In can be enabled manually in Firebase Console');
+        
+      } catch (updateError: any) {
+        if (updateError.response?.status === 404 && updateError.response?.data?.error?.status === 'CONFIGURATION_NOT_FOUND') {
+          log('❌ Authentication configuration not found - Identity Toolkit API may not be enabled');
+          log('⚠️  Ensure identitytoolkit.googleapis.com is enabled for this project');
         }
-      }, {
-        headers: {
-          'Authorization': `Bearer ${accessToken.token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      log('✅ Email/Password authentication provider enabled');
-      log('✅ Google Sign-In provider enabled');
+        log(`❌ Failed to enable auth providers: ${updateError.response?.data?.error?.message || updateError.message}`);
+        throw updateError;
+      }
       
       // Step 4: Add current user as admin
       log('Step 4: Setting up admin user...');
@@ -680,5 +815,23 @@ export class FirestoreDeployer {
 
   getAdminEmail(): string | undefined {
     return this.adminEmail;
+  }
+
+  private async getProjectNumber(projectId: string): Promise<string> {
+    try {
+      const cloudResourceManager = google.cloudresourcemanager({
+        version: 'v1',
+        auth: this.auth
+      });
+      
+      const { data } = await cloudResourceManager.projects.get({
+        projectId
+      });
+      
+      return data.projectNumber?.toString() || '';
+    } catch (error) {
+      console.error('Error getting project number:', error);
+      return '';
+    }
   }
 }

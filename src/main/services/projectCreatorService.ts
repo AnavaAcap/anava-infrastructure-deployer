@@ -138,11 +138,16 @@ export class ProjectCreatorService {
 
   private generateProjectId(projectName: string): string {
     // Convert to lowercase, replace spaces with hyphens, remove special chars
-    const base = projectName
+    let base = projectName
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, '-')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '');
+    
+    // Ensure the ID starts with a letter (GCP requirement)
+    if (base.length === 0 || !/^[a-z]/.test(base)) {
+      base = 'project-' + base;
+    }
     
     // Add timestamp to ensure uniqueness
     const timestamp = Date.now().toString(36).slice(-4);
@@ -150,7 +155,10 @@ export class ProjectCreatorService {
     // Project IDs must be 6-30 characters
     const projectId = `${base}-${timestamp}`.slice(0, 30);
     
-    return projectId;
+    // Final validation: ensure it starts with a letter and ends with alphanumeric
+    const finalProjectId = projectId.replace(/[^a-z0-9]$/, '');
+    
+    return finalProjectId;
   }
 
   private async waitForOperation(
@@ -207,8 +215,10 @@ export class ProjectCreatorService {
       auth
     });
 
-    // Wait up to 30 seconds for project to be fully ready
-    const maxAttempts = 15;
+    // Wait up to 90 seconds for project to be fully ready (increased from 30s)
+    const maxAttempts = 45;
+    const pollInterval = 2000; // 2 seconds between attempts
+    
     for (let i = 0; i < maxAttempts; i++) {
       try {
         // Try to get the project - if successful, it's ready
@@ -223,13 +233,13 @@ export class ProjectCreatorService {
           await this.sleep(3000);
           return;
         } else {
-          console.log(`Project state: ${data.state}, waiting...`);
+          console.log(`Project state: ${data.state}, waiting... (${(i + 1) * pollInterval / 1000}s elapsed)`);
         }
       } catch (error: any) {
-        console.log(`Project not ready yet (attempt ${i + 1}/${maxAttempts})`);
+        console.log(`Project not ready yet (attempt ${i + 1}/${maxAttempts}, ${(i + 1) * pollInterval / 1000}s elapsed)`);
       }
       
-      await this.sleep(2000);
+      await this.sleep(pollInterval);
     }
     
     throw new Error('Project creation timed out - project may not be fully ready');
