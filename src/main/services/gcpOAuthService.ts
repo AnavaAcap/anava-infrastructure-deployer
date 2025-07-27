@@ -548,4 +548,20 @@ export class GCPOAuthService {
     this.store.set('gcpProjectId', projectId);
     return { projectId };
   }
+
+  async getServiceAccountKey(): Promise<any> {
+    // For Terraform, we'll use the Application Default Credentials
+    // that we've already set up
+    if (!this.oauth2Client || !this.oauth2Client.credentials.refresh_token) {
+      throw new Error('Not authenticated');
+    }
+    
+    // Return the ADC-formatted credentials that Terraform can use
+    return {
+      type: 'authorized_user',
+      client_id: this.authConfig.client_id,
+      client_secret: this.authConfig.client_secret,
+      refresh_token: this.oauth2Client.credentials.refresh_token
+    };
+  }
 }

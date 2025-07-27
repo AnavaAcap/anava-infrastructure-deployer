@@ -398,7 +398,8 @@ export class GCPApiServiceManager {
 
     const resource = `projects/${projectId}/serviceAccounts/${serviceAccountEmail}`;
     const role = 'roles/iam.serviceAccountUser';
-    const member = `serviceAccount:${memberEmail}`;
+    // memberEmail should already include the prefix (user:, serviceAccount:, etc.)
+    const member = memberEmail.includes(':') ? memberEmail : `serviceAccount:${memberEmail}`;
 
     // Retry logic for eventual consistency
     for (let attempt = 0; attempt < maxRetries; attempt++) {

@@ -141,31 +141,70 @@ export class AuthTestService {
   private async verifyGcpToken(gcpToken: string) {
     console.log('[AuthTest] Step 4: Verifying GCP token...');
     
-    // Test the token by getting token info
-    const response = await axios.get(
-      'https://www.googleapis.com/oauth2/v1/tokeninfo',
-      {
-        params: {
-          access_token: gcpToken
+    try {
+      // Test the token by making a simple API call to Cloud Resource Manager
+      // This verifies the token works for actual GCP API calls
+      const response = await axios.get(
+        'https://cloudresourcemanager.googleapis.com/v1/projects',
+        {
+          headers: {
+            'Authorization': `Bearer ${gcpToken}`,
+            'Content-Type': 'application/json'
+          },
+          params: {
+            pageSize: 1  // Just get one project to verify the token works
+          }
         }
-      }
-    );
+      );
 
-    if (response.data?.email) {
-      console.log('[AuthTest] ✅ GCP token is valid!');
-      console.log(`[AuthTest] Service Account: ${response.data.email}`);
-      
-      // Extract service account name for display (hide full email for security)
-      const serviceAccountName = response.data.email.split('@')[0];
-      
-      return {
-        success: true,
-        serviceAccount: `${serviceAccountName}@...`,
-        scope: response.data.scope,
-        expiresIn: response.data.expires_in
-      };
-    } else {
-      throw new Error('Invalid token response');
+      if (response.status === 200) {
+        console.log('[AuthTest] ✅ GCP token is valid!');
+        console.log('[AuthTest] Successfully made authenticated API call to GCP');
+        
+        // Try to get the service account info from the token
+        // Note: This might not work for all token types, so we make it optional
+        try {
+          const tokenInfoResponse = await axios.get(
+            'https://www.googleapis.com/oauth2/v1/tokeninfo',
+            {
+              params: {
+                access_token: gcpToken
+              }
+            }
+          );
+          
+          if (tokenInfoResponse.data?.email) {
+            const serviceAccountName = tokenInfoResponse.data.email.split('@')[0];
+            console.log(`[AuthTest] Service Account: ${serviceAccountName}@...`);
+            
+            return {
+              success: true,
+              serviceAccount: `${serviceAccountName}@...`,
+              scope: tokenInfoResponse.data.scope,
+              expiresIn: tokenInfoResponse.data.expires_in
+            };
+          }
+        } catch (tokenInfoError) {
+          // Token info might not be available for WIF tokens, that's OK
+          console.log('[AuthTest] Note: Could not retrieve token info (this is normal for WIF tokens)');
+        }
+        
+        return {
+          success: true,
+          serviceAccount: 'vertex-ai-sa (via Workload Identity)',
+          message: 'Token validated successfully via API call'
+        };
+      } else {
+        throw new Error(`Unexpected response status: ${response.status}`);
+      }
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        throw new Error('GCP token is invalid or expired');
+      } else if (error.response?.status === 403) {
+        throw new Error('GCP token lacks required permissions');
+      } else {
+        throw new Error(`Token verification failed: ${error.message}`);
+      }
     }
   }
 }

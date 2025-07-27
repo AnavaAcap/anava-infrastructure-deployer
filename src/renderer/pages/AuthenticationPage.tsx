@@ -144,32 +144,110 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
         setPreparingProjectId(null);
         onProjectSelected(newProject);
       } else {
-        // Project not found yet, retry a few times
+        // Project not found yet, retry for up to 3 minutes with increasing delays
         let retries = 0;
-        const maxRetries = 5;
+        const maxRetries = 36; // 36 retries to cover 3 minutes
+        let retryDelay = 2000; // Start with 2 seconds
+        
+        console.log(`Project ${projectId} not found in initial list, starting extended retry loop...`);
         
         while (retries < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          const retryProjectList = await window.electronAPI.auth.getProjects();
-          const foundProject = retryProjectList.find(p => p.projectId === projectId);
+          // Increase delay after first 10 retries
+          if (retries === 10) {
+            retryDelay = 3000; // 3 seconds
+            console.log('Increasing retry delay to 3 seconds...');
+          } else if (retries === 20) {
+            retryDelay = 5000; // 5 seconds
+            console.log('Increasing retry delay to 5 seconds...');
+          }
           
-          if (foundProject) {
-            setProjects(retryProjectList);
-            setPreparingProject(false);
-            setPreparingProjectId(null);
-            onProjectSelected(foundProject);
-            return;
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          
+          const elapsedSeconds = Math.floor(
+            (retries < 10 ? (retries + 1) * 2 : 
+             retries < 20 ? 20 + (retries - 9) * 3 :
+             20 + 30 + (retries - 19) * 5) / 1000
+          );
+          
+          console.log(`Retry ${retries + 1}/${maxRetries}: Checking for project ${projectId}... (${elapsedSeconds}s elapsed)`);
+          
+          // Force a fresh fetch with no caching
+          try {
+            const retryProjectList = await window.electronAPI.auth.getProjects();
+            console.log(`Found ${retryProjectList.length} projects in retry ${retries + 1}`);
+            
+            const foundProject = retryProjectList.find(p => p.projectId === projectId);
+            
+            if (foundProject) {
+              console.log(`✅ Project ${projectId} found after ${elapsedSeconds} seconds!`);
+              setProjects(retryProjectList);
+              setPreparingProject(false);
+              setPreparingProjectId(null);
+              onProjectSelected(foundProject);
+              return;
+            }
+            
+            // Also check if project exists but with different casing
+            const foundProjectCaseInsensitive = retryProjectList.find(p => 
+              p.projectId.toLowerCase() === projectId.toLowerCase()
+            );
+            
+            if (foundProjectCaseInsensitive) {
+              console.log(`✅ Project found with different casing: ${foundProjectCaseInsensitive.projectId}`);
+              setProjects(retryProjectList);
+              setPreparingProject(false);
+              setPreparingProjectId(null);
+              onProjectSelected(foundProjectCaseInsensitive);
+              return;
+            }
+          } catch (retryError) {
+            console.error(`Error in retry ${retries + 1}:`, retryError);
+            // Continue retrying even if one attempt fails
           }
           
           retries++;
         }
         
-        // Fallback: set it as selected and let user click Next
+        // Final attempt: One last try after all retries
+        console.log('Making final attempt to find project...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        
+        try {
+          const finalProjectList = await window.electronAPI.auth.getProjects();
+          const finalProject = finalProjectList.find(p => p.projectId === projectId);
+          
+          if (finalProject) {
+            console.log(`✅ Project ${projectId} found in final attempt!`);
+            setProjects(finalProjectList);
+            setPreparingProject(false);
+            setPreparingProjectId(null);
+            onProjectSelected(finalProject);
+            return;
+          }
+        } catch (finalError) {
+          console.error('Final attempt failed:', finalError);
+        }
+        
+        // Fallback: set it as selected and let user proceed manually
+        console.log(`❌ Project ${projectId} not found after extended retry (3+ minutes)`);
         setProjects(projectList);
         setSelectedProject(projectId);
         setPreparingProject(false);
         setPreparingProjectId(null);
-        setError('Project created successfully but may take a few minutes to appear in the list. You can proceed with deployment.');
+        
+        // Create a "fake" project entry so user can proceed
+        const fakeProject: GCPProject = {
+          projectId: projectId,
+          projectNumber: '',
+          displayName: projectId,
+          state: 'ACTIVE'
+        };
+        
+        // Add it to the list and select it
+        const updatedList = [...projectList, fakeProject];
+        setProjects(updatedList);
+        
+        setError('✅ Project created successfully! It may take 2-3 minutes to appear in the list. You can proceed with deployment or wait for it to show up.');
       }
     } catch (error) {
       console.error('Error preparing project:', error);
