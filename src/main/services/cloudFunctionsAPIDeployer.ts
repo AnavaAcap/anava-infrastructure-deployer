@@ -3,6 +3,8 @@ import { OAuth2Client } from 'google-auth-library';
 import archiver from 'archiver';
 import fs from 'fs';
 import path from 'path';
+import { ParallelExecutor } from './utils/parallelExecutor';
+// import { ResilienceUtils } from './utils/resilienceUtils'; // TODO: Add retry logic to deployFunction
 
 export interface CloudFunctionConfig {
   name: string;
@@ -23,6 +25,45 @@ export class CloudFunctionsAPIDeployer {
 
   constructor(auth: OAuth2Client) {
     this.auth = auth;
+  }
+
+  async deployFunctions(
+    projectId: string,
+    configs: Array<{ config: CloudFunctionConfig; sourceDir: string }>,
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<Record<string, string>> {
+    console.log(`Deploying ${configs.length} Cloud Functions in parallel...`);
+    const startTime = Date.now();
+    const results: Record<string, string> = {};
+    
+    // Get project number once for all functions (used inside deployFunction)
+    
+    const tasks = configs.map(({ config, sourceDir }) => ({
+      name: config.name,
+      fn: async () => {
+        const url = await this.deployFunction(projectId, config, sourceDir);
+        results[config.name] = url;
+        return url;
+      },
+      critical: true // All functions are critical
+    }));
+
+    const parallelResults = await ParallelExecutor.executeBatch(tasks, {
+      maxConcurrency: 2, // Deploy up to 2 functions simultaneously
+      stopOnError: true,
+      onProgress
+    });
+
+    // Check for failures
+    const failures = parallelResults.filter(r => !r.success);
+    if (failures.length > 0) {
+      throw new Error(`Failed to deploy functions: ${failures.map(f => f.name).join(', ')}`);
+    }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`Deployed ${configs.length} functions in ${elapsed}ms`);
+    
+    return results;
   }
 
   async deployFunction(
@@ -199,21 +240,33 @@ export class CloudFunctionsAPIDeployer {
         bucket: bucketName,
         auth: this.auth
       });
+      return; // Bucket exists
     } catch (error: any) {
-      if (error.code === 404) {
-        // Create bucket - map region to GCS location
-        const location = this.mapRegionToGCSLocation(region);
-        await this.storage.buckets.insert({
-          project: projectId,
-          requestBody: {
-            name: bucketName,
-            location: location
-          },
-          auth: this.auth
-        });
-      } else {
-        throw error;
+      if (error.code !== 404) {
+        throw error; // Unexpected error
       }
+      // Bucket doesn't exist, try to create it
+    }
+    
+    // Try to create the bucket, handling race conditions
+    try {
+      const location = this.mapRegionToGCSLocation(region);
+      await this.storage.buckets.insert({
+        project: projectId,
+        requestBody: {
+          name: bucketName,
+          location: location
+        },
+        auth: this.auth
+      });
+      console.log(`Created bucket ${bucketName}`);
+    } catch (error: any) {
+      // Handle race condition where another process created the bucket
+      if (error.code === 409 && error.message?.includes('you already own it')) {
+        console.log(`Bucket ${bucketName} already exists (created by parallel process)`);
+        return; // That's fine, bucket exists now
+      }
+      throw error; // Some other error
     }
   }
 

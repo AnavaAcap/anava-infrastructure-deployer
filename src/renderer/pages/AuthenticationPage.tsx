@@ -14,6 +14,7 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  TextField,
 } from '@mui/material';
 import { CheckCircle, ArrowBack, ArrowForward, Refresh, Add } from '@mui/icons-material';
 import { AuthStatus, GCPProject } from '../../types';
@@ -34,6 +35,24 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [preparingProject, setPreparingProject] = useState(false);
+  const [preparingProjectId, setPreparingProjectId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Helper function to format project display name
+  const formatProjectName = (project: GCPProject): string => {
+    // If no display name or display name is same as project ID, just return project ID
+    if (!project.displayName || project.displayName === project.projectId) {
+      return project.projectId;
+    }
+    
+    // Truncate display name if too long (max 40 characters)
+    const truncatedName = project.displayName.length > 40 
+      ? project.displayName.substring(0, 37) + '...' 
+      : project.displayName;
+    
+    return `${truncatedName} - ${project.projectId}`;
+  };
 
   useEffect(() => {
     checkAuthentication();
@@ -48,10 +67,28 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
       setAuthStatus(status);
       
       if (status.authenticated) {
+        console.log('Getting project list...');
         const projectList = await window.electronAPI.auth.getProjects();
-        setProjects(projectList);
+        console.log(`Received ${projectList.length} projects`);
+        
+        // Validate project data
+        const validProjects = projectList.filter(p => {
+          if (!p || typeof p !== 'object') {
+            console.error('Invalid project object:', p);
+            return false;
+          }
+          if (!p.projectId) {
+            console.error('Project missing projectId:', p);
+            return false;
+          }
+          return true;
+        });
+        
+        console.log(`${validProjects.length} valid projects after filtering`);
+        setProjects(validProjects);
       }
     } catch (err) {
+      console.error('Authentication check error:', err);
       setError((err as Error).message);
     } finally {
       setLoading(false);
@@ -83,14 +120,141 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   };
 
   const handleProjectCreated = async (projectId: string) => {
-    // Refresh the project list
-    await handleRefreshProjects();
-    
-    // Select the new project
-    setSelectedProject(projectId);
-    
-    // Close dialog
-    setCreateDialogOpen(false);
+    try {
+      // Close dialog first
+      setCreateDialogOpen(false);
+      
+      // Show preparing state
+      setPreparingProject(true);
+      setPreparingProjectId(projectId);
+      
+      // Give the project a moment to fully initialize
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Refresh the project list to get the full project info
+      const projectList = await window.electronAPI.auth.getProjects();
+      setProjects(projectList);
+      
+      // Find the newly created project
+      const newProject = projectList.find(p => p.projectId === projectId);
+      
+      if (newProject) {
+        // Proceed directly to deployment with the new project
+        setPreparingProject(false);
+        setPreparingProjectId(null);
+        onProjectSelected(newProject);
+      } else {
+        // Project not found yet, retry for up to 3 minutes with increasing delays
+        let retries = 0;
+        const maxRetries = 36; // 36 retries to cover 3 minutes
+        let retryDelay = 2000; // Start with 2 seconds
+        
+        console.log(`Project ${projectId} not found in initial list, starting extended retry loop...`);
+        
+        while (retries < maxRetries) {
+          // Increase delay after first 10 retries
+          if (retries === 10) {
+            retryDelay = 3000; // 3 seconds
+            console.log('Increasing retry delay to 3 seconds...');
+          } else if (retries === 20) {
+            retryDelay = 5000; // 5 seconds
+            console.log('Increasing retry delay to 5 seconds...');
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          
+          const elapsedSeconds = Math.floor(
+            (retries < 10 ? (retries + 1) * 2 : 
+             retries < 20 ? 20 + (retries - 9) * 3 :
+             20 + 30 + (retries - 19) * 5) / 1000
+          );
+          
+          console.log(`Retry ${retries + 1}/${maxRetries}: Checking for project ${projectId}... (${elapsedSeconds}s elapsed)`);
+          
+          // Force a fresh fetch with no caching
+          try {
+            const retryProjectList = await window.electronAPI.auth.getProjects();
+            console.log(`Found ${retryProjectList.length} projects in retry ${retries + 1}`);
+            
+            const foundProject = retryProjectList.find(p => p.projectId === projectId);
+            
+            if (foundProject) {
+              console.log(`✅ Project ${projectId} found after ${elapsedSeconds} seconds!`);
+              setProjects(retryProjectList);
+              setPreparingProject(false);
+              setPreparingProjectId(null);
+              onProjectSelected(foundProject);
+              return;
+            }
+            
+            // Also check if project exists but with different casing
+            const foundProjectCaseInsensitive = retryProjectList.find(p => 
+              p.projectId.toLowerCase() === projectId.toLowerCase()
+            );
+            
+            if (foundProjectCaseInsensitive) {
+              console.log(`✅ Project found with different casing: ${foundProjectCaseInsensitive.projectId}`);
+              setProjects(retryProjectList);
+              setPreparingProject(false);
+              setPreparingProjectId(null);
+              onProjectSelected(foundProjectCaseInsensitive);
+              return;
+            }
+          } catch (retryError) {
+            console.error(`Error in retry ${retries + 1}:`, retryError);
+            // Continue retrying even if one attempt fails
+          }
+          
+          retries++;
+        }
+        
+        // Final attempt: One last try after all retries
+        console.log('Making final attempt to find project...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        
+        try {
+          const finalProjectList = await window.electronAPI.auth.getProjects();
+          const finalProject = finalProjectList.find(p => p.projectId === projectId);
+          
+          if (finalProject) {
+            console.log(`✅ Project ${projectId} found in final attempt!`);
+            setProjects(finalProjectList);
+            setPreparingProject(false);
+            setPreparingProjectId(null);
+            onProjectSelected(finalProject);
+            return;
+          }
+        } catch (finalError) {
+          console.error('Final attempt failed:', finalError);
+        }
+        
+        // Fallback: set it as selected and let user proceed manually
+        console.log(`❌ Project ${projectId} not found after extended retry (3+ minutes)`);
+        setProjects(projectList);
+        setSelectedProject(projectId);
+        setPreparingProject(false);
+        setPreparingProjectId(null);
+        
+        // Create a "fake" project entry so user can proceed
+        const fakeProject: GCPProject = {
+          projectId: projectId,
+          projectNumber: '',
+          displayName: projectId,
+          state: 'ACTIVE'
+        };
+        
+        // Add it to the list and select it
+        const updatedList = [...projectList, fakeProject];
+        setProjects(updatedList);
+        
+        setError('✅ Project created successfully! It may take 2-3 minutes to appear in the list. You can proceed with deployment or wait for it to show up.');
+      }
+    } catch (error) {
+      console.error('Error preparing project:', error);
+      setPreparingProject(false);
+      setPreparingProjectId(null);
+      setError('Project created but failed to prepare for deployment. Please refresh and select it manually.');
+    }
   };
 
   if (loading) {
@@ -98,6 +262,31 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
       <Paper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
         <CircularProgress />
         <Typography sx={{ mt: 2 }}>Checking authentication...</Typography>
+      </Paper>
+    );
+  }
+
+  if (preparingProject) {
+    return (
+      <Paper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
+        <TopBar 
+          title="Google Cloud Authentication" 
+          showLogout={authStatus?.authenticated && !!onLogout}
+          onLogout={onLogout}
+        />
+        
+        <Box sx={{ mt: 4 }}>
+          <CircularProgress size={48} />
+          <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
+            Preparing Project
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Setting up project {preparingProjectId} for deployment...
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This will only take a moment.
+          </Typography>
+        </Box>
       </Paper>
     );
   }
@@ -125,6 +314,17 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
             </Stack>
           </Box>
           
+          {projects.length > 10 && (
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search projects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              sx={{ mb: 2 }}
+            />
+          )}
+          
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 4 }}>
             <FormControl fullWidth>
               <InputLabel>Project</InputLabel>
@@ -133,6 +333,10 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
                 onChange={(e) => setSelectedProject(e.target.value)}
                 label="Project"
                 disabled={refreshing}
+                renderValue={(value) => {
+                  const project = projects.find(p => p.projectId === value);
+                  return project ? formatProjectName(project) : value;
+                }}
               >
                 {projects.length === 0 ? (
                   <MenuItem disabled>
@@ -141,14 +345,42 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
                     </Typography>
                   </MenuItem>
                 ) : (
-                  projects.map((project) => (
-                    <MenuItem key={project.projectId} value={project.projectId}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Typography>{project.displayName}</Typography>
-                        <Chip label={project.projectId} size="small" />
-                      </Box>
-                    </MenuItem>
-                  ))
+                  (() => {
+                    const filteredProjects = projects.filter((project) => {
+                      if (!searchQuery) return true;
+                      const query = searchQuery.toLowerCase();
+                      const displayName = (project.displayName || '').toLowerCase();
+                      const projectId = project.projectId.toLowerCase();
+                      return displayName.includes(query) || projectId.includes(query);
+                    });
+                    
+                    const displayProjects = filteredProjects.slice(0, 50);
+                    const hasMore = filteredProjects.length > 50;
+                    
+                    return [
+                      ...displayProjects.map((project) => {
+                        try {
+                          return (
+                            <MenuItem key={project.projectId} value={project.projectId}>
+                              <Typography>
+                                {formatProjectName(project)}
+                              </Typography>
+                            </MenuItem>
+                          );
+                        } catch (err) {
+                          console.error('Error rendering project:', project, err);
+                          return null;
+                        }
+                      }).filter(Boolean),
+                      ...(hasMore ? [
+                        <MenuItem key="__more__" disabled>
+                          <Typography color="text.secondary" variant="caption">
+                            {filteredProjects.length - 50} more projects... Use search to filter
+                          </Typography>
+                        </MenuItem>
+                      ] : [])
+                    ];
+                  })()
                 )}
               </Select>
             </FormControl>

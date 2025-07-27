@@ -54,6 +54,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [testDialogOpen, setTestDialogOpen] = useState(false);
+  const [firebaseSetupComplete, setFirebaseSetupComplete] = useState(false);
 
   const handleCopy = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -291,6 +292,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             variant="outlined"
             startIcon={<Download />}
             onClick={handleExportConfig}
+            disabled={!firebaseSetupComplete}
           >
             Export Configuration
           </Button>
@@ -298,6 +300,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             variant="outlined"
             startIcon={<ScienceIcon />}
             onClick={() => setTestDialogOpen(true)}
+            disabled={!firebaseSetupComplete}
           >
             Test Auth Flow
           </Button>
@@ -322,6 +325,9 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             }
             firebaseConfig={result.firebaseConfig}
             onComplete={handleChecklistComplete}
+            onFirebaseSetupComplete={setFirebaseSetupComplete}
+            authConfigured={result.resources?.setupFirestore?.authConfigured !== false}
+            adminEmail={result.adminEmail}
           />
           <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
             <Button
@@ -390,6 +396,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
               startIcon={<Download />}
               onClick={handleExportConfig}
               size="large"
+              disabled={!firebaseSetupComplete}
             >
               Export Configuration
             </Button>
@@ -398,6 +405,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
               startIcon={<ScienceIcon />}
               onClick={() => setTestDialogOpen(true)}
               size="large"
+              disabled={!firebaseSetupComplete}
             >
               Test Configuration
             </Button>

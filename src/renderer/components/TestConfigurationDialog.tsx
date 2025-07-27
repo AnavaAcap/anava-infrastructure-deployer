@@ -110,7 +110,7 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
       const idTokenResponse = await window.electronAPI.testAuthStep({
         step: 'id-token',
         customToken: customTokenResponse.customToken,
-        firebaseApiKey: deploymentConfig.firebaseApiKey
+        firebaseApiKey: deploymentConfig.firebaseConfig?.apiKey
       });
 
       if (idTokenResponse.success) {
@@ -149,7 +149,7 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
       const verifyResponse = await window.electronAPI.testAuthStep({
         step: 'verify',
         gcpToken: gcpTokenResponse.gcpToken,
-        projectId: deploymentConfig.projectId
+        projectId: deploymentConfig.firebaseConfig?.projectId
       });
 
       if (verifyResponse.success) {
@@ -191,6 +191,12 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
           </Alert>
         )}
 
+        {!deploymentConfig?.firebaseConfig?.apiKey && deploymentConfig?.apiGatewayUrl && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Firebase API key not found. Some test steps may fail.
+          </Alert>
+        )}
+
         <Card variant="outlined" sx={{ mb: 3, bgcolor: 'grey.50' }}>
           <CardContent>
             <Typography variant="subtitle2" gutterBottom>Configuration</Typography>
@@ -210,7 +216,7 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <SecurityIcon fontSize="small" color="action" />
                 <Typography variant="body2">
-                  Project: <Chip label={deploymentConfig?.projectId || 'Not configured'} size="small" />
+                  Project: <Chip label={deploymentConfig?.firebaseConfig?.projectId || 'Not configured'} size="small" />
                 </Typography>
               </Box>
             </Box>

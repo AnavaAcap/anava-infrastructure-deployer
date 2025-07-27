@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import fs from 'fs';
+import { ResilienceUtils } from './utils/resilienceUtils';
 
 export class ApiGatewayDeployer {
   private apigateway = google.apigateway('v1');
@@ -293,26 +294,41 @@ export class ApiGatewayDeployer {
     
     progressCallback?.('api-config', 70, 'Creating new API configuration...');
     
-    // Create the API config
+    // Create the API config with retry logic
     const configId = `config-${Date.now()}`;
     log(`Creating API config ${configId}...`);
     
     log(`Creating API config with service account: ${serviceAccount}`);
     
-    const { data: operation } = await this.apigateway.projects.locations.apis.configs.create({
-      parent: `projects/${projectId}/locations/global/apis/${apiId}`,
-      apiConfigId: configId,
-      requestBody: {
-        displayName: `Config for ${apiId}`,
-        openapiDocuments: [{
-          document: {
-            path: 'openapi.yaml',
-            contents: Buffer.from(configContent).toString('base64')
-          }
-        }],
-        gatewayServiceAccount: serviceAccount
-      },
-      auth: this.auth
+    const createConfigWithRetry = async () => {
+      const { data: operation } = await this.apigateway.projects.locations.apis.configs.create({
+        parent: `projects/${projectId}/locations/global/apis/${apiId}`,
+        apiConfigId: configId,
+        requestBody: {
+          displayName: `Config for ${apiId}`,
+          openapiDocuments: [{
+            document: {
+              path: 'openapi.yaml',
+              contents: Buffer.from(configContent).toString('base64')
+            }
+          }],
+          gatewayServiceAccount: serviceAccount
+        },
+        auth: this.auth
+      });
+      
+      return operation;
+    };
+    
+    const operation = await ResilienceUtils.withRetry(createConfigWithRetry, {
+      maxAttempts: 3,
+      initialDelayMs: 2000,
+      maxDelayMs: 10000,
+      onRetry: (attempt, error, delayMs) => {
+        log(`API config creation failed (attempt ${attempt}), retrying in ${delayMs}ms...`);
+        log(`Error: ${error.message}`);
+        progressCallback?.('api-config', 70, `Retrying config creation (attempt ${attempt})...`);
+      }
     });
     
     log('Waiting for API config creation to complete...');
@@ -357,14 +373,30 @@ export class ApiGatewayDeployer {
     
     progressCallback?.('gateway', 20, 'Creating API Gateway instance...');
     
-    const { data: operation } = await this.apigateway.projects.locations.gateways.create({
-      parent: `projects/${projectId}/locations/${region}`,
-      gatewayId: gatewayId,
-      requestBody: {
-        displayName: `Gateway for ${apiId}`,
-        apiConfig: `projects/${projectId}/locations/global/apis/${apiId}/configs/${configId}`
-      },
-      auth: this.auth
+    // Use retry logic for gateway creation
+    const createGatewayWithRetry = async () => {
+      const { data: operation } = await this.apigateway.projects.locations.gateways.create({
+        parent: `projects/${projectId}/locations/${region}`,
+        gatewayId: gatewayId,
+        requestBody: {
+          displayName: `Gateway for ${apiId}`,
+          apiConfig: `projects/${projectId}/locations/global/apis/${apiId}/configs/${configId}`
+        },
+        auth: this.auth
+      });
+      
+      return operation;
+    };
+    
+    const operation = await ResilienceUtils.withRetry(createGatewayWithRetry, {
+      maxAttempts: 3,
+      initialDelayMs: 2000,
+      maxDelayMs: 10000,
+      onRetry: (attempt, error, delayMs) => {
+        log(`Gateway creation failed (attempt ${attempt}), retrying in ${delayMs}ms...`);
+        log(`Error: ${error.message}`);
+        progressCallback?.('gateway', 20, `Retrying gateway creation (attempt ${attempt})...`);
+      }
     });
     
     log('Waiting for gateway creation to complete...');
