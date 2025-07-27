@@ -135,10 +135,10 @@ export class StateManager {
     const stepOrder = [
       'authenticate',
       'enableApis',
-      'createFirebaseWebApp',      // Moved up - only needs APIs
-      'setupFirestore',           // Moved up - includes Auth & Storage setup
+      'createFirebaseWebApp',      // Needs to be early for Firebase config
       'createServiceAccounts',
-      'assignIamRoles',
+      'assignIamRoles',           // Must happen before setupFirestore for Storage permissions
+      'setupFirestore',           // Needs IAM roles for Storage service agent
       'deployCloudFunctions',
       'createApiGateway',
       'configureWorkloadIdentity',

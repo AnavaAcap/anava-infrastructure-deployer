@@ -17,7 +17,6 @@ export class FirestoreDeployer {
     logCallback?: (message: string) => void
   ): Promise<void> {
     const log = (message: string) => {
-      console.log(message);
       logCallback?.(message);
     };
 
@@ -567,7 +566,6 @@ export class FirestoreDeployer {
     userEmail?: string
   ): Promise<boolean> {
     const log = (message: string) => {
-      console.log(message);
       logCallback?.(message);
     };
 
@@ -796,7 +794,6 @@ export class FirestoreDeployer {
     logCallback?: (message: string) => void
   ): Promise<string> {
     const log = (message: string) => {
-      console.log(message);
       logCallback?.(message);
     };
 

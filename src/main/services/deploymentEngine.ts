@@ -7,6 +7,8 @@ import { ApiGatewayDeployer } from './apiGatewayDeployer';
 import { FirestoreDeployer } from './firestoreDeployer';
 import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
 import { FirebaseAppDeployer } from './firebaseAppDeployer';
+import { TerraformService } from './terraformService';
+import { FirebaseAuthSetupService } from './firebaseAuthSetupService';
 import { DeploymentConfig, DeploymentProgress, DeploymentResult } from '../../types';
 import { ParallelExecutor } from './utils/parallelExecutor';
 import { ResilienceUtils } from './utils/resilienceUtils';
@@ -26,6 +28,8 @@ export class DeploymentEngine extends EventEmitter {
   private firestoreDeployer?: FirestoreDeployer;
   private workloadIdentityDeployer?: WorkloadIdentityDeployer;
   private firebaseAppDeployer?: FirebaseAppDeployer;
+  private terraformService?: TerraformService;
+  private firebaseAuthSetupService?: FirebaseAuthSetupService;
   private isPaused = false;
   // private deploymentTimer?: DeploymentTimer; // TODO: Implement timing tracking
 
@@ -46,6 +50,8 @@ export class DeploymentEngine extends EventEmitter {
       this.firestoreDeployer = new FirestoreDeployer(this.gcpAuth.oauth2Client);
       this.workloadIdentityDeployer = new WorkloadIdentityDeployer(this.gcpAuth.oauth2Client);
       this.firebaseAppDeployer = new FirebaseAppDeployer(this.gcpAuth.oauth2Client);
+      this.terraformService = new TerraformService();
+      this.firebaseAuthSetupService = new FirebaseAuthSetupService(this.gcpAuth.oauth2Client);
     }
   }
 
@@ -990,14 +996,81 @@ export class DeploymentEngine extends EventEmitter {
       {
         name: 'Firebase Authentication',
         fn: async () => {
-          const authConfigured = await this.firestoreDeployer!.enableFirebaseAuthentication(
-            state.projectId, 
-            logCallback, 
-            userEmail
-          );
-          this.stateManager.updateStepResource('setupFirestore', 'authEnabled', authConfigured);
-          this.stateManager.updateStepResource('setupFirestore', 'authConfigured', authConfigured);
-          return authConfigured;
+          logCallback('=== Initializing Firebase Authentication with Terraform ===');
+          
+          if (!this.terraformService) {
+            throw new Error('Terraform service not initialized. Cannot proceed with Firebase Auth setup.');
+          }
+          
+          try {
+            logCallback('Step 1: Initializing Terraform service...');
+            await this.terraformService.initialize();
+            logCallback('✅ Terraform service initialized');
+            
+            // Create service account key for Terraform
+            logCallback('Step 2: Creating service account credentials for Terraform...');
+            const keyFile = path.join(app.getPath('userData'), 'terraform-sa-key.json');
+            const keyContent = await this.gcpAuth.getServiceAccountKey();
+            await fs.writeFile(keyFile, JSON.stringify(keyContent, null, 2));
+            logCallback('✅ Service account key created');
+            
+            // Initialize Firebase Auth with Terraform
+            logCallback('Step 3: Running Terraform to initialize Firebase Authentication...');
+            logCallback(`  Project ID: ${state.projectId}`);
+            logCallback(`  Authorized domains: ${state.projectId}.firebaseapp.com, localhost`);
+            logCallback('  Enabling email/password and anonymous authentication...');
+            
+            await this.terraformService.initializeFirebaseAuth(
+              state.projectId,
+              keyFile,
+              {
+                enableAnonymous: true,
+                authorizedDomains: [
+                  `${state.projectId}.firebaseapp.com`,
+                  'localhost'
+                ]
+              }
+            );
+            
+            // Clean up key file
+            await fs.unlink(keyFile);
+            logCallback('✅ Cleaned up temporary credentials');
+            
+            logCallback('✅ Firebase Authentication initialized successfully with Terraform!');
+            logCallback('✅ Email/password and anonymous authentication are now enabled');
+            
+            // Now set up Google provider and admin user
+            if (this.firebaseAuthSetupService && userEmail) {
+              try {
+                logCallback('');
+                logCallback('Step 4: Setting up Google authentication provider...');
+                await this.firebaseAuthSetupService.setupGoogleProvider(
+                  state.projectId,
+                  userEmail,
+                  logCallback
+                );
+                logCallback('✅ Google provider configuration completed');
+              } catch (providerError: any) {
+                console.error('Failed to set up Google provider:', providerError);
+                logCallback(`⚠️  Could not fully configure Google provider: ${providerError.message}`);
+                logCallback('⚠️  You can enable Google Sign-In manually in Firebase Console');
+              }
+            }
+            
+            this.stateManager.updateStepResource('setupFirestore', 'authEnabled', true);
+            this.stateManager.updateStepResource('setupFirestore', 'authConfigured', true);
+            return true;
+          } catch (error: any) {
+            console.error('Terraform auth initialization failed:', error);
+            logCallback(`❌ Failed to initialize Firebase Authentication: ${error.message}`);
+            logCallback('❌ Firebase Authentication must be initialized manually in the Firebase Console');
+            logCallback('❌ Go to: https://console.firebase.google.com/project/' + state.projectId + '/authentication/providers');
+            logCallback('❌ Click "Get Started" and enable Email/Password authentication');
+            
+            this.stateManager.updateStepResource('setupFirestore', 'authEnabled', false);
+            this.stateManager.updateStepResource('setupFirestore', 'authConfigured', false);
+            throw new Error(`Firebase Auth initialization failed: ${error.message}`);
+          }
         },
         critical: true
       },
