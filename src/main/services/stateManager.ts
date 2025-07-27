@@ -135,13 +135,13 @@ export class StateManager {
     const stepOrder = [
       'authenticate',
       'enableApis',
+      'createFirebaseWebApp',      // Moved up - only needs APIs
+      'setupFirestore',           // Moved up - includes Auth & Storage setup
       'createServiceAccounts',
       'assignIamRoles',
       'deployCloudFunctions',
       'createApiGateway',
       'configureWorkloadIdentity',
-      'setupFirestore',
-      'createFirebaseWebApp',
     ];
 
     for (const stepName of stepOrder) {
