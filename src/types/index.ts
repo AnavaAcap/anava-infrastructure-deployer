@@ -58,6 +58,7 @@ export interface DeploymentResult {
   success: boolean;
   apiGatewayUrl?: string;
   apiKey?: string;
+  adminEmail?: string;
   firebaseConfig?: {
     apiKey: string;
     authDomain: string;

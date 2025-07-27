@@ -52,10 +52,6 @@ export class FirebaseAppDeployer {
       const config = await this.getWebAppConfig(webApp.name!);
       console.log('Firebase config retrieved successfully');
       
-      // Note: Firebase Storage and Authentication must be initialized manually
-      // in the Firebase Console for the first time
-      console.log('⚠️  Note: Firebase Storage and Authentication require manual initialization in Firebase Console');
-      
       return config;
     } catch (error: any) {
       console.error('Failed to create Firebase web app:', error);
