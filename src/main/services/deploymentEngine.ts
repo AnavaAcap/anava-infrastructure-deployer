@@ -407,6 +407,7 @@ export class DeploymentEngine extends EventEmitter {
       'apikeys.googleapis.com',
       'identitytoolkit.googleapis.com', // Firebase Auth API
       'aiplatform.googleapis.com', // Vertex AI API
+      'iap.googleapis.com', // Identity-Aware Proxy API for OAuth brands
     ];
     
     this.emitProgress({
