@@ -1299,9 +1299,10 @@ export class DeploymentEngine extends EventEmitter {
           this.emitLog('Please create an API key manually at https://aistudio.google.com/app/apikey');
         } else {
           // Try to create API key in the selected project
-          apiKey = await this.aiStudioService.getOrCreateAPIKey(state.projectId);
+          const createdKey = await this.aiStudioService.getOrCreateAPIKey(state.projectId);
           
-          if (apiKey) {
+          if (createdKey) {
+            apiKey = createdKey;
             console.log('AI Studio API key created successfully');
             this.stateManager.updateConfiguration({ ...state.configuration, aiStudioApiKey: apiKey });
           }
