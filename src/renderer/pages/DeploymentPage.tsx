@@ -43,26 +43,39 @@ interface DeploymentPageProps {
   onLogout?: () => void;
 }
 
-const deploymentSteps = [
-  { key: 'authenticate', label: 'Authentication' },
-  { key: 'enableApis', label: 'Enable APIs' },
-  { key: 'createServiceAccounts', label: 'Create Service Accounts' },
-  { key: 'assignIamRoles', label: 'Assign IAM Roles' },
-  { key: 'deployCloudFunctions', label: 'Deploy Cloud Functions', note: 'This step typically takes 5-7 minutes' },
-  { 
-    key: 'createApiGateway', 
-    label: 'Create API Gateway', 
-    note: 'This step typically takes 10-15 minutes',
-    subSteps: [
-      { key: 'managed-service', label: 'Creating managed service' },
-      { key: 'api-config', label: 'Creating API configuration' },
-      { key: 'gateway', label: 'Creating API Gateway instance' }
-    ]
-  },
-  { key: 'configureWorkloadIdentity', label: 'Configure Identity Federation' },
-  { key: 'setupFirestore', label: 'Setup Firestore & Authentication' },
-  { key: 'createFirebaseWebApp', label: 'Create Firebase Web App' },
-];
+// Get deployment steps based on AI mode
+const getDeploymentSteps = (config: DeploymentConfig | null) => {
+  if (config?.aiMode === 'ai-studio') {
+    // Minimal steps for AI Studio mode
+    return [
+      { key: 'authenticate', label: 'Authentication' },
+      { key: 'enableApis', label: 'Enable AI Studio API' },
+      { key: 'createAiStudioKey', label: 'Create AI Studio API Key' },
+    ];
+  }
+
+  // Full deployment steps for Vertex AI mode
+  return [
+    { key: 'authenticate', label: 'Authentication' },
+    { key: 'enableApis', label: 'Enable APIs' },
+    { key: 'createServiceAccounts', label: 'Create Service Accounts' },
+    { key: 'assignIamRoles', label: 'Assign IAM Roles' },
+    { key: 'deployCloudFunctions', label: 'Deploy Cloud Functions', note: 'This step typically takes 5-7 minutes' },
+    { 
+      key: 'createApiGateway', 
+      label: 'Create API Gateway', 
+      note: 'This step typically takes 10-15 minutes',
+      subSteps: [
+        { key: 'managed-service', label: 'Creating managed service' },
+        { key: 'api-config', label: 'Creating API configuration' },
+        { key: 'gateway', label: 'Creating API Gateway instance' }
+      ]
+    },
+    { key: 'configureWorkloadIdentity', label: 'Configure Identity Federation' },
+    { key: 'setupFirestore', label: 'Setup Firestore & Authentication' },
+    { key: 'createFirebaseWebApp', label: 'Create Firebase Web App' },
+  ];
+};
 
 const DeploymentPage: React.FC<DeploymentPageProps> = ({
   project,
@@ -77,6 +90,9 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [showLogs, setShowLogs] = useState(false);
+  
+  // Get deployment steps based on AI mode
+  const deploymentSteps = getDeploymentSteps(config);
 
   useEffect(() => {
     // Set up event listeners
@@ -168,6 +184,18 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
+        </Alert>
+      )}
+      
+      {config?.aiMode === 'ai-studio' && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            AI Studio Mode Deployment
+          </Typography>
+          <Typography variant="body2">
+            Deploying with Google AI Studio for direct API access to Gemini models. 
+            Cloud Functions and API Gateway steps will be skipped.
+          </Typography>
         </Alert>
       )}
       

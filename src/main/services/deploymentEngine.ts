@@ -9,6 +9,7 @@ import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
 import { FirebaseAppDeployer } from './firebaseAppDeployer';
 import { TerraformService } from './terraformService';
 import { IAPOAuthService } from './iapOAuthService';
+import { AIStudioService } from './aiStudioService';
 import { DeploymentConfig, DeploymentProgress, DeploymentResult } from '../../types';
 import { ParallelExecutor } from './utils/parallelExecutor';
 import { ResilienceUtils } from './utils/resilienceUtils';
@@ -30,6 +31,7 @@ export class DeploymentEngine extends EventEmitter {
   private firebaseAppDeployer?: FirebaseAppDeployer;
   private terraformService?: TerraformService;
   private iapOAuthService?: IAPOAuthService;
+  private aiStudioService?: AIStudioService;
   private isPaused = false;
   // private deploymentTimer?: DeploymentTimer; // TODO: Implement timing tracking
 
@@ -52,6 +54,7 @@ export class DeploymentEngine extends EventEmitter {
       this.firebaseAppDeployer = new FirebaseAppDeployer(this.gcpAuth.oauth2Client);
       this.terraformService = new TerraformService();
       this.iapOAuthService = new IAPOAuthService(this.gcpAuth.oauth2Client);
+      this.aiStudioService = new AIStudioService(this.gcpAuth.oauth2Client);
     }
   }
 
@@ -120,14 +123,17 @@ export class DeploymentEngine extends EventEmitter {
           console.log('🚀 DEPLOYMENT COMPLETED SUCCESSFULLY! 🚀');
           console.log('🎉 ========================================= 🎉\n');
           
-          const gatewayUrl = this.getResourceValue('createApiGateway', 'gatewayUrl');
-          const apiKey = this.getResourceValue('createApiGateway', 'apiKey');
+          const state = this.stateManager.getState()!;
+          const isAiStudioMode = state.configuration.aiMode === 'ai-studio';
+          
+          const gatewayUrl = isAiStudioMode ? null : this.getResourceValue('createApiGateway', 'gatewayUrl');
+          const apiKey = isAiStudioMode ? null : this.getResourceValue('createApiGateway', 'apiKey');
           const firebaseConfig = this.getResourceValue('createFirebaseWebApp', 'config');
           
           // Validate critical resources exist
           const missingResources: string[] = [];
-          if (!gatewayUrl) missingResources.push('API Gateway URL');
-          if (!apiKey) missingResources.push('API Key');
+          if (!isAiStudioMode && !gatewayUrl) missingResources.push('API Gateway URL');
+          if (!isAiStudioMode && !apiKey) missingResources.push('API Key');
           if (!firebaseConfig) missingResources.push('Firebase Configuration');
           if (!firebaseConfig?.apiKey) missingResources.push('Firebase API Key');
           
@@ -171,6 +177,8 @@ export class DeploymentEngine extends EventEmitter {
             firebaseConfig: firebaseConfig,
             resources: this.getAllResources(),
             adminEmail: adminEmail,
+            aiMode: state.configuration.aiMode,
+            aiStudioApiKey: state.configuration.aiStudioApiKey,
             warning: hasPlaceholderFunctions ? 'Cloud Functions build failed - you may need to deploy them manually' : undefined
           });
           break;
@@ -221,6 +229,8 @@ export class DeploymentEngine extends EventEmitter {
       
       // Execute step with retry logic
       await ResilienceUtils.withRetry(async () => {
+        const isAiStudioMode = this.stateManager.getState()?.configuration.aiMode === 'ai-studio';
+        
         switch (stepName) {
           case 'authenticate':
             await this.stepAuthenticate();
@@ -228,26 +238,45 @@ export class DeploymentEngine extends EventEmitter {
           case 'enableApis':
             await this.stepEnableApis();
             break;
+          case 'createAiStudioKey':
+            if (isAiStudioMode) {
+              await this.stepCreateAiStudioKey();
+            }
+            break;
           case 'createServiceAccounts':
-            await this.stepCreateServiceAccounts();
+            if (!isAiStudioMode) {
+              await this.stepCreateServiceAccounts();
+            }
             break;
           case 'assignIamRoles':
-            await this.stepAssignIamRoles();
+            if (!isAiStudioMode) {
+              await this.stepAssignIamRoles();
+            }
             break;
           case 'deployCloudFunctions':
-            await this.stepDeployCloudFunctions();
+            if (!isAiStudioMode) {
+              await this.stepDeployCloudFunctions();
+            }
             break;
           case 'createApiGateway':
-            await this.stepCreateApiGateway();
+            if (!isAiStudioMode) {
+              await this.stepCreateApiGateway();
+            }
             break;
           case 'configureWorkloadIdentity':
-            await this.stepConfigureWorkloadIdentity();
+            if (!isAiStudioMode) {
+              await this.stepConfigureWorkloadIdentity();
+            }
             break;
           case 'setupFirestore':
-            await this.stepSetupFirestore();
+            if (!isAiStudioMode) {
+              await this.stepSetupFirestore();
+            }
             break;
           case 'createFirebaseWebApp':
-            await this.stepCreateFirebaseWebApp();
+            if (!isAiStudioMode) {
+              await this.stepCreateFirebaseWebApp();
+            }
             break;
           default:
             throw new Error(`Unknown step: ${stepName}`);
@@ -308,7 +337,50 @@ export class DeploymentEngine extends EventEmitter {
   }
 
   private async stepEnableApis(): Promise<void> {
-    // Critical APIs that must be enabled first
+    const state = this.stateManager.getState()!;
+    const isAiStudioMode = state.configuration.aiMode === 'ai-studio';
+    const isNoProject = state.projectId === 'no-project';
+    const startTime = Date.now();
+
+    // For AI Studio mode with no project, skip API enabling
+    if (isAiStudioMode && isNoProject) {
+      this.emitProgress({
+        currentStep: 'enableApis',
+        stepProgress: 100,
+        totalProgress: 50,
+        message: 'Skipped - Using personal API key',
+      });
+      return;
+    }
+
+    // For AI Studio mode with project, only enable minimal APIs
+    if (isAiStudioMode) {
+      const aiStudioApis = [
+        'serviceusage.googleapis.com',
+        'generativelanguage.googleapis.com',
+        'apikeys.googleapis.com',
+      ];
+
+      this.emitProgress({
+        currentStep: 'enableApis',
+        stepProgress: 0,
+        totalProgress: 25,
+        message: 'Enabling AI Studio APIs...',
+      });
+
+      await this.gcpService.enableApis(state.projectId, aiStudioApis);
+
+      this.emitProgress({
+        currentStep: 'enableApis',
+        stepProgress: 100,
+        totalProgress: 50,
+        message: 'AI Studio APIs enabled',
+      });
+      
+      return;
+    }
+
+    // Full API list for Vertex AI mode
     const criticalApis = [
       'serviceusage.googleapis.com',
       'iam.googleapis.com',
@@ -336,9 +408,6 @@ export class DeploymentEngine extends EventEmitter {
       'identitytoolkit.googleapis.com', // Firebase Auth API
       'aiplatform.googleapis.com', // Vertex AI API
     ];
-
-    const state = this.stateManager.getState()!;
-    const startTime = Date.now();
     
     this.emitProgress({
       currentStep: 'enableApis',
@@ -361,6 +430,19 @@ export class DeploymentEngine extends EventEmitter {
     // Enable other APIs in parallel
     console.log('Enabling remaining APIs in parallel...');
     await this.gcpService.enableApis(state.projectId, otherApis);
+    
+    // Enable AI Studio API if using AI Studio mode
+    if (state.configuration.aiMode === 'ai-studio' && this.aiStudioService) {
+      console.log('Enabling Generative Language API for AI Studio...');
+      this.emitProgress({
+        currentStep: 'enableApis',
+        stepProgress: 90,
+        totalProgress: 23.75,
+        message: 'Enabling AI Studio API...',
+      });
+      
+      await this.aiStudioService.enableGenerativeLanguageAPI(state.projectId);
+    }
 
     const allApis = [...criticalApis, ...otherApis];
     this.stateManager.updateStepResource('enableApis', 'apis', allApis);
@@ -1187,6 +1269,54 @@ export class DeploymentEngine extends EventEmitter {
       totalProgress: 100,
       message: 'Firebase web app created',
       subStep: 'create-app',
+    });
+    
+  }
+
+  private async stepCreateAiStudioKey(): Promise<void> {
+    const state = this.stateManager.getState()!;
+    const isNoProject = state.projectId === 'no-project';
+    
+    this.emitProgress({
+      currentStep: 'createAiStudioKey',
+      stepProgress: 0,
+      totalProgress: 90,
+      message: 'Creating AI Studio API key...',
+    });
+
+    if (!this.aiStudioService) {
+      throw new Error('AI Studio service not initialized');
+    }
+
+    // Get or create API key
+    let apiKey = state.configuration.aiStudioApiKey;
+    
+    if (!apiKey) {
+      try {
+        if (isNoProject) {
+          // For no project, we can't create API key programmatically
+          console.log('No project selected - user will need to create API key manually');
+          this.emitLog('Please create an API key manually at https://aistudio.google.com/app/apikey');
+        } else {
+          // Try to create API key in the selected project
+          apiKey = await this.aiStudioService.getOrCreateAPIKey(state.projectId);
+          
+          if (apiKey) {
+            console.log('AI Studio API key created successfully');
+            this.stateManager.updateConfiguration({ ...state.configuration, aiStudioApiKey: apiKey });
+          }
+        }
+      } catch (error) {
+        console.error('Error creating AI Studio API key:', error);
+        this.emitLog('Could not create API key automatically - please create one at https://aistudio.google.com/app/apikey');
+      }
+    }
+
+    this.emitProgress({
+      currentStep: 'createAiStudioKey',
+      stepProgress: 100,
+      totalProgress: 100,
+      message: apiKey ? 'AI Studio API key ready' : 'Manual API key creation required',
     });
   }
 

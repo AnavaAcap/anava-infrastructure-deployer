@@ -36,8 +36,15 @@ export class CameraConfigurationService {
           appId: deploymentConfig.firebaseConfig?.appId || '',
           databaseId: '(default)'
         },
-        gemini: {
-          apiKey: '', // Not used in WIF setup
+        gemini: deploymentConfig.aiMode === 'ai-studio' ? {
+          apiKey: deploymentConfig.aiStudioApiKey || '',
+          vertexApiGatewayUrl: '', // Not used in AI Studio mode
+          vertexApiGatewayKey: '', // Not used in AI Studio mode
+          vertexGcpProjectId: deploymentConfig.projectId,
+          vertexGcpRegion: deploymentConfig.region || 'us-central1',
+          vertexGcsBucketName: `${deploymentConfig.projectId}-anava-analytics`
+        } : {
+          apiKey: '', // Not used in Vertex AI mode
           vertexApiGatewayUrl: deploymentConfig.apiGatewayUrl,
           vertexApiGatewayKey: deploymentConfig.apiKey,
           vertexGcpProjectId: deploymentConfig.projectId,

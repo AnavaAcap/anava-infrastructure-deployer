@@ -15,6 +15,7 @@ import {
   IconButton,
   Tooltip,
   TextField,
+  Divider,
 } from '@mui/material';
 import { CheckCircle, ArrowBack, ArrowForward, Refresh, Add } from '@mui/icons-material';
 import { AuthStatus, GCPProject } from '../../types';
@@ -25,9 +26,10 @@ interface AuthenticationPageProps {
   onProjectSelected: (project: GCPProject) => void;
   onBack: () => void;
   onLogout?: () => void;
+  aiMode?: 'vertex' | 'ai-studio';
 }
 
-const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelected, onBack, onLogout }) => {
+const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelected, onBack, onLogout, aiMode }) => {
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [projects, setProjects] = useState<GCPProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
@@ -96,9 +98,20 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   };
 
   const handleNext = () => {
-    const project = projects.find(p => p.projectId === selectedProject);
-    if (project) {
-      onProjectSelected(project);
+    if (selectedProject === 'no-project') {
+      // For AI Studio with no project, create a special project object
+      const noProjectOption: GCPProject = {
+        projectId: 'no-project',
+        projectNumber: '',
+        displayName: 'Personal API Key',
+        state: 'ACTIVE'
+      };
+      onProjectSelected(noProjectOption);
+    } else {
+      const project = projects.find(p => p.projectId === selectedProject);
+      if (project) {
+        onProjectSelected(project);
+      }
     }
   };
 
@@ -358,6 +371,19 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
                     const hasMore = filteredProjects.length > 50;
                     
                     return [
+                      // Add "No Project" option for AI Studio mode
+                      aiMode === 'ai-studio' && (
+                        <MenuItem key="no-project" value="no-project">
+                          <Stack>
+                            <Typography>No Project - Personal API Key</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Use my personal Google account quota
+                            </Typography>
+                          </Stack>
+                        </MenuItem>
+                      ),
+                      aiMode === 'ai-studio' && <MenuItem key="divider" disabled><Divider /></MenuItem>,
+                      // Regular project list
                       ...displayProjects.map((project) => {
                         try {
                           return (

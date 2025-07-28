@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Container, ThemeProvider, CssBaseline, Typography, Button } from '@mui/material';
 import WelcomePage from './pages/WelcomePage';
 import AuthenticationPage from './pages/AuthenticationPage';
+import AIModeSelectionPage from './pages/AIModeSelectionPage';
 import ConfigurationPage from './pages/ConfigurationPage';
 import DeploymentPage from './pages/DeploymentPage';
 import CompletionPage from './pages/CompletionPage';
@@ -18,6 +19,7 @@ import { DeploymentState, DeploymentConfig, GCPProject } from '../types';
 function App() {
   const [currentView, setCurrentView] = useState<NavigationView>('welcome');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [selectedAIMode, setSelectedAIMode] = useState<'vertex' | 'ai-studio' | null>(null);
   const [selectedProject, setSelectedProject] = useState<GCPProject | null>(null);
   const [deploymentConfig, setDeploymentConfig] = useState<DeploymentConfig | null>(null);
   const [deploymentResult, setDeploymentResult] = useState<any>(null);
@@ -54,7 +56,11 @@ function App() {
   };
 
   const handleConfigComplete = (config: DeploymentConfig) => {
-    setDeploymentConfig(config);
+    // Ensure AI mode is included in the config
+    setDeploymentConfig({
+      ...config,
+      aiMode: selectedAIMode || 'vertex'
+    });
     // Start deployment automatically
   };
 
@@ -105,12 +111,29 @@ function App() {
           );
         }
         
+        // Show AI mode selection after authentication
+        if (!selectedAIMode) {
+          return (
+            <AIModeSelectionPage
+              onSelectMode={(mode) => {
+                setSelectedAIMode(mode);
+                // For AI Studio, we can optionally skip project selection
+                if (mode === 'ai-studio') {
+                  // We'll still show project selection but with "No Project" option
+                }
+              }}
+              onLogout={handleLogout}
+            />
+          );
+        }
+        
         if (!selectedProject) {
           return (
             <AuthenticationPage
               onProjectSelected={handleProjectSelected}
-              onBack={() => setCurrentView('welcome')}
+              onBack={() => setSelectedAIMode(null)}
               onLogout={handleLogout}
+              aiMode={selectedAIMode}
             />
           );
         }
