@@ -13,8 +13,10 @@ import {
   FormControlLabel,
   Radio,
   Alert,
+  IconButton,
+  InputAdornment,
 } from '@mui/material';
-import { ArrowBack, RocketLaunch } from '@mui/icons-material';
+import { ArrowBack, RocketLaunch, Visibility, VisibilityOff } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig } from '../../types';
 import TopBar from '../components/TopBar';
 
@@ -30,6 +32,8 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
   const [region, setRegion] = useState('us-central1');
   const [aiMode, setAiMode] = useState<'vertex' | 'ai-studio'>('vertex');
   const [aiStudioApiKey, setAiStudioApiKey] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleDeploy = () => {
     // Automatically configure CORS for Anava cameras
@@ -47,6 +51,7 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
       apiKeyRestrictions: defaultCorsOrigins,
       aiMode,
       aiStudioApiKey: aiMode === 'ai-studio' ? aiStudioApiKey : undefined,
+      adminPassword,
     };
 
     onComplete(config);
@@ -182,6 +187,35 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
             />
           </>
         )}
+        
+        <TextField
+          fullWidth
+          label="Admin Password"
+          type={showPassword ? 'text' : 'password'}
+          value={adminPassword}
+          onChange={(e) => setAdminPassword(e.target.value)}
+          required
+          error={adminPassword.length > 0 && adminPassword.length < 6}
+          helperText={
+            adminPassword.length > 0 && adminPassword.length < 6
+              ? 'Password must be at least 6 characters'
+              : 'Password for the admin user account'
+          }
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  aria-label="toggle password visibility"
+                  onClick={() => setShowPassword(!showPassword)}
+                  edge="end"
+                >
+                  {showPassword ? <VisibilityOff /> : <Visibility />}
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+          sx={{ mt: 2 }}
+        />
       </Stack>
       
       <Stack direction="row" spacing={2} justifyContent="space-between" sx={{ mt: 4 }}>
@@ -197,7 +231,7 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
           variant="contained"
           startIcon={<RocketLaunch />}
           onClick={handleDeploy}
-          disabled={!namePrefix}
+          disabled={!namePrefix || !adminPassword || adminPassword.length < 6}
           size="large"
         >
           Deploy

@@ -157,6 +157,9 @@ function App() {
                 setDeploymentComplete(false);
                 setDeploymentResult(null);
                 setDeploymentConfig(null);
+                setSelectedProject(null);
+                setSelectedAIMode(null);
+                setCurrentView('welcome');
               }}
               onBack={() => setCurrentView('welcome')}
               onLogout={handleLogout}

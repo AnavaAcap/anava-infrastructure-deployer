@@ -8,7 +8,7 @@ import { FirestoreDeployer } from './firestoreDeployer';
 import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
 import { FirebaseAppDeployer } from './firebaseAppDeployer';
 import { TerraformService } from './terraformService';
-import { IAPOAuthService } from './iapOAuthService';
+// import { IAPOAuthService } from './iapOAuthService'; // Removed - not needed for email/password auth
 import { AIStudioService } from './aiStudioService';
 import { DeploymentConfig, DeploymentProgress, DeploymentResult } from '../../types';
 import { ParallelExecutor } from './utils/parallelExecutor';
@@ -18,6 +18,7 @@ import path from 'path';
 import { app } from 'electron';
 import fs from 'fs/promises';
 import { google } from 'googleapis';
+import axios from 'axios';
 import { OAuth2Client } from 'google-auth-library';
 
 export class DeploymentEngine extends EventEmitter {
@@ -30,7 +31,7 @@ export class DeploymentEngine extends EventEmitter {
   private workloadIdentityDeployer?: WorkloadIdentityDeployer;
   private firebaseAppDeployer?: FirebaseAppDeployer;
   private terraformService?: TerraformService;
-  private iapOAuthService?: IAPOAuthService;
+  // private iapOAuthService?: IAPOAuthService; // Removed - not needed for email/password auth
   private aiStudioService?: AIStudioService;
   private isPaused = false;
   // private deploymentTimer?: DeploymentTimer; // TODO: Implement timing tracking
@@ -53,7 +54,7 @@ export class DeploymentEngine extends EventEmitter {
       this.workloadIdentityDeployer = new WorkloadIdentityDeployer(this.gcpAuth.oauth2Client);
       this.firebaseAppDeployer = new FirebaseAppDeployer(this.gcpAuth.oauth2Client);
       this.terraformService = new TerraformService();
-      this.iapOAuthService = new IAPOAuthService(this.gcpAuth.oauth2Client);
+      // this.iapOAuthService = new IAPOAuthService(this.gcpAuth.oauth2Client); // Removed - not needed for email/password auth
       this.aiStudioService = new AIStudioService(this.gcpAuth.oauth2Client);
     }
   }
@@ -164,8 +165,65 @@ export class DeploymentEngine extends EventEmitter {
           console.log('\n🔐 All authentication infrastructure deployed!');
           console.log('📱 Ready for camera authentication!\n');
           
-          // Get admin email if it was set
-          const adminEmail = this.firestoreDeployer?.getAdminEmail();
+          // Create admin user if password was provided
+          let adminEmail: string | undefined;
+          const userInfo = await this.gcpAuth.getCurrentUser();
+          const userEmail = userInfo?.email;
+          
+          if (userEmail && state.configuration.adminPassword) {
+            console.log('\nCreating admin user...');
+            
+            try {
+              // Wait a moment for auth to be fully ready
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Get the Firebase config which contains the API key
+              const firebaseConfig = this.getResourceValue('createFirebaseWebApp', 'config');
+              
+              if (!firebaseConfig || !firebaseConfig.apiKey) {
+                throw new Error('Firebase API key not available');
+              }
+              
+              const firebaseApiKey = firebaseConfig.apiKey;
+              
+              // Create the admin user via Firebase Admin API
+              const identityUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseApiKey}`;
+              
+              const response = await axios.post(identityUrl, {
+                email: userEmail,
+                password: state.configuration.adminPassword,
+                returnSecureToken: true
+              });
+              
+              if (response.data.idToken) {
+                console.log(`✅ Admin user created successfully: ${userEmail}`);
+                adminEmail = userEmail;
+                
+                // Set admin email in firestore deployer so it's included in deployment result
+                if (this.firestoreDeployer) {
+                  this.firestoreDeployer.setAdminEmail(userEmail);
+                }
+              }
+            } catch (error: any) {
+              if (error.response?.data?.error?.message === 'EMAIL_EXISTS') {
+                console.log(`ℹ️  Admin user already exists: ${userEmail}`);
+                adminEmail = userEmail;
+                
+                // Set admin email in firestore deployer so it's included in deployment result
+                if (this.firestoreDeployer) {
+                  this.firestoreDeployer.setAdminEmail(userEmail);
+                }
+              } else {
+                console.error('Failed to create admin user:', error);
+                console.log(`⚠️  Could not create admin user: ${error.response?.data?.error?.message || error.message}`);
+                console.log('⚠️  You can create the admin user manually in Firebase Console');
+              }
+            }
+          } else {
+            // Get admin email if it was set elsewhere
+            adminEmail = this.firestoreDeployer?.getAdminEmail();
+          }
+          
           if (adminEmail) {
             console.log(`👤 Admin user configured: ${adminEmail}`);
           }
@@ -391,6 +449,7 @@ export class DeploymentEngine extends EventEmitter {
     // Other APIs that can be enabled in parallel
     const otherApis = [
       'storage.googleapis.com',
+      'firebasestorage.googleapis.com', // Cloud Storage for Firebase API
       'cloudfunctions.googleapis.com',
       'cloudbuild.googleapis.com',
       'artifactregistry.googleapis.com',
@@ -407,7 +466,6 @@ export class DeploymentEngine extends EventEmitter {
       'apikeys.googleapis.com',
       'identitytoolkit.googleapis.com', // Firebase Auth API
       'aiplatform.googleapis.com', // Vertex AI API
-      'iap.googleapis.com', // Identity-Aware Proxy API for OAuth brands
     ];
     
     this.emitProgress({
@@ -447,6 +505,16 @@ export class DeploymentEngine extends EventEmitter {
 
     const allApis = [...criticalApis, ...otherApis];
     this.stateManager.updateStepResource('enableApis', 'apis', allApis);
+    
+    // Wait for APIs to propagate, especially firebasestorage.googleapis.com
+    console.log('Waiting 15 seconds for APIs to fully propagate...');
+    this.emitProgress({
+      currentStep: 'enableApis',
+      stepProgress: 95,
+      totalProgress: 24.5,
+      message: 'Waiting for API propagation...',
+    });
+    await new Promise(resolve => setTimeout(resolve, 15000));
     
     const elapsed = Date.now() - startTime;
     console.log(`All APIs enabled in ${elapsed}ms`);
@@ -1121,43 +1189,13 @@ export class DeploymentEngine extends EventEmitter {
             logCallback('✅ Cleaned up temporary credentials');
             
             logCallback('✅ Firebase Authentication initialized successfully with Terraform!');
-            logCallback('✅ Email/password and anonymous authentication are now enabled');
+logCallback('✅ Email/password and anonymous authentication are now enabled');
             
-            // Now set up Google Sign-In with IAP OAuth
-            if (userEmail && this.iapOAuthService) {
-              logCallback('');
-              logCallback('Step 4: Setting up Google Sign-In with IAP OAuth...');
-              
-              try {
-                const iapCredentials = await this.iapOAuthService.setupIAPOAuth(
-                  state.projectId,
-                  userEmail,
-                  'Anava Vision Internal',
-                  logCallback
-                );
-                
-                logCallback('');
-                logCallback('✅ Google Sign-In has been fully configured!');
-                logCallback('✅ OAuth credentials were created automatically');
-                logCallback('✅ No manual setup required!');
-                logCallback('');
-                logCallback('Authentication Details:');
-                logCallback(`  - Admin user: ${userEmail}`);
-                logCallback('  - Access: Internal users only (your organization)');
-                logCallback('  - OAuth Client: Created via IAP');
-                logCallback('');
-                logCallback('Your Firebase application will work without any code changes!');
-                
-                // Store the OAuth client ID for reference
-                this.stateManager.updateStepResource('setupFirestore', 'oauthClientId', iapCredentials.clientId);
-                this.stateManager.updateStepResource('setupFirestore', 'googleSignInEnabled', true);
-                
-              } catch (iapError: any) {
-                console.error('IAP OAuth setup failed:', iapError);
-                logCallback(`⚠️  Could not set up Google Sign-In automatically: ${iapError.message}`);
-                logCallback('⚠️  You can still enable it manually in Firebase Console if needed');
-              }
-            }
+            // IAP OAuth setup removed - using email/password authentication only
+            logCallback('');
+            logCallback('ℹ️  Google Sign-In is not configured automatically');
+            logCallback('ℹ️  Using email/password authentication only');
+            logCallback('ℹ️  You can manually enable Google Sign-In in Firebase Console if needed');
             
             this.stateManager.updateStepResource('setupFirestore', 'authEnabled', true);
             this.stateManager.updateStepResource('setupFirestore', 'authConfigured', true);
@@ -1180,7 +1218,8 @@ export class DeploymentEngine extends EventEmitter {
         name: 'Firebase Storage',
         fn: async () => {
           const storageBucket = await this.firestoreDeployer!.enableFirebaseStorage(
-            state.projectId, 
+            state.projectId,
+            state.region,
             logCallback
           );
           this.stateManager.updateStepResource('setupFirestore', 'storageBucket', storageBucket);
