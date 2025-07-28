@@ -9,6 +9,7 @@ import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
 import { FirebaseAppDeployer } from './firebaseAppDeployer';
 import { TerraformService } from './terraformService';
 import { FirebaseAuthSetupService } from './firebaseAuthSetupService';
+import { IAPOAuthService } from './iapOAuthService';
 import { DeploymentConfig, DeploymentProgress, DeploymentResult } from '../../types';
 import { ParallelExecutor } from './utils/parallelExecutor';
 import { ResilienceUtils } from './utils/resilienceUtils';
@@ -30,6 +31,7 @@ export class DeploymentEngine extends EventEmitter {
   private firebaseAppDeployer?: FirebaseAppDeployer;
   private terraformService?: TerraformService;
   private firebaseAuthSetupService?: FirebaseAuthSetupService;
+  private iapOAuthService?: IAPOAuthService;
   private isPaused = false;
   // private deploymentTimer?: DeploymentTimer; // TODO: Implement timing tracking
 
@@ -52,6 +54,7 @@ export class DeploymentEngine extends EventEmitter {
       this.firebaseAppDeployer = new FirebaseAppDeployer(this.gcpAuth.oauth2Client);
       this.terraformService = new TerraformService();
       this.firebaseAuthSetupService = new FirebaseAuthSetupService(this.gcpAuth.oauth2Client);
+      this.iapOAuthService = new IAPOAuthService(this.gcpAuth.oauth2Client);
     }
   }
 
@@ -1040,16 +1043,40 @@ export class DeploymentEngine extends EventEmitter {
             logCallback('✅ Firebase Authentication initialized successfully with Terraform!');
             logCallback('✅ Email/password and anonymous authentication are now enabled');
             
-            if (userEmail) {
+            // Now set up Google Sign-In with IAP OAuth
+            if (userEmail && this.iapOAuthService) {
               logCallback('');
-              logCallback('ℹ️  To enable Google Sign-In (optional):');
-              logCallback('   1. Go to Firebase Console > Authentication > Sign-in method');
-              logCallback('   2. Click on Google provider and Enable it');
-              logCallback('   3. Configure with your project support email');
-              logCallback(`   4. Add ${userEmail} as an authorized user`);
-              logCallback('');
-              logCallback('   Direct link:');
-              logCallback(`   https://console.firebase.google.com/project/${state.projectId}/authentication/providers`);
+              logCallback('Step 4: Setting up Google Sign-In with IAP OAuth...');
+              
+              try {
+                const iapCredentials = await this.iapOAuthService.setupIAPOAuth(
+                  state.projectId,
+                  userEmail,
+                  'Anava Vision Internal',
+                  logCallback
+                );
+                
+                logCallback('');
+                logCallback('✅ Google Sign-In has been fully configured!');
+                logCallback('✅ OAuth credentials were created automatically');
+                logCallback('✅ No manual setup required!');
+                logCallback('');
+                logCallback('Authentication Details:');
+                logCallback(`  - Admin user: ${userEmail}`);
+                logCallback('  - Access: Internal users only (your organization)');
+                logCallback('  - OAuth Client: Created via IAP');
+                logCallback('');
+                logCallback('Your Firebase application will work without any code changes!');
+                
+                // Store the OAuth client ID for reference
+                this.stateManager.updateStepResource('setupFirestore', 'oauthClientId', iapCredentials.clientId);
+                this.stateManager.updateStepResource('setupFirestore', 'googleSignInEnabled', true);
+                
+              } catch (iapError: any) {
+                console.error('IAP OAuth setup failed:', iapError);
+                logCallback(`⚠️  Could not set up Google Sign-In automatically: ${iapError.message}`);
+                logCallback('⚠️  You can still enable it manually in Firebase Console if needed');
+              }
             }
             
             this.stateManager.updateStepResource('setupFirestore', 'authEnabled', true);

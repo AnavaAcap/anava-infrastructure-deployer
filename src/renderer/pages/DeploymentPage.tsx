@@ -60,7 +60,7 @@ const deploymentSteps = [
     ]
   },
   { key: 'configureWorkloadIdentity', label: 'Configure Identity Federation' },
-  { key: 'setupFirestore', label: 'Setup Firestore' },
+  { key: 'setupFirestore', label: 'Setup Firestore & Authentication' },
   { key: 'createFirebaseWebApp', label: 'Create Firebase Web App' },
 ];
 
