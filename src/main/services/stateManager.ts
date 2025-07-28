@@ -2,7 +2,7 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { DeploymentState, DeploymentConfig, StepStatus } from '../../types';
+import { DeploymentState, DeploymentConfig, StepStatus, DeploymentSteps } from '../../types';
 
 export class StateManager {
   private statePath: string;
@@ -49,6 +49,25 @@ export class StateManager {
   }
 
   public createNewDeployment(projectId: string, region: string, config: DeploymentConfig): DeploymentState {
+    // Define steps based on AI mode
+    const steps: DeploymentSteps = config.aiMode === 'ai-studio' 
+      ? {
+          authenticate: { status: 'pending' as const },
+          enableApis: { status: 'pending' as const },
+          createAiStudioKey: { status: 'pending' as const },
+        }
+      : {
+          authenticate: { status: 'pending' as const },
+          enableApis: { status: 'pending' as const },
+          createServiceAccounts: { status: 'pending' as const },
+          assignIamRoles: { status: 'pending' as const },
+          deployCloudFunctions: { status: 'pending' as const },
+          createApiGateway: { status: 'pending' as const },
+          configureWorkloadIdentity: { status: 'pending' as const },
+          setupFirestore: { status: 'pending' as const },
+          createFirebaseWebApp: { status: 'pending' as const },
+        };
+
     this.state = {
       version: '1.0',
       projectId,
@@ -57,17 +76,7 @@ export class StateManager {
       startedAt: new Date().toISOString(),
       lastUpdatedAt: new Date().toISOString(),
       configuration: config,
-      steps: {
-        authenticate: { status: 'pending' },
-        enableApis: { status: 'pending' },
-        createServiceAccounts: { status: 'pending' },
-        assignIamRoles: { status: 'pending' },
-        deployCloudFunctions: { status: 'pending' },
-        createApiGateway: { status: 'pending' },
-        configureWorkloadIdentity: { status: 'pending' },
-        setupFirestore: { status: 'pending' },
-        createFirebaseWebApp: { status: 'pending' },
-      },
+      steps,
     };
     
     this.saveState();
@@ -120,6 +129,15 @@ export class StateManager {
       }
     }
     return null;
+  }
+
+  public updateConfiguration(config: DeploymentConfig): void {
+    if (!this.state) {
+      throw new Error('No active deployment');
+    }
+    
+    this.state.configuration = config;
+    this.saveState();
   }
 
   public clearState(): void {
