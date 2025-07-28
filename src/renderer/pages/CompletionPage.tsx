@@ -284,7 +284,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
               <ListItem>
                 <ListItemText
                   primary="Authentication Status"
-                  secondary="✅ Email/Password and Google Sign-In enabled automatically"
+                  secondary="✅ Email/Password authentication enabled"
                 />
               </ListItem>
             </>

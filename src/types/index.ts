@@ -20,6 +20,7 @@ export interface DeploymentConfig {
   corsOrigins: string[];
   aiMode?: 'vertex' | 'ai-studio';  // Which AI path to use
   aiStudioApiKey?: string;           // API key for AI Studio
+  adminPassword?: string;            // Password for admin user
 }
 
 export interface DeploymentSteps {
