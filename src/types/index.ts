@@ -18,6 +18,8 @@ export interface DeploymentConfig {
   firebaseApiKey?: string;
   apiKeyRestrictions: string[];
   corsOrigins: string[];
+  aiMode?: 'vertex' | 'ai-studio';  // Which AI path to use
+  aiStudioApiKey?: string;           // API key for AI Studio
 }
 
 export interface DeploymentSteps {
@@ -71,6 +73,8 @@ export interface DeploymentResult {
   resources?: Record<string, any>;
   error?: string;
   warning?: string;
+  aiMode?: 'vertex' | 'ai-studio';
+  aiStudioApiKey?: string;
 }
 
 export interface AuthStatus {

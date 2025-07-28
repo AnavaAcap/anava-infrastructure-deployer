@@ -64,20 +64,13 @@ const PostDeploymentChecklist: React.FC<PostDeploymentChecklistProps> = ({
 
   // Track Firebase setup completion
   React.useEffect(() => {
-    let allComplete = false;
-    
-    if (authConfigured) {
-      // Auth is automated, only need user creation
-      allComplete = userCreated;
-    } else {
-      // Auth needs manual setup, need both auth checkbox and user creation
-      allComplete = checkedItems.includes('enable-auth') && userCreated;
-    }
+    // Since auth is now always automated, we only need user creation
+    const allComplete = userCreated;
     
     if (onFirebaseSetupComplete) {
       onFirebaseSetupComplete(allComplete);
     }
-  }, [authConfigured, checkedItems, userCreated, onFirebaseSetupComplete]);
+  }, [userCreated, onFirebaseSetupComplete]);
 
   const handleToggle = (item: string) => {
     setCheckedItems(prev => 

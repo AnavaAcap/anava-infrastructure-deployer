@@ -49,6 +49,25 @@ export class StateManager {
   }
 
   public createNewDeployment(projectId: string, region: string, config: DeploymentConfig): DeploymentState {
+    // Define steps based on AI mode
+    const steps = config.aiMode === 'ai-studio' 
+      ? {
+          authenticate: { status: 'pending' },
+          enableApis: { status: 'pending' },
+          createAiStudioKey: { status: 'pending' },
+        }
+      : {
+          authenticate: { status: 'pending' },
+          enableApis: { status: 'pending' },
+          createServiceAccounts: { status: 'pending' },
+          assignIamRoles: { status: 'pending' },
+          deployCloudFunctions: { status: 'pending' },
+          createApiGateway: { status: 'pending' },
+          configureWorkloadIdentity: { status: 'pending' },
+          setupFirestore: { status: 'pending' },
+          createFirebaseWebApp: { status: 'pending' },
+        };
+
     this.state = {
       version: '1.0',
       projectId,
@@ -57,17 +76,7 @@ export class StateManager {
       startedAt: new Date().toISOString(),
       lastUpdatedAt: new Date().toISOString(),
       configuration: config,
-      steps: {
-        authenticate: { status: 'pending' },
-        enableApis: { status: 'pending' },
-        createServiceAccounts: { status: 'pending' },
-        assignIamRoles: { status: 'pending' },
-        deployCloudFunctions: { status: 'pending' },
-        createApiGateway: { status: 'pending' },
-        configureWorkloadIdentity: { status: 'pending' },
-        setupFirestore: { status: 'pending' },
-        createFirebaseWebApp: { status: 'pending' },
-      },
+      steps,
     };
     
     this.saveState();
@@ -120,6 +129,15 @@ export class StateManager {
       }
     }
     return null;
+  }
+
+  public updateConfiguration(config: DeploymentConfig): void {
+    if (!this.state) {
+      throw new Error('No active deployment');
+    }
+    
+    this.state.configuration = config;
+    this.saveState();
   }
 
   public clearState(): void {
