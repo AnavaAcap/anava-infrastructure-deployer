@@ -8,7 +8,6 @@ import { FirestoreDeployer } from './firestoreDeployer';
 import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
 import { FirebaseAppDeployer } from './firebaseAppDeployer';
 import { TerraformService } from './terraformService';
-import { FirebaseAuthSetupService } from './firebaseAuthSetupService';
 import { IAPOAuthService } from './iapOAuthService';
 import { DeploymentConfig, DeploymentProgress, DeploymentResult } from '../../types';
 import { ParallelExecutor } from './utils/parallelExecutor';
@@ -30,7 +29,6 @@ export class DeploymentEngine extends EventEmitter {
   private workloadIdentityDeployer?: WorkloadIdentityDeployer;
   private firebaseAppDeployer?: FirebaseAppDeployer;
   private terraformService?: TerraformService;
-  private firebaseAuthSetupService?: FirebaseAuthSetupService;
   private iapOAuthService?: IAPOAuthService;
   private isPaused = false;
   // private deploymentTimer?: DeploymentTimer; // TODO: Implement timing tracking
@@ -53,7 +51,6 @@ export class DeploymentEngine extends EventEmitter {
       this.workloadIdentityDeployer = new WorkloadIdentityDeployer(this.gcpAuth.oauth2Client);
       this.firebaseAppDeployer = new FirebaseAppDeployer(this.gcpAuth.oauth2Client);
       this.terraformService = new TerraformService();
-      this.firebaseAuthSetupService = new FirebaseAuthSetupService(this.gcpAuth.oauth2Client);
       this.iapOAuthService = new IAPOAuthService(this.gcpAuth.oauth2Client);
     }
   }
