@@ -46,28 +46,48 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
 }) => {
   const [testing, setTesting] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
-  const [testSteps, setTestSteps] = useState<TestStep[]>([
-    {
-      label: 'Request Firebase Custom Token',
-      description: 'Authenticate device with API Gateway',
-      status: 'pending'
-    },
-    {
-      label: 'Exchange for Firebase ID Token',
-      description: 'Convert custom token to Firebase authentication',
-      status: 'pending'
-    },
-    {
-      label: 'Request GCP Access Token',
-      description: 'Exchange Firebase token for GCP access via Workload Identity Federation',
-      status: 'pending'
-    },
-    {
-      label: 'Verify GCP Permissions',
-      description: 'Test access to GCP services',
-      status: 'pending'
-    }
-  ]);
+  const isAiStudioMode = deploymentConfig?.aiMode === 'ai-studio';
+  
+  const [testSteps, setTestSteps] = useState<TestStep[]>(
+    isAiStudioMode ? [
+      {
+        label: 'Create Firebase User',
+        description: 'Create a test user in Firebase Authentication',
+        status: 'pending'
+      },
+      {
+        label: 'Sign In with Firebase',
+        description: 'Authenticate with email/password to get ID token',
+        status: 'pending'
+      },
+      {
+        label: 'Verify AI Studio Access',
+        description: 'Test Gemini API access with AI Studio key',
+        status: 'pending'
+      }
+    ] : [
+      {
+        label: 'Request Firebase Custom Token',
+        description: 'Authenticate device with API Gateway',
+        status: 'pending'
+      },
+      {
+        label: 'Exchange for Firebase ID Token',
+        description: 'Convert custom token to Firebase authentication',
+        status: 'pending'
+      },
+      {
+        label: 'Request GCP Access Token',
+        description: 'Exchange Firebase token for GCP access via Workload Identity Federation',
+        status: 'pending'
+      },
+      {
+        label: 'Verify GCP Permissions',
+        description: 'Test access to GCP services',
+        status: 'pending'
+      }
+    ]
+  );
 
   const updateStep = (index: number, update: Partial<TestStep>) => {
     setTestSteps(prev => prev.map((step, i) => 
@@ -83,83 +103,150 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
     setTestSteps(prev => prev.map(step => ({ ...step, status: 'pending', details: undefined, error: undefined })));
 
     try {
-      // Step 1: Get Firebase custom token
-      updateStep(0, { status: 'running' });
-      
-      const deviceId = `test-device-${Date.now()}`;
-      const customTokenResponse = await window.electronAPI.testAuthStep({
-        step: 'custom-token',
-        apiGatewayUrl: deploymentConfig.apiGatewayUrl,
-        apiKey: deploymentConfig.apiKey,
-        deviceId
-      });
-
-      if (customTokenResponse.success) {
-        updateStep(0, { 
-          status: 'success', 
-          details: `Device ID: ${deviceId.substring(0, 20)}...`
+      if (isAiStudioMode) {
+        // AI Studio mode: Test Firebase auth and AI Studio API
+        
+        // Step 1: Create Firebase user
+        updateStep(0, { status: 'running' });
+        const testEmail = `test-${Date.now()}@example.com`;
+        const testPassword = 'testPassword123!';
+        
+        const createUserResponse = await window.electronAPI.testAuthStep({
+          step: 'create-user',
+          firebaseApiKey: deploymentConfig.firebaseConfig?.apiKey,
+          email: testEmail,
+          password: testPassword
         });
-        setActiveStep(1);
-      } else {
-        throw new Error(customTokenResponse.error || 'Failed to get custom token');
-      }
 
-      // Step 2: Exchange for Firebase ID token
-      updateStep(1, { status: 'running' });
-      
-      const idTokenResponse = await window.electronAPI.testAuthStep({
-        step: 'id-token',
-        customToken: customTokenResponse.customToken,
-        firebaseApiKey: deploymentConfig.firebaseConfig?.apiKey
-      });
+        if (createUserResponse.success) {
+          updateStep(0, { 
+            status: 'success', 
+            details: `User: ${testEmail}`
+          });
+          setActiveStep(1);
+        } else {
+          throw new Error(createUserResponse.error || 'Failed to create user');
+        }
 
-      if (idTokenResponse.success) {
-        updateStep(1, { 
-          status: 'success',
-          details: `Expires in: ${idTokenResponse.expiresIn}s`
+        // Step 2: Sign in with Firebase
+        updateStep(1, { status: 'running' });
+        
+        const signInResponse = await window.electronAPI.testAuthStep({
+          step: 'sign-in',
+          firebaseApiKey: deploymentConfig.firebaseConfig?.apiKey,
+          email: testEmail,
+          password: testPassword
         });
-        setActiveStep(2);
-      } else {
-        throw new Error(idTokenResponse.error || 'Failed to get ID token');
-      }
 
-      // Step 3: Exchange for GCP access token
-      updateStep(2, { status: 'running' });
-      
-      const gcpTokenResponse = await window.electronAPI.testAuthStep({
-        step: 'gcp-token',
-        apiGatewayUrl: deploymentConfig.apiGatewayUrl,
-        apiKey: deploymentConfig.apiKey,
-        idToken: idTokenResponse.idToken
-      });
+        if (signInResponse.success) {
+          updateStep(1, { 
+            status: 'success',
+            details: `ID Token obtained`
+          });
+          setActiveStep(2);
+        } else {
+          throw new Error(signInResponse.error || 'Failed to sign in');
+        }
 
-      if (gcpTokenResponse.success) {
-        updateStep(2, { 
-          status: 'success',
-          details: `Token expires in: ${gcpTokenResponse.expiresIn}s`
+        // Step 3: Verify AI Studio access
+        updateStep(2, { status: 'running' });
+        
+        const aiStudioResponse = await window.electronAPI.testAuthStep({
+          step: 'ai-studio',
+          aiStudioApiKey: deploymentConfig.aiStudioApiKey
         });
-        setActiveStep(3);
+
+        if (aiStudioResponse.success) {
+          updateStep(2, { 
+            status: 'success',
+            details: 'AI Studio API is accessible'
+          });
+          setActiveStep(3);
+        } else {
+          throw new Error(aiStudioResponse.error || 'Failed to verify AI Studio access');
+        }
+        
       } else {
-        throw new Error(gcpTokenResponse.error || 'Failed to get GCP token');
-      }
-
-      // Step 4: Verify GCP permissions
-      updateStep(3, { status: 'running' });
-      
-      const verifyResponse = await window.electronAPI.testAuthStep({
-        step: 'verify',
-        gcpToken: gcpTokenResponse.gcpToken,
-        projectId: deploymentConfig.firebaseConfig?.projectId
-      });
-
-      if (verifyResponse.success) {
-        updateStep(3, { 
-          status: 'success',
-          details: `Service Account: ${verifyResponse.serviceAccount}`
+        // Vertex AI mode: Test full auth flow through API Gateway
+        
+        // Step 1: Get Firebase custom token
+        updateStep(0, { status: 'running' });
+        
+        const deviceId = `test-device-${Date.now()}`;
+        const customTokenResponse = await window.electronAPI.testAuthStep({
+          step: 'custom-token',
+          apiGatewayUrl: deploymentConfig.apiGatewayUrl,
+          apiKey: deploymentConfig.apiKey,
+          deviceId
         });
-        setActiveStep(4);
-      } else {
-        throw new Error(verifyResponse.error || 'Failed to verify permissions');
+
+        if (customTokenResponse.success) {
+          updateStep(0, { 
+            status: 'success', 
+            details: `Device ID: ${deviceId.substring(0, 20)}...`
+          });
+          setActiveStep(1);
+        } else {
+          throw new Error(customTokenResponse.error || 'Failed to get custom token');
+        }
+
+        // Step 2: Exchange for Firebase ID token
+        updateStep(1, { status: 'running' });
+        
+        const idTokenResponse = await window.electronAPI.testAuthStep({
+          step: 'id-token',
+          customToken: customTokenResponse.customToken,
+          firebaseApiKey: deploymentConfig.firebaseConfig?.apiKey
+        });
+
+        if (idTokenResponse.success) {
+          updateStep(1, { 
+            status: 'success',
+            details: `Expires in: ${idTokenResponse.expiresIn}s`
+          });
+          setActiveStep(2);
+        } else {
+          throw new Error(idTokenResponse.error || 'Failed to get ID token');
+        }
+
+        // Step 3: Exchange for GCP access token
+        updateStep(2, { status: 'running' });
+        
+        const gcpTokenResponse = await window.electronAPI.testAuthStep({
+          step: 'gcp-token',
+          apiGatewayUrl: deploymentConfig.apiGatewayUrl,
+          apiKey: deploymentConfig.apiKey,
+          idToken: idTokenResponse.idToken
+        });
+
+        if (gcpTokenResponse.success) {
+          updateStep(2, { 
+            status: 'success',
+            details: `Token expires in: ${gcpTokenResponse.expiresIn}s`
+          });
+          setActiveStep(3);
+        } else {
+          throw new Error(gcpTokenResponse.error || 'Failed to get GCP token');
+        }
+
+        // Step 4: Verify GCP permissions
+        updateStep(3, { status: 'running' });
+        
+        const verifyResponse = await window.electronAPI.testAuthStep({
+          step: 'verify',
+          gcpToken: gcpTokenResponse.gcpToken,
+          projectId: deploymentConfig.firebaseConfig?.projectId
+        });
+
+        if (verifyResponse.success) {
+          updateStep(3, { 
+            status: 'success',
+            details: `Service Account: ${verifyResponse.serviceAccount}`
+          });
+          setActiveStep(4);
+        } else {
+          throw new Error(verifyResponse.error || 'Failed to verify permissions');
+        }
       }
 
     } catch (error: any) {
@@ -185,9 +272,15 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
           This test simulates the complete authentication flow that cameras will use to access GCP services.
         </Typography>
 
-        {!deploymentConfig?.apiGatewayUrl && (
+        {!deploymentConfig?.apiGatewayUrl && deploymentConfig?.aiMode !== 'ai-studio' && (
           <Alert severity="error" sx={{ mb: 2 }}>
             No deployment configuration found. Please complete the GCP deployment first.
+          </Alert>
+        )}
+
+        {deploymentConfig?.aiMode === 'ai-studio' && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            AI Studio mode uses direct API access. This test will verify Firebase authentication only.
           </Alert>
         )}
 
@@ -201,18 +294,37 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
           <CardContent>
             <Typography variant="subtitle2" gutterBottom>Configuration</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CloudIcon fontSize="small" color="action" />
-                <Typography variant="body2">
-                  API Gateway: <Chip label={deploymentConfig?.apiGatewayUrl?.split('//')[1]?.split('/')[0] || 'Not configured'} size="small" />
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <VpnKeyIcon fontSize="small" color="action" />
-                <Typography variant="body2">
-                  API Key: <Chip label="••••••••" size="small" />
-                </Typography>
-              </Box>
+              {isAiStudioMode ? (
+                <>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CloudIcon fontSize="small" color="action" />
+                    <Typography variant="body2">
+                      AI Mode: <Chip label="AI Studio" size="small" color="primary" />
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <VpnKeyIcon fontSize="small" color="action" />
+                    <Typography variant="body2">
+                      AI Studio Key: <Chip label={deploymentConfig?.aiStudioApiKey ? '••••••••' : 'Not configured'} size="small" />
+                    </Typography>
+                  </Box>
+                </>
+              ) : (
+                <>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CloudIcon fontSize="small" color="action" />
+                    <Typography variant="body2">
+                      API Gateway: <Chip label={deploymentConfig?.apiGatewayUrl?.split('//')[1]?.split('/')[0] || 'Not configured'} size="small" />
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <VpnKeyIcon fontSize="small" color="action" />
+                    <Typography variant="body2">
+                      API Key: <Chip label="••••••••" size="small" />
+                    </Typography>
+                  </Box>
+                </>
+              )}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <SecurityIcon fontSize="small" color="action" />
                 <Typography variant="body2">
@@ -276,7 +388,7 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
         <Button 
           variant="contained" 
           onClick={runTest}
-          disabled={!deploymentConfig?.apiGatewayUrl || testing}
+          disabled={(!deploymentConfig?.apiGatewayUrl && deploymentConfig?.aiMode !== 'ai-studio') || testing}
           startIcon={testing ? <CircularProgress size={20} /> : null}
         >
           {testing ? 'Testing...' : 'Run Test'}
