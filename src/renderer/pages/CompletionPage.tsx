@@ -12,15 +12,13 @@ import {
   ListItem,
   ListItemText,
   Divider,
-  Stepper,
-  Step,
-  StepLabel,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   CircularProgress,
   ListItemIcon,
+  TextField,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -29,14 +27,12 @@ import {
   VisibilityOff,
   Add,
   Download,
-  ArrowBack,
-  PlayCircle,
   Error as ErrorIcon,
   Science as ScienceIcon,
+  Person,
 } from '@mui/icons-material';
 import { DeploymentResult } from '../../types';
 import TopBar from '../components/TopBar';
-import PostDeploymentChecklist from '../components/PostDeploymentChecklist';
 import { TestConfigurationDialog } from '../components/TestConfigurationDialog';
 
 interface CompletionPageProps {
@@ -49,12 +45,13 @@ interface CompletionPageProps {
 const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment, onBack, onLogout }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-  const [activeStep, setActiveStep] = useState(0);
-  const [validationOpen, setValidationOpen] = useState(false);
-  const [validating, setValidating] = useState(false);
-  const [validationResult, setValidationResult] = useState<any>(null);
   const [testDialogOpen, setTestDialogOpen] = useState(false);
-  const [firebaseSetupComplete, setFirebaseSetupComplete] = useState(false);
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [userPassword, setUserPassword] = useState('');
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [userCreated, setUserCreated] = useState(false);
 
   const handleCopy = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -62,491 +59,352 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const handleExportConfig = () => {
-    const config = {
-      apiGatewayUrl: result.apiGatewayUrl,
-      apiKey: result.apiKey,
-      firebaseConfig: result.firebaseConfig,
-      resources: result.resources,
-      timestamp: new Date().toISOString(),
-    };
-    
-    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'anava-deployment-config.json';
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExportConfig = async () => {
+    try {
+      const config = {
+        projectId: result.resources?.createServiceAccounts?.accounts ? 
+          result.resources.createServiceAccounts.accounts['device-auth-sa']?.split('@')[1]?.split('.')[0] : 
+          'unknown',
+        apiGatewayUrl: result.apiGatewayUrl,
+        apiKey: result.apiKey,
+        firebaseConfig: result.firebaseConfig,
+        adminEmail: result.adminEmail,
+        aiMode: result.aiMode,
+        aiStudioApiKey: result.aiStudioApiKey,
+        timestamp: new Date().toISOString()
+      };
+
+      const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `anava-config-${config.projectId}-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error('Failed to export config:', err);
+    }
   };
 
-  if (!result.success) {
-    return (
-      <Paper elevation={3} sx={{ p: 6 }}>
-        <TopBar 
-          title="Deployment Status" 
-          showLogout={!!onLogout}
-          onLogout={onLogout}
-        />
-        
-        <Alert severity="error" sx={{ mb: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            Deployment Failed
-          </Typography>
-          <Typography>
-            {result.error || 'An unknown error occurred during deployment.'}
-          </Typography>
-        </Alert>
-        
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={onNewDeployment}
-          fullWidth
-        >
-          Try New Deployment
-        </Button>
-      </Paper>
-    );
-  }
-
-  const steps = ['Deployment Complete', 'Firebase Setup', 'Ready to Export'];
-
-  const handleChecklistComplete = () => {
-    setActiveStep(2); // Move to final step
-  };
-
-  const handleValidate = async () => {
-    if (!result.apiGatewayUrl || !result.apiKey || !result.firebaseConfig?.apiKey) {
-      alert('Missing required configuration. Please ensure Firebase API key is available.');
+  const handleCreateUser = async () => {
+    if (!userEmail || !userPassword || !result.firebaseConfig?.apiKey) {
+      setError('Missing required information');
       return;
     }
 
-    setValidating(true);
-    setValidationResult(null);
-    setValidationOpen(true);
+    setCreatingUser(true);
+    setError(null);
 
     try {
-      const validationResult = await window.electronAPI!.validateDeployment({
-        apiGatewayUrl: result.apiGatewayUrl,
-        apiKey: result.apiKey,
-        firebaseApiKey: result.firebaseConfig.apiKey
+      const projectId = result.resources?.createServiceAccounts?.accounts ? 
+        result.resources.createServiceAccounts.accounts['device-auth-sa']?.split('@')[1]?.split('.')[0] : 
+        'unknown';
+
+      const response = await window.electronAPI.createFirebaseUser({
+        projectId,
+        email: userEmail,
+        password: userPassword,
+        apiKey: result.firebaseConfig.apiKey
       });
 
-      setValidationResult(validationResult);
-    } catch (error: any) {
-      setValidationResult({
-        success: false,
-        steps: [],
-        error: error.message || 'Validation failed'
-      });
+      if (response.success) {
+        setUserCreated(true);
+        setCreateUserOpen(false);
+        setUserEmail('');
+        setUserPassword('');
+      } else {
+        setError(response.error || 'Failed to create user');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to create user');
     } finally {
-      setValidating(false);
+      setCreatingUser(false);
     }
   };
 
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
       <TopBar 
-        title="Deployment Status" 
+        title="Deployment Complete" 
         showLogout={!!onLogout}
         onLogout={onLogout}
       />
       
-      <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-        {steps.map((label) => (
-          <Step key={label}>
-            <StepLabel>{label}</StepLabel>
-          </Step>
-        ))}
-      </Stepper>
+      <Box textAlign="center" sx={{ mb: 4 }}>
+        <CheckCircle color="success" sx={{ fontSize: 64, mb: 2 }} />
+        <Typography variant="h4" gutterBottom>
+          {result.aiMode === 'ai-studio' 
+            ? 'AI Studio Setup Complete! 🎉'
+            : 'Infrastructure Deployed Successfully! 🎉'
+          }
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          {result.aiMode === 'ai-studio'
+            ? 'Your AI Studio configuration is ready. You can now use the Gemini API directly.'
+            : 'Your Anava Vision authentication infrastructure is ready. Authentication has been automatically configured.'
+          }
+        </Typography>
+      </Box>
 
-      {activeStep === 0 && (
-        <>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-            <CheckCircle color="success" sx={{ fontSize: 36 }} />
-            <Typography variant="h6" color="success.main">
-              All systems deployed successfully
-            </Typography>
-          </Stack>
-      
-      <List sx={{ mb: 4 }}>
-        <ListItem>
-          <ListItemText
-            primary="API Gateway URL"
-            secondary={
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                  {result.apiGatewayUrl}
-                </Typography>
-                <Tooltip title={copied === 'url' ? 'Copied!' : 'Copy'}>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleCopy(result.apiGatewayUrl!, 'url')}
-                  >
-                    <ContentCopy fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-            }
-          />
-        </ListItem>
+      <Paper elevation={1} sx={{ p: 3, mb: 4, backgroundColor: 'background.default' }}>
+        <Typography variant="h6" gutterBottom>
+          Deployment Summary
+        </Typography>
         
-        <Divider />
-        
-        <ListItem>
-          <ListItemText
-            primary="API Key"
-            secondary={
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                  {showApiKey ? result.apiKey : '••••••••-••••-••••'}
-                </Typography>
-                <IconButton
-                  size="small"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                >
-                  {showApiKey ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                </IconButton>
-                <Tooltip title={copied === 'key' ? 'Copied!' : 'Copy'}>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleCopy(result.apiKey!, 'key')}
-                  >
-                    <ContentCopy fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-            }
-          />
-        </ListItem>
-        
-        {result.firebaseConfig && (
-          <>
-            <Divider sx={{ my: 2 }} />
-            {!result.firebaseConfig.apiKey && (
+        <List>
+          {result.aiMode === 'ai-studio' ? (
+            <>
               <ListItem>
-                <Alert severity="warning" sx={{ width: '100%' }}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Firebase API Key Not Retrieved
-                  </Typography>
-                  <Typography variant="body2">
-                    The Firebase API key could not be automatically retrieved. You'll need to:
-                  </Typography>
-                  <List dense sx={{ mt: 1 }}>
-                    <ListItem>1. Go to the Firebase Console</ListItem>
-                    <ListItem>2. Select your project</ListItem>
-                    <ListItem>3. Go to Project Settings → General</ListItem>
-                    <ListItem>4. Copy the Web API Key</ListItem>
-                  </List>
-                </Alert>
+                <ListItemText
+                  primary="AI Mode"
+                  secondary="Google AI Studio - Direct API access to Gemini models"
+                />
               </ListItem>
-            )}
-            <ListItem>
-              <ListItemText
-                primary="Firebase Auth Domain"
-                secondary={
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <Typography variant="mono" sx={{ fontFamily: 'monospace' }}>
-                      {result.firebaseConfig.authDomain}
-                    </Typography>
-                    <Tooltip title={copied === 'authDomain' ? 'Copied!' : 'Copy'}>
+              
+              <Divider />
+              {result.aiStudioApiKey ? (
+                <ListItem>
+                  <ListItemText
+                    primary="AI Studio API Key"
+                    secondary={
+                      <Stack direction="row" alignItems="center" spacing={1}>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                          {showApiKey ? result.aiStudioApiKey : '••••••••-••••-••••'}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                        >
+                          {showApiKey ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                        </IconButton>
+                        <Tooltip title={copied === 'ai-key' ? 'Copied!' : 'Copy'}>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleCopy(result.aiStudioApiKey!, 'ai-key')}
+                          >
+                            <ContentCopy fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
+                    }
+                  />
+                </ListItem>
+              ) : (
+                <ListItem>
+                  <ListItemText
+                    primary="AI Studio API Key"
+                    secondary={
+                      <Stack spacing={1}>
+                        <Typography variant="body2" color="text.secondary">
+                          Please create an API key manually at:
+                        </Typography>
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            fontFamily: 'monospace',
+                            color: 'primary.main',
+                            cursor: 'pointer',
+                            '&:hover': { textDecoration: 'underline' }
+                          }}
+                          onClick={() => window.electronAPI.shell.openExternal('https://aistudio.google.com/app/apikey')}
+                        >
+                          https://aistudio.google.com/app/apikey
+                        </Typography>
+                      </Stack>
+                    }
+                  />
+                </ListItem>
+              )}
+            </>
+          ) : (
+            <>
+              <ListItem>
+                <ListItemText
+                  primary="API Gateway URL"
+                  secondary={
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                        {result.apiGatewayUrl}
+                      </Typography>
+                      <Tooltip title={copied === 'url' ? 'Copied!' : 'Copy'}>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleCopy(result.apiGatewayUrl!, 'url')}
+                        >
+                          <ContentCopy fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  }
+                />
+              </ListItem>
+              
+              <Divider />
+              
+              <ListItem>
+                <ListItemText
+                  primary="API Key"
+                  secondary={
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                        {showApiKey ? result.apiKey : '••••••••-••••-••••'}
+                      </Typography>
                       <IconButton
                         size="small"
-                        onClick={() => handleCopy(result.firebaseConfig!.authDomain, 'authDomain')}
+                        onClick={() => setShowApiKey(!showApiKey)}
                       >
-                        <ContentCopy fontSize="small" />
+                        {showApiKey ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
                       </IconButton>
-                    </Tooltip>
-                  </Stack>
-                }
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText
-                primary="Firebase App ID"
-                secondary={
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <Typography variant="mono" sx={{ fontFamily: 'monospace' }}>
-                      {result.firebaseConfig.appId}
-                    </Typography>
-                    <Tooltip title={copied === 'appId' ? 'Copied!' : 'Copy'}>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleCopy(result.firebaseConfig!.appId, 'appId')}
-                      >
-                        <ContentCopy fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                }
-              />
-            </ListItem>
-          </>
-        )}
-      </List>
-      
+                      <Tooltip title={copied === 'key' ? 'Copied!' : 'Copy'}>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleCopy(result.apiKey!, 'key')}
+                        >
+                          <ContentCopy fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  }
+                />
+              </ListItem>
+            </>
+          )}
+          
+          {result.firebaseConfig && (
+            <>
+              <Divider />
+              <ListItem>
+                <ListItemText
+                  primary="Firebase Project"
+                  secondary={result.firebaseConfig.projectId}
+                />
+              </ListItem>
+              
+              <Divider />
+              <ListItem>
+                <ListItemText
+                  primary="Authentication Status"
+                  secondary="✅ Email/Password and Google Sign-In enabled automatically"
+                />
+              </ListItem>
+            </>
+          )}
+        </List>
+      </Paper>
+
+      {result.aiMode !== 'ai-studio' && (
+        <>
+          {result.adminEmail && (
+            <Alert severity="success" sx={{ mb: 3 }}>
+              <Typography variant="subtitle2">Admin User Created</Typography>
+              <Typography variant="body2">
+                Admin email: {result.adminEmail}
+              </Typography>
+            </Alert>
+          )}
+
+          {!result.adminEmail && !userCreated && (
+            <Alert severity="info" sx={{ mb: 3 }}>
+              <Typography variant="subtitle2">Create Admin User</Typography>
+              <Typography variant="body2">
+                You should create an admin user for secure access to Firestore and Storage.
+              </Typography>
+            </Alert>
+          )}
+        </>
+      )}
+
       <Box sx={{ mt: 4 }}>
         <Stack direction="row" spacing={2} justifyContent="center">
           <Button
             variant="outlined"
             startIcon={<Download />}
             onClick={handleExportConfig}
-            disabled={!firebaseSetupComplete}
           >
             Export Configuration
           </Button>
-          <Button
-            variant="outlined"
-            startIcon={<ScienceIcon />}
-            onClick={() => setTestDialogOpen(true)}
-            disabled={!firebaseSetupComplete}
-          >
-            Test Auth Flow
-          </Button>
-          <Button
-            variant="contained"
-            size="large"
-            onClick={() => setActiveStep(1)}
-          >
-            Continue to Firebase Setup
-          </Button>
-        </Stack>
-      </Box>
-        </>
-      )}
-
-      {activeStep === 1 && (
-        <>
-          <PostDeploymentChecklist
-            projectId={result.resources?.createServiceAccounts?.accounts ? 
-              result.resources.createServiceAccounts.accounts['device-auth-sa']?.split('@')[1]?.split('.')[0] : 
-              'unknown'
-            }
-            firebaseConfig={result.firebaseConfig}
-            onComplete={handleChecklistComplete}
-            onFirebaseSetupComplete={setFirebaseSetupComplete}
-            authConfigured={result.resources?.setupFirestore?.authConfigured !== false}
-            adminEmail={result.adminEmail}
-          />
-          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-            <Button
-              variant="outlined"
-              startIcon={<ArrowBack />}
-              onClick={() => setActiveStep(0)}
-            >
-              Back to Summary
-            </Button>
-          </Box>
-        </>
-      )}
-
-      {activeStep === 2 && (
-        <Box textAlign="center">
-          <CheckCircle color="success" sx={{ fontSize: 64, mb: 2 }} />
-          <Typography variant="h5" gutterBottom>
-            Setup Complete! 🎉
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-            Your Anava Vision authentication infrastructure is fully configured and ready to use.
-          </Typography>
           
-          <Paper elevation={1} sx={{ p: 3, mb: 4, maxWidth: 600, mx: 'auto', textAlign: 'left' }}>
-            <Typography variant="h6" gutterBottom>
-              Configuration Details
-            </Typography>
-            <List dense>
-              <ListItem>
-                <ListItemText 
-                  primary="API Gateway URL"
-                  secondary={result.apiGatewayUrl}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText 
-                  primary="Firebase Project"
-                  secondary={result.firebaseConfig?.projectId || 'N/A'}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText 
-                  primary="Authentication"
-                  secondary="Email/Password enabled with admin user created"
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText 
-                  primary="Storage"
-                  secondary="Firebase Storage initialized"
-                />
-              </ListItem>
-            </List>
-          </Paper>
-          
-          <Typography variant="h6" gutterBottom>
-            Next Steps for Camera Configuration
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Use the exported configuration file to set up your Anava cameras:
-          </Typography>
-          
-          <Stack direction="row" spacing={2} justifyContent="center" sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<Download />}
-              onClick={handleExportConfig}
-              size="large"
-              disabled={!firebaseSetupComplete}
-            >
-              Export Configuration
-            </Button>
+          {result.aiMode !== 'ai-studio' && (
             <Button
               variant="outlined"
               startIcon={<ScienceIcon />}
               onClick={() => setTestDialogOpen(true)}
-              size="large"
-              disabled={!firebaseSetupComplete}
             >
-              Test Configuration
+              Test Auth Flow
             </Button>
-            <Button
-              variant="outlined"
-              startIcon={<Add />}
-              onClick={onNewDeployment}
-            >
-              New Deployment
-            </Button>
-          </Stack>
+          )}
           
-          <Box sx={{ mt: 2, textAlign: 'center' }}>
+          {result.aiMode !== 'ai-studio' && !result.adminEmail && !userCreated && (
             <Button
               variant="outlined"
-              color="success"
-              startIcon={<PlayCircle />}
-              onClick={handleValidate}
-              disabled={!result.firebaseConfig?.apiKey}
+              startIcon={<Person />}
+              onClick={() => setCreateUserOpen(true)}
             >
-              Test Deployment
+              Create Admin User
             </Button>
-            {!result.firebaseConfig?.apiKey && (
-              <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
-                Firebase API key required for testing
-              </Typography>
-            )}
-          </Box>
-        </Box>
-      )}
-      
-      {/* Validation Dialog */}
-      <Dialog
-        open={validationOpen}
-        onClose={() => !validating && setValidationOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>
-          <Stack direction="row" alignItems="center" spacing={2}>
-            <PlayCircle color="primary" />
-            <Typography variant="h6">Testing Deployment</Typography>
-          </Stack>
-        </DialogTitle>
+          )}
+          
+          <Button
+            variant="contained"
+            size="large"
+            onClick={onNewDeployment}
+          >
+            New Deployment
+          </Button>
+        </Stack>
+      </Box>
+
+      {/* Create User Dialog */}
+      <Dialog open={createUserOpen} onClose={() => setCreateUserOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Create Admin User</DialogTitle>
         <DialogContent>
-          {validating && !validationResult && (
-            <Box textAlign="center" py={4}>
-              <CircularProgress size={48} />
-              <Typography variant="body1" sx={{ mt: 2 }}>
-                Running authentication workflow test...
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                This simulates the complete camera authentication flow
-              </Typography>
-            </Box>
-          )}
-          
-          {validationResult && (
-            <>
-              {validationResult.error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {validationResult.error}
-                </Alert>
-              )}
-              
-              <List>
-                {validationResult.steps?.map((step: any, index: number) => (
-                  <ListItem key={index}>
-                    <ListItemIcon>
-                      {step.success ? (
-                        <CheckCircle color="success" />
-                      ) : (
-                        <ErrorIcon color="error" />
-                      )}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={step.name}
-                      secondary={
-                        <>
-                          <Typography variant="body2">{step.message}</Typography>
-                          {step.details && (
-                            <Typography variant="caption" component="div" sx={{ mt: 1, fontFamily: 'monospace' }}>
-                              {Object.entries(step.details).map(([key, value]) => (
-                                <div key={key}>{key}: {String(value)}</div>
-                              ))}
-                            </Typography>
-                          )}
-                        </>
-                      }
-                    />
-                  </ListItem>
-                ))}
-              </List>
-              
-              {validationResult.success && validationResult.summary && (
-                <Alert severity="success" sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Deployment Validated Successfully!
-                  </Typography>
-                  <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>
-                    {validationResult.summary}
-                  </Typography>
-                </Alert>
-              )}
-              
-              {!validationResult.success && (
-                <Alert severity="error" sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2">
-                    Validation Failed
-                  </Typography>
-                  <Typography variant="body2">
-                    Please check the deployment configuration and ensure all services are properly configured.
-                  </Typography>
-                </Alert>
-              )}
-            </>
-          )}
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {error && (
+              <Alert severity="error" onClose={() => setError(null)}>
+                {error}
+              </Alert>
+            )}
+            <TextField
+              label="Email"
+              type="email"
+              fullWidth
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+              disabled={creatingUser}
+            />
+            <TextField
+              label="Password"
+              type="password"
+              fullWidth
+              value={userPassword}
+              onChange={(e) => setUserPassword(e.target.value)}
+              disabled={creatingUser}
+              helperText="At least 6 characters"
+            />
+          </Stack>
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={() => setValidationOpen(false)} 
-            disabled={validating}
-          >
-            Close
+          <Button onClick={() => setCreateUserOpen(false)} disabled={creatingUser}>
+            Cancel
           </Button>
-          {!validating && !validationResult?.success && (
-            <Button
-              onClick={handleValidate}
-              variant="contained"
-              startIcon={<PlayCircle />}
-            >
-              Retry Test
-            </Button>
-          )}
+          <Button 
+            onClick={handleCreateUser} 
+            variant="contained"
+            disabled={creatingUser || !userEmail || !userPassword}
+            startIcon={creatingUser && <CircularProgress size={20} />}
+          >
+            Create User
+          </Button>
         </DialogActions>
       </Dialog>
 
+      {/* Test Configuration Dialog */}
       <TestConfigurationDialog
         open={testDialogOpen}
         onClose={() => setTestDialogOpen(false)}
-        deploymentConfig={result}
+        apiGatewayUrl={result.apiGatewayUrl || ''}
+        apiKey={result.apiKey || ''}
+        deviceId="test-device-001"
       />
     </Paper>
   );

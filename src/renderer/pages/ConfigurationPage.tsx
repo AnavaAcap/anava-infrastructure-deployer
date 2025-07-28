@@ -9,6 +9,10 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  Alert,
 } from '@mui/material';
 import { ArrowBack, RocketLaunch } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig } from '../../types';
@@ -24,6 +28,8 @@ interface ConfigurationPageProps {
 const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComplete, onBack, onLogout }) => {
   const [namePrefix, setNamePrefix] = useState('anava-iot');
   const [region, setRegion] = useState('us-central1');
+  const [aiMode, setAiMode] = useState<'vertex' | 'ai-studio'>('vertex');
+  const [aiStudioApiKey, setAiStudioApiKey] = useState('');
 
   const handleDeploy = () => {
     // Automatically configure CORS for Anava cameras
@@ -39,6 +45,8 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
       namePrefix,
       corsOrigins: defaultCorsOrigins,
       apiKeyRestrictions: defaultCorsOrigins,
+      aiMode,
+      aiStudioApiKey: aiMode === 'ai-studio' ? aiStudioApiKey : undefined,
     };
 
     onComplete(config);
@@ -124,6 +132,56 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
             Select the Google Cloud region where your resources will be deployed
           </Typography>
         </FormControl>
+        
+        <FormControl component="fieldset" sx={{ mt: 2 }}>
+          <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+            AI Processing Mode
+          </Typography>
+          <RadioGroup value={aiMode} onChange={(e) => setAiMode(e.target.value as 'vertex' | 'ai-studio')}>
+            <FormControlLabel 
+              value="vertex" 
+              control={<Radio />} 
+              label={
+                <Stack>
+                  <Typography variant="body1">Vertex AI (via API Gateway)</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Production-ready infrastructure with full GCP integration
+                  </Typography>
+                </Stack>
+              } 
+            />
+            <FormControlLabel 
+              value="ai-studio" 
+              control={<Radio />} 
+              label={
+                <Stack>
+                  <Typography variant="body1">Google AI Studio</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Simple API key-based access to Gemini models
+                  </Typography>
+                </Stack>
+              }
+            />
+          </RadioGroup>
+        </FormControl>
+
+        {aiMode === 'ai-studio' && (
+          <>
+            <Alert severity="info" sx={{ mt: 2 }}>
+              We'll help you create a Google AI Studio API key during deployment. This provides direct access to Gemini models without complex infrastructure.
+            </Alert>
+            <TextField
+              fullWidth
+              label="Google AI Studio API Key (Optional)"
+              variant="outlined"
+              value={aiStudioApiKey}
+              onChange={(e) => setAiStudioApiKey(e.target.value)}
+              sx={{ mt: 2 }}
+              helperText="Leave empty to create one during deployment"
+              placeholder="Enter existing key or leave empty"
+            />
+          </>
+        )}
       </Stack>
       
       <Stack direction="row" spacing={2} justifyContent="space-between" sx={{ mt: 4 }}>

@@ -65,6 +65,8 @@ export class TerraformService {
     options?: {
       enableAnonymous?: boolean;
       authorizedDomains?: string[];
+      adminEmail?: string;
+      projectNumber?: string;
     }
   ): Promise<void> {
     console.log('[Terraform] Starting Firebase Auth initialization...');
@@ -143,6 +145,7 @@ resource "google_identity_platform_config" "default" {
   authorized_domains = ${JSON.stringify(authorizedDomains)}
 }
 
+
 # Output the configuration
 output "auth_config" {
   value = google_identity_platform_config.default
@@ -153,6 +156,7 @@ output "auth_enabled" {
   value = true
   description = "Indicates that Firebase Auth has been initialized"
 }
+
 `;
 
     // Write Terraform configuration
