@@ -402,9 +402,13 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
       <TestConfigurationDialog
         open={testDialogOpen}
         onClose={() => setTestDialogOpen(false)}
-        apiGatewayUrl={result.apiGatewayUrl || ''}
-        apiKey={result.apiKey || ''}
-        deviceId="test-device-001"
+        deploymentConfig={{
+          apiGatewayUrl: result.apiGatewayUrl,
+          apiKey: result.apiKey,
+          firebaseConfig: result.firebaseConfig,
+          aiMode: result.aiMode,
+          aiStudioApiKey: result.aiStudioApiKey
+        }}
       />
     </Paper>
   );
