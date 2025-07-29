@@ -42,11 +42,12 @@ jobs:
         # Update npm to latest version first
         npm install -g npm@latest
         
-        # Explicitly pre-install the problematic rollup module
-        npm install @rollup/rollup-win32-x64-msvc --no-save
-        
-        # Now run standard install with package-lock.json
+        # Run the clean install first
         npm ci
+        
+        # NOW patch the installation by adding the missing native module
+        # This happens AFTER npm ci, so it won't be deleted
+        npm install @rollup/rollup-win32-x64-msvc --no-save
       shell: pwsh
       
     - name: Install dependencies (macOS)
