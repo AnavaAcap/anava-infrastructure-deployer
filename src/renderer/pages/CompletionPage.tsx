@@ -307,7 +307,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             <Alert severity="info" sx={{ mb: 3 }}>
               <Typography variant="subtitle2">Create Admin User</Typography>
               <Typography variant="body2">
-                You should create an admin user for secure access to Firestore and Storage.
+                You should create an admin user for secure access to Firestore.
               </Typography>
             </Alert>
           )}

@@ -4,7 +4,7 @@ import { GCPApiServiceManager } from './gcpApiServiceManager';
 import { GCPOAuthService } from './gcpOAuthService';
 import { CloudFunctionsAPIDeployer, CloudFunctionConfig } from './cloudFunctionsAPIDeployer';
 import { ApiGatewayDeployer } from './apiGatewayDeployer';
-import { FirestoreDeployer } from './firestoreDeployer';
+import { FirestoreRulesDeployer } from './firestoreRulesDeployer';
 import { WorkloadIdentityDeployer } from './workloadIdentityDeployer';
 import { FirebaseAppDeployer } from './firebaseAppDeployer';
 import { TerraformService } from './terraformService';
@@ -27,7 +27,7 @@ export class DeploymentEngine extends EventEmitter {
   private gcpAuth: GCPOAuthService;
   private cloudFunctionsAPIDeployer?: CloudFunctionsAPIDeployer;
   private apiGatewayDeployer?: ApiGatewayDeployer;
-  private firestoreDeployer?: FirestoreDeployer;
+  private firestoreRulesDeployer?: FirestoreRulesDeployer;
   private workloadIdentityDeployer?: WorkloadIdentityDeployer;
   private firebaseAppDeployer?: FirebaseAppDeployer;
   private terraformService?: TerraformService;
@@ -50,7 +50,7 @@ export class DeploymentEngine extends EventEmitter {
     if (this.gcpAuth.oauth2Client) {
       this.cloudFunctionsAPIDeployer = new CloudFunctionsAPIDeployer(this.gcpAuth.oauth2Client);
       this.apiGatewayDeployer = new ApiGatewayDeployer(this.gcpAuth.oauth2Client);
-      this.firestoreDeployer = new FirestoreDeployer(this.gcpAuth.oauth2Client);
+      this.firestoreRulesDeployer = new FirestoreRulesDeployer(this.gcpAuth.oauth2Client);
       this.workloadIdentityDeployer = new WorkloadIdentityDeployer(this.gcpAuth.oauth2Client);
       this.firebaseAppDeployer = new FirebaseAppDeployer(this.gcpAuth.oauth2Client);
       this.terraformService = new TerraformService();
@@ -199,29 +199,20 @@ export class DeploymentEngine extends EventEmitter {
                 console.log(`✅ Admin user created successfully: ${userEmail}`);
                 adminEmail = userEmail;
                 
-                // Set admin email in firestore deployer so it's included in deployment result
-                if (this.firestoreDeployer) {
-                  this.firestoreDeployer.setAdminEmail(userEmail);
-                }
+                // Admin email is now tracked in state manager
               }
             } catch (error: any) {
               if (error.response?.data?.error?.message === 'EMAIL_EXISTS') {
                 console.log(`ℹ️  Admin user already exists: ${userEmail}`);
                 adminEmail = userEmail;
                 
-                // Set admin email in firestore deployer so it's included in deployment result
-                if (this.firestoreDeployer) {
-                  this.firestoreDeployer.setAdminEmail(userEmail);
-                }
+                // Admin email is now tracked in state manager
               } else {
                 console.error('Failed to create admin user:', error);
                 console.log(`⚠️  Could not create admin user: ${error.response?.data?.error?.message || error.message}`);
                 console.log('⚠️  You can create the admin user manually in Firebase Console');
               }
             }
-          } else {
-            // Get admin email if it was set elsewhere
-            adminEmail = this.firestoreDeployer?.getAdminEmail();
           }
           
           if (adminEmail) {
@@ -449,7 +440,6 @@ export class DeploymentEngine extends EventEmitter {
     // Other APIs that can be enabled in parallel
     const otherApis = [
       'storage.googleapis.com',
-      'firebasestorage.googleapis.com', // Cloud Storage for Firebase API
       'cloudfunctions.googleapis.com',
       'cloudbuild.googleapis.com',
       'artifactregistry.googleapis.com',
@@ -1104,8 +1094,8 @@ export class DeploymentEngine extends EventEmitter {
     console.log('Starting Firestore setup...');
     const state = this.stateManager.getState()!;
     
-    if (!this.firestoreDeployer) {
-      throw new Error('Firestore deployer not initialized');
+    if (!this.firestoreRulesDeployer) {
+      throw new Error('Firestore rules deployer not initialized');
     }
     
     const logCallback = (message: string) => {
@@ -1125,131 +1115,97 @@ export class DeploymentEngine extends EventEmitter {
       console.warn('Could not get current user email:', error);
     }
 
-    // Enable Firebase Auth and Storage in parallel
+    // Initialize Firebase Authentication
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 0,
       totalProgress: 87.5,
-      message: 'Initializing Firebase services in parallel...',
+      message: 'Initializing Firebase Authentication...',
     });
 
     const startTime = Date.now();
 
-    // Execute Firebase Auth and Storage setup in parallel
-    const firebaseSetupTasks = [
-      {
-        name: 'Firebase Authentication',
-        fn: async () => {
-          logCallback('=== Initializing Firebase Authentication with Terraform ===');
-          
-          if (!this.terraformService) {
-            throw new Error('Terraform service not initialized. Cannot proceed with Firebase Auth setup.');
-          }
-          
-          try {
-            logCallback('Step 1: Initializing Terraform service...');
-            await this.terraformService.initialize();
-            logCallback('✅ Terraform service initialized');
-            
-            // Create service account key for Terraform
-            logCallback('Step 2: Creating service account credentials for Terraform...');
-            const keyFile = path.join(app.getPath('userData'), 'terraform-sa-key.json');
-            const keyContent = await this.gcpAuth.getServiceAccountKey();
-            await fs.writeFile(keyFile, JSON.stringify(keyContent, null, 2));
-            logCallback('✅ Service account key created');
-            
-            // Get project number for OAuth setup
-            const projectNumber = await this.getProjectNumber(state.projectId);
-            
-            // Initialize Firebase Auth with Terraform
-            logCallback('Step 3: Running Terraform to initialize Firebase Authentication...');
-            logCallback(`  Project ID: ${state.projectId}`);
-            logCallback(`  Project Number: ${projectNumber}`);
-            logCallback(`  Admin Email: ${userEmail}`);
-            logCallback(`  Authorized domains: ${state.projectId}.firebaseapp.com, localhost`);
-            logCallback('  Enabling email/password and anonymous authentication...');
-            
-            
-            await this.terraformService.initializeFirebaseAuth(
-              state.projectId,
-              keyFile,
-              {
-                enableAnonymous: true,
-                authorizedDomains: [
-                  `${state.projectId}.firebaseapp.com`,
-                  'localhost'
-                ],
-                adminEmail: userEmail,
-                projectNumber: projectNumber
-              }
-            );
-            
-            // Clean up key file
-            await fs.unlink(keyFile);
-            logCallback('✅ Cleaned up temporary credentials');
-            
-            logCallback('✅ Firebase Authentication initialized successfully with Terraform!');
-logCallback('✅ Email/password and anonymous authentication are now enabled');
-            
-            // IAP OAuth setup removed - using email/password authentication only
-            logCallback('');
-            logCallback('ℹ️  Google Sign-In is not configured automatically');
-            logCallback('ℹ️  Using email/password authentication only');
-            logCallback('ℹ️  You can manually enable Google Sign-In in Firebase Console if needed');
-            
-            this.stateManager.updateStepResource('setupFirestore', 'authEnabled', true);
-            this.stateManager.updateStepResource('setupFirestore', 'authConfigured', true);
-            return true;
-          } catch (error: any) {
-            console.error('Terraform auth initialization failed:', error);
-            logCallback(`❌ Failed to initialize Firebase Authentication: ${error.message}`);
-            logCallback('❌ Firebase Authentication must be initialized manually in the Firebase Console');
-            logCallback('❌ Go to: https://console.firebase.google.com/project/' + state.projectId + '/authentication/providers');
-            logCallback('❌ Click "Get Started" and enable Email/Password authentication');
-            
-            this.stateManager.updateStepResource('setupFirestore', 'authEnabled', false);
-            this.stateManager.updateStepResource('setupFirestore', 'authConfigured', false);
-            throw new Error(`Firebase Auth initialization failed: ${error.message}`);
-          }
-        },
-        critical: true
-      },
-      {
-        name: 'Firebase Storage',
-        fn: async () => {
-          const storageBucket = await this.firestoreDeployer!.enableFirebaseStorage(
-            state.projectId,
-            state.region,
-            logCallback
-          );
-          this.stateManager.updateStepResource('setupFirestore', 'storageBucket', storageBucket);
-          return storageBucket;
-        },
-        critical: true
+    // Initialize Firebase Authentication with Terraform
+    try {
+      logCallback('=== Initializing Firebase Authentication with Terraform ===');
+      
+      if (!this.terraformService) {
+        throw new Error('Terraform service not initialized. Cannot proceed with Firebase Auth setup.');
       }
-    ];
-
-    console.log('Enabling Firebase Authentication and Storage in parallel...');
-    const setupResults = await ParallelExecutor.executeBatch<any>(firebaseSetupTasks, {
-      maxConcurrency: 2,
-      stopOnError: true
-    });
-
-    // Check for failures
-    const setupFailures = setupResults.filter(r => !r.success);
-    if (setupFailures.length > 0) {
-      throw new Error(`Failed to set up Firebase services: ${setupFailures.map(f => f.name).join(', ')}`);
+      
+      logCallback('Step 1: Initializing Terraform service...');
+      await this.terraformService.initialize();
+      logCallback('✅ Terraform service initialized');
+      
+      // Create service account key for Terraform
+      logCallback('Step 2: Creating service account credentials for Terraform...');
+      const keyFile = path.join(app.getPath('userData'), 'terraform-sa-key.json');
+      const keyContent = await this.gcpAuth.getServiceAccountKey();
+      await fs.writeFile(keyFile, JSON.stringify(keyContent, null, 2));
+      logCallback('✅ Service account key created');
+      
+      // Get project number for OAuth setup
+      const projectNumber = await this.getProjectNumber(state.projectId);
+      
+      // Initialize Firebase Auth with Terraform
+      logCallback('Step 3: Running Terraform to initialize Firebase Authentication...');
+      logCallback(`  Project ID: ${state.projectId}`);
+      logCallback(`  Project Number: ${projectNumber}`);
+      logCallback(`  Admin Email: ${userEmail}`);
+      logCallback(`  Authorized domains: ${state.projectId}.firebaseapp.com, localhost`);
+      logCallback('  Enabling email/password and anonymous authentication...');
+      
+      await this.terraformService.initializeFirebaseAuth(
+        state.projectId,
+        keyFile,
+        {
+          enableAnonymous: true,
+          authorizedDomains: [
+            `${state.projectId}.firebaseapp.com`,
+            'localhost'
+          ],
+          adminEmail: userEmail,
+          projectNumber: projectNumber
+        }
+      );
+      
+      // Clean up key file
+      await fs.unlink(keyFile);
+      logCallback('✅ Cleaned up temporary credentials');
+      
+      logCallback('✅ Firebase Authentication initialized successfully with Terraform!');
+      logCallback('✅ Email/password and anonymous authentication are now enabled');
+      
+      // IAP OAuth setup removed - using email/password authentication only
+      logCallback('');
+      logCallback('ℹ️  Google Sign-In is not configured automatically');
+      logCallback('ℹ️  Using email/password authentication only');
+      logCallback('ℹ️  You can manually enable Google Sign-In in Firebase Console if needed');
+      
+      this.stateManager.updateStepResource('setupFirestore', 'authEnabled', true);
+      this.stateManager.updateStepResource('setupFirestore', 'authConfigured', true);
+      
+    } catch (error: any) {
+      console.error('Terraform auth initialization failed:', error);
+      logCallback(`❌ Failed to initialize Firebase Authentication: ${error.message}`);
+      logCallback('❌ Firebase Authentication must be initialized manually in the Firebase Console');
+      logCallback('❌ Go to: https://console.firebase.google.com/project/' + state.projectId + '/authentication/providers');
+      logCallback('❌ Click "Get Started" and enable Email/Password authentication');
+      
+      this.stateManager.updateStepResource('setupFirestore', 'authEnabled', false);
+      this.stateManager.updateStepResource('setupFirestore', 'authConfigured', false);
+      throw new Error(`Firebase Auth initialization failed: ${error.message}`);
     }
 
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 50,
       totalProgress: 87.5,
-      message: 'Deploying security rules...',
+      message: 'Deploying Firestore security rules and indexes...',
     });
     
-    // Deploy security rules (this needs to happen after storage bucket exists)
-    await this.firestoreDeployer.deploySecurityRules(state.projectId, logCallback);
+    // Deploy Firestore security rules and indexes only (no Firebase Storage)
+    await this.firestoreRulesDeployer.deploySecurityRules(state.projectId, logCallback);
     this.stateManager.updateStepResource('setupFirestore', 'databaseId', '(default)');
     this.stateManager.updateStepResource('setupFirestore', 'rulesDeployed', true);
     
@@ -1260,7 +1216,7 @@ logCallback('✅ Email/password and anonymous authentication are now enabled');
       currentStep: 'setupFirestore',
       stepProgress: 100,
       totalProgress: 87.5,
-      message: 'Firebase setup complete - Auth, Storage, and security rules configured',
+      message: 'Firebase setup complete - Auth and Firestore configured',
     });
   }
 
@@ -1283,6 +1239,10 @@ logCallback('✅ Email/password and anonymous authentication are now enabled');
     const appName = `anava-${state.configuration.namePrefix}`;
     const displayName = `Anava Camera Auth - ${state.configuration.namePrefix}`;
     
+    // Get the storage bucket that was created during setupFirestore step
+    const storageBucket = this.getResourceValue('setupFirestore', 'storageBucket');
+    console.log(`Using storage bucket from setupFirestore step: ${storageBucket}`);
+    
     // Step 1: Create the web app
     this.emitProgress({
       currentStep: 'createFirebaseWebApp',
@@ -1295,7 +1255,8 @@ logCallback('✅ Email/password and anonymous authentication are now enabled');
     const firebaseConfig = await this.firebaseAppDeployer.createFirebaseWebApp(
       state.projectId,
       appName,
-      displayName
+      displayName,
+      storageBucket
     );
 
     this.stateManager.updateStepResource('createFirebaseWebApp', 'config', firebaseConfig);
