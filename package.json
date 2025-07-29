@@ -1,11 +1,12 @@
 {
   "name": "anava-vision",
-  "version": "0.9.45",
+  "version": "0.9.50",
   "description": "Anava Vision - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "npm run build:main && NODE_ENV=development electron .",
     "download-terraform": "node scripts/download-terraform.js",
+    "download-terraform-win": "node scripts/download-terraform-win.js",
     "dev:renderer": "vite --config vite.config.ts",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
@@ -72,6 +73,10 @@
       {
         "from": "terraform-bin",
         "to": "terraform-bin"
+      },
+      {
+        "from": "firestore-indexes.json",
+        "to": "firestore-indexes.json"
       }
     ],
     "mac": {

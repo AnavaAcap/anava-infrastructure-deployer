@@ -5,7 +5,7 @@ import path from 'path';
 import { app } from 'electron';
 import axios from 'axios';
 
-export class FirestoreDeployer {
+export class FirestoreRulesDeployer {
   private firebaserules = google.firebaserules('v1');
   private firestore = google.firestore('v1');
   private adminEmail?: string;
@@ -102,8 +102,7 @@ export class FirestoreDeployer {
     log('Deploying Firebase Storage security rules...');
     
     // First ensure storage bucket exists and configure CORS
-    // Use default region us-central for rules deployment context
-    await this.ensureStorageBucketExists(projectId, 'us-central1', log);
+    await this.ensureStorageBucketExists(projectId, log);
     
     // Read Storage rules template
     const rulesPath = path.join(
@@ -251,13 +250,11 @@ export class FirestoreDeployer {
 
   private async ensureStorageBucketExists(
     projectId: string,
-    region: string,
     log: (message: string) => void
   ): Promise<string> {
     log('Checking if Firebase Storage bucket exists...');
     
     const storage = google.storage({ version: 'v1', auth: this.auth });
-    const projectNumber = await this.getProjectNumber(projectId);
     
     // Try multiple bucket naming patterns
     const bucketPatterns = [
@@ -275,26 +272,8 @@ export class FirestoreDeployer {
         });
         
         log(`Firebase Storage bucket already exists: ${bucket.name}`);
-        
-        // Link existing bucket to Firebase if needed
-        try {
-          await this.linkBucketToFirebase(projectId, bucketName, log);
-        } catch (linkError: any) {
-          log(`⚠️  Could not link existing bucket to Firebase: ${linkError.message}`);
-          log(`⚠️  Bucket exists but may have limited Firebase features`);
-        }
-        
-        // Configure CORS
-        try {
-          await this.configureBucketCORS(bucketName, projectId, log);
-        } catch (corsError: any) {
-          log(`⚠️  Could not configure CORS: ${corsError.message}`);
-          log(`⚠️  You may need to configure CORS manually`);
-        }
-        
-        // Grant permissions to service agent
-        await this.grantStorageAdminToServiceAgent(projectId, projectNumber, log);
-        
+        await this.configureBucketCORS(bucketName, projectId, log);
+        await this.finalizeFirebaseStorageBucket(projectId, bucketName, log);
         return bucketName;
       } catch (error: any) {
         if (error.code !== 404) {
@@ -312,11 +291,8 @@ export class FirestoreDeployer {
       
       log('Creating default Firebase Storage bucket via Firebase API...');
       
-      // Convert region to storage location format
-      const locationId = this.convertRegionToStorageLocation(region);
-      
       await axios.post(addDefaultBucketUrl, {
-        locationId: locationId
+        // The API will create the default bucket with the right name
       }, {
         headers: {
           'Authorization': `Bearer ${accessToken.token}`,
@@ -334,56 +310,14 @@ export class FirestoreDeployer {
       // Configure CORS for the new bucket
       await this.configureBucketCORS(defaultBucketName, projectId, log);
       
-      // Grant permissions to service agent (it should exist after defaultBucket:add)
-      await this.grantStorageAdminToServiceAgent(projectId, projectNumber, log);
+      // The bucket is already linked to Firebase since we used the defaultBucket:add API
+      // But we still need to set up the service agent permissions
+      await this.finalizeFirebaseStorageBucket(projectId, defaultBucketName, log);
       
       return defaultBucketName;
       
     } catch (defaultBucketError: any) {
-      const errorMessage = defaultBucketError.response?.data?.error?.message || '';
-      
-      // Check if it's the API not enabled error
-      if (errorMessage.includes('has not been used in project') || 
-          errorMessage.includes('is disabled') ||
-          errorMessage.includes('SERVICE_DISABLED')) {
-        log(`⚠️  Firebase Storage API not ready yet, waiting 30 seconds...`);
-        await new Promise(resolve => setTimeout(resolve, 30000));
-        
-        // Retry once
-        try {
-          const retryAccessToken = await this.auth.getAccessToken();
-          const retryDefaultBucketUrl = `https://firebase.googleapis.com/v1beta1/projects/${projectId}/defaultBucket:add`;
-          const retryLocationId = this.convertRegionToStorageLocation(region);
-          
-          await axios.post(retryDefaultBucketUrl, {
-            locationId: retryLocationId
-          }, {
-            headers: {
-              'Authorization': `Bearer ${retryAccessToken.token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          const defaultBucketName = `${projectId}.appspot.com`;
-          log(`✅ Default Firebase Storage bucket created successfully (on retry): ${defaultBucketName}`);
-          
-          // Wait for bucket to be ready
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          
-          // Configure CORS for the new bucket
-          await this.configureBucketCORS(defaultBucketName, projectId, log);
-          
-          // Grant permissions to service agent
-          await this.grantStorageAdminToServiceAgent(projectId, projectNumber, log);
-          
-          return defaultBucketName;
-        } catch (retryError: any) {
-          log(`❌ Retry failed: ${retryError.response?.data?.error?.message || retryError.message}`);
-        }
-      }
-      
-      if (defaultBucketError.response?.status === 409 || 
-          errorMessage.includes('already exists')) {
+      if (defaultBucketError.response?.status === 409) {
         // Bucket might already exist, let's check again
         const defaultBucketName = `${projectId}.appspot.com`;
         try {
@@ -392,24 +326,8 @@ export class FirestoreDeployer {
             auth: this.auth
           });
           log(`✅ Default Firebase Storage bucket already exists: ${bucket.name}`);
-          
-          // Link to Firebase if needed
-          try {
-            await this.linkBucketToFirebase(projectId, defaultBucketName, log);
-          } catch (linkError: any) {
-            log(`⚠️  Could not link existing bucket to Firebase: ${linkError.message}`);
-          }
-          
-          // Configure CORS
-          try {
-            await this.configureBucketCORS(defaultBucketName, projectId, log);
-          } catch (corsError: any) {
-            log(`⚠️  Could not configure CORS: ${corsError.message}`);
-          }
-          
-          // Grant permissions to service agent
-          await this.grantStorageAdminToServiceAgent(projectId, projectNumber, log);
-          
+          await this.configureBucketCORS(defaultBucketName, projectId, log);
+          await this.finalizeFirebaseStorageBucket(projectId, defaultBucketName, log);
           return defaultBucketName;
         } catch (checkError: any) {
           log(`⚠️  Could not verify default bucket after creation: ${checkError.message}`);
@@ -444,24 +362,8 @@ export class FirestoreDeployer {
         
         log(`Created custom Firebase Storage bucket: ${customBucketName}`);
         await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        // Link custom bucket to Firebase
-        try {
-          await this.linkBucketToFirebase(projectId, customBucketName, log);
-        } catch (linkError: any) {
-          log(`⚠️  Could not link custom bucket to Firebase: ${linkError.message}`);
-        }
-        
-        // Configure CORS
-        try {
-          await this.configureBucketCORS(customBucketName, projectId, log);
-        } catch (corsError: any) {
-          log(`⚠️  Could not configure CORS: ${corsError.message}`);
-        }
-        
-        // Grant permissions to service agent
-        await this.grantStorageAdminToServiceAgent(projectId, projectNumber, log);
-        
+        await this.configureBucketCORS(customBucketName, projectId, log);
+        await this.finalizeFirebaseStorageBucket(projectId, customBucketName, log);
         return customBucketName;
         
       } catch (createError: any) {
@@ -559,83 +461,127 @@ export class FirestoreDeployer {
     }
   }
 
-  private async linkBucketToFirebase(
+  private async finalizeFirebaseStorageBucket(
     projectId: string,
     bucketName: string,
     log: (message: string) => void
   ): Promise<void> {
-    // Only link non-default buckets to Firebase
-    // Default buckets (.appspot.com) are automatically linked when created via defaultBucket:add
-    if (bucketName.endsWith('.appspot.com')) {
-      log(`Default bucket ${bucketName} is already linked to Firebase`);
-      return;
-    }
-    
     log(`Linking ${bucketName} to Firebase Storage...`);
     
     try {
       const accessToken = await this.auth.getAccessToken();
-      const addFirebaseUrl = `https://firebasestorage.googleapis.com/v1beta/projects/${projectId}/buckets/${bucketName}:addFirebase`;
+      const projectNumber = await this.getProjectNumber(projectId);
       
-      await axios.post(addFirebaseUrl, {}, {
-        headers: {
-          'Authorization': `Bearer ${accessToken.token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // Check if this is the default bucket pattern
+      const isDefaultBucket = bucketName.endsWith('.appspot.com');
       
-      log(`✅ Bucket ${bucketName} successfully linked to Firebase Storage`);
-      
-      // The service agent should now exist after calling addFirebase
-      // Let's wait a moment for it to be created
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
-    } catch (error: any) {
-      if (error.response?.status === 409) {
-        log(`✅ Bucket ${bucketName} already linked to Firebase Storage`);
-        return;
-      } else if (error.response?.status === 403) {
-        const errorMessage = error.response?.data?.error?.message || '';
-        
-        // Check if it's the API not enabled error
-        if (errorMessage.includes('has not been used in project') || 
-            errorMessage.includes('is disabled') ||
-            errorMessage.includes('SERVICE_DISABLED')) {
-          log(`⚠️  Firebase Storage API not ready yet, waiting 30 seconds...`);
-          await new Promise(resolve => setTimeout(resolve, 30000));
+      if (isDefaultBucket) {
+        // For default bucket, use the defaultBucket:add API
+        log('Creating default Firebase Storage bucket...');
+        try {
+          const addDefaultBucketUrl = `https://firebase.googleapis.com/v1beta1/projects/${projectId}/defaultBucket:add`;
           
-          // Retry once
-          try {
-            const retryAccessToken = await this.auth.getAccessToken();
-            const retryAddFirebaseUrl = `https://firebasestorage.googleapis.com/v1beta/projects/${projectId}/buckets/${bucketName}:addFirebase`;
-            
-            await axios.post(retryAddFirebaseUrl, {}, {
-              headers: {
-                'Authorization': `Bearer ${retryAccessToken.token}`,
-                'Content-Type': 'application/json'
-              }
-            });
-            
-            log(`✅ Bucket ${bucketName} successfully linked to Firebase Storage (on retry)`);
-            
-            // Wait for service agent to be created
-            await new Promise(resolve => setTimeout(resolve, 5000));
-            
-            return;
-            
-          } catch (retryError: any) {
-            log(`❌ Failed to link bucket to Firebase: ${retryError.response?.data?.error?.message || retryError.message}`);
-            // Don't throw on retry failure - continue with deployment
-            log(`⚠️  Continuing without Firebase linking - bucket may have limited Firebase features`);
+          await axios.post(addDefaultBucketUrl, {
+            // The API will create the default bucket with the right name
+          }, {
+            headers: {
+              'Authorization': `Bearer ${accessToken.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          log(`✅ Default Firebase Storage bucket created successfully`);
+          return;
+        } catch (defaultError: any) {
+          if (defaultError.response?.status === 409) {
+            log(`✅ Default Firebase Storage bucket already exists`);
             return;
           }
+          log(`⚠️  Could not create default bucket: ${defaultError.response?.data?.error?.message || defaultError.message}`);
+        }
+      } else {
+        // For custom buckets, use buckets:addFirebase API
+        try {
+          const addFirebaseUrl = `https://firebasestorage.googleapis.com/v1beta/projects/${projectId}/buckets/${bucketName}:addFirebase`;
+          
+          await axios.post(addFirebaseUrl, {}, {
+            headers: {
+              'Authorization': `Bearer ${accessToken.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          log(`✅ Bucket ${bucketName} successfully linked to Firebase Storage`);
+          
+          // Now assign Storage Admin role to the Firebase Storage service agent
+          const firebaseStorageSA = `service-${projectNumber}@gcp-sa-firebasestorage.iam.gserviceaccount.com`;
+          log(`Assigning Storage Admin role to Firebase Storage service agent: ${firebaseStorageSA}`);
+          
+          try {
+            const { google } = await import('googleapis');
+            const cloudResourceManager = google.cloudresourcemanager({
+              version: 'v1',
+              auth: this.auth
+            });
+            
+            // Get current IAM policy
+            const { data: policy } = await cloudResourceManager.projects.getIamPolicy({
+              resource: projectId,
+              requestBody: {}
+            });
+            
+            // Add Storage Admin role
+            const role = 'roles/storage.admin';
+            const member = `serviceAccount:${firebaseStorageSA}`;
+            
+            const binding = policy.bindings?.find(b => b.role === role);
+            if (binding) {
+              if (!binding.members) {
+                binding.members = [];
+              }
+              if (!binding.members.includes(member)) {
+                binding.members.push(member);
+              }
+            } else {
+              policy.bindings = policy.bindings || [];
+              policy.bindings.push({
+                role,
+                members: [member]
+              });
+            }
+            
+            // Update IAM policy
+            await cloudResourceManager.projects.setIamPolicy({
+              resource: projectId,
+              requestBody: { policy }
+            });
+            
+            log(`✅ Successfully assigned Storage Admin role to Firebase Storage service agent`);
+          } catch (iamError: any) {
+            log(`⚠️  Could not assign Storage Admin role: ${iamError.message}`);
+            log(`⚠️  You may need to manually grant this permission for Firebase Storage to work properly`);
+          }
+          
+          return;
+          
+        } catch (addFirebaseError: any) {
+          if (addFirebaseError.response?.status === 409) {
+            log(`✅ Bucket ${bucketName} already linked to Firebase Storage`);
+            return;
+          } else if (addFirebaseError.response?.status === 403) {
+            log(`❌ Permission denied linking bucket to Firebase`);
+            log(`⚠️  The Firebase Storage service agent (service-${projectNumber}@gcp-sa-firebasestorage.iam.gserviceaccount.com) needs Storage Admin role`);
+            log(`⚠️  Grant this permission in IAM console or via: gcloud projects add-iam-policy-binding ${projectId} --member="serviceAccount:service-${projectNumber}@gcp-sa-firebasestorage.iam.gserviceaccount.com" --role="roles/storage.admin"`);
+          }
+          
+          log(`⚠️  buckets:addFirebase failed: ${addFirebaseError.response?.data?.error?.message || addFirebaseError.message}`);
         }
       }
       
-      log(`⚠️  Could not link bucket to Firebase: ${error.response?.data?.error?.message || error.message}`);
-      // Don't throw - bucket exists but may not be fully linked to Firebase
-      // This is not critical enough to fail the entire deployment
-      log(`⚠️  Continuing without Firebase linking - bucket may have limited Firebase features`);
+    } catch (error: any) {
+      log(`⚠️  Warning: Could not link Firebase Storage bucket: ${error.response?.data?.error?.message || error.message}`);
+      log(`⚠️  The bucket exists but may not be fully integrated with Firebase`);
+      // Don't throw - this is not critical enough to fail the entire deployment
     }
   }
 
@@ -921,7 +867,6 @@ export class FirestoreDeployer {
 
   async enableFirebaseStorage(
     projectId: string,
-    region: string,
     logCallback?: (message: string) => void
   ): Promise<string> {
     const log = (message: string) => {
@@ -933,45 +878,16 @@ export class FirestoreDeployer {
     try {
       // Firebase Storage is essentially a GCS bucket with special configuration
       // We'll create/ensure the default Firebase storage bucket exists
-      return await this.ensureStorageBucketExists(projectId, region, log);
+      return await this.ensureStorageBucketExists(projectId, log);
       
     } catch (error: any) {
       log(`❌ Failed to enable Firebase Storage: ${error.message}`);
-      
-      // Check if a bucket exists even though setup failed
-      const storage = google.storage({ version: 'v1', auth: this.auth });
-      const bucketPatterns = [
-        `${projectId}.appspot.com`,
-        `${projectId}.firebasestorage.app`,
-        `${projectId}-firebase-storage`
-      ];
-      
-      for (const bucketName of bucketPatterns) {
-        try {
-          await storage.buckets.get({
-            bucket: bucketName,
-            auth: this.auth
-          });
-          
-          log(`⚠️  Firebase Storage setup failed but bucket ${bucketName} exists`);
-          log(`⚠️  You may need to complete Firebase Storage setup manually in the Firebase Console`);
-          return bucketName; // Return existing bucket name to allow deployment to continue
-        } catch (checkError: any) {
-          // Continue checking other bucket names
-        }
-      }
-      
-      // Only throw if no bucket exists at all
       throw new Error(`Firebase Storage enablement failed: ${error.message}`);
     }
   }
 
   getAdminEmail(): string | undefined {
     return this.adminEmail;
-  }
-
-  setAdminEmail(email: string): void {
-    this.adminEmail = email;
   }
 
   private async getProjectNumber(projectId: string): Promise<string> {
@@ -990,102 +906,5 @@ export class FirestoreDeployer {
       console.error('Error getting project number:', error);
       return '';
     }
-  }
-
-  private async grantStorageAdminToServiceAgent(
-    projectId: string,
-    projectNumber: string,
-    log: (message: string) => void
-  ): Promise<void> {
-    const firebaseStorageSA = `service-${projectNumber}@gcp-sa-firebasestorage.iam.gserviceaccount.com`;
-    log(`Assigning Storage Admin role to Firebase Storage service agent: ${firebaseStorageSA}`);
-    
-    try {
-      const { google } = await import('googleapis');
-      const cloudResourceManager = google.cloudresourcemanager({
-        version: 'v1',
-        auth: this.auth
-      });
-      
-      // Get current IAM policy
-      const { data: policy } = await cloudResourceManager.projects.getIamPolicy({
-        resource: projectId,
-        requestBody: {}
-      });
-      
-      // Add Storage Admin role
-      const role = 'roles/storage.admin';
-      const member = `serviceAccount:${firebaseStorageSA}`;
-      
-      const binding = policy.bindings?.find(b => b.role === role);
-      if (binding) {
-        if (!binding.members) {
-          binding.members = [];
-        }
-        if (!binding.members.includes(member)) {
-          binding.members.push(member);
-        }
-      } else {
-        policy.bindings = policy.bindings || [];
-        policy.bindings.push({
-          role,
-          members: [member]
-        });
-      }
-      
-      // Update IAM policy
-      await cloudResourceManager.projects.setIamPolicy({
-        resource: projectId,
-        requestBody: { policy }
-      });
-      
-      log(`✅ Successfully assigned Storage Admin role to Firebase Storage service agent`);
-    } catch (iamError: any) {
-      log(`⚠️  Could not assign Storage Admin role: ${iamError.message}`);
-      log(`⚠️  You may need to manually grant this permission for Firebase Storage to work properly`);
-    }
-  }
-
-  private convertRegionToStorageLocation(region: string): string {
-    // Map compute engine regions to Cloud Storage locations
-    // Cloud Storage uses multi-region or dual-region locations
-    
-    // US regions
-    if (region.startsWith('us-central') || region.startsWith('us-west') || region.startsWith('us-east') || region.startsWith('us-south')) {
-      return 'us-central';
-    }
-    
-    // Europe regions
-    if (region.startsWith('europe-')) {
-      return 'eu';
-    }
-    
-    // Asia regions
-    if (region.startsWith('asia-')) {
-      return 'asia';
-    }
-    
-    // Australia regions
-    if (region.startsWith('australia-')) {
-      return 'australia-southeast1';
-    }
-    
-    // North America regions
-    if (region.startsWith('northamerica-')) {
-      return 'us-central';
-    }
-    
-    // South America regions
-    if (region.startsWith('southamerica-')) {
-      return 'southamerica-east1';
-    }
-    
-    // Middle East regions
-    if (region.startsWith('me-')) {
-      return 'me-central2';
-    }
-    
-    // Default to us-central
-    return 'us-central';
   }
 }

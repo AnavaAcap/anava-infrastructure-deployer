@@ -31,7 +31,7 @@ export class CameraConfigurationService {
           apiKey: deploymentConfig.firebaseApiKey,
           authDomain: `${deploymentConfig.projectId}.firebaseapp.com`,
           projectId: deploymentConfig.projectId,
-          storageBucket: `${deploymentConfig.projectId}.appspot.com`,
+          storageBucket: deploymentConfig.firebaseConfig?.storageBucket || `${deploymentConfig.projectId}.appspot.com`,
           messagingSenderId: deploymentConfig.firebaseConfig?.messagingSenderId || '',
           appId: deploymentConfig.firebaseConfig?.appId || '',
           databaseId: '(default)'

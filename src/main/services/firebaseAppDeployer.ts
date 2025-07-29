@@ -19,7 +19,8 @@ export class FirebaseAppDeployer {
   async createFirebaseWebApp(
     projectId: string,
     appName: string,
-    displayName: string
+    displayName: string,
+    existingStorageBucket?: string
   ): Promise<FirebaseConfig> {
     console.log('=== Starting Firebase Web App creation ===');
     console.log(`Project: ${projectId}, App Name: ${appName}`);
@@ -40,7 +41,7 @@ export class FirebaseAppDeployer {
       
       if (existingApp) {
         console.log(`Web app "${displayName}" already exists`);
-        return await this.getWebAppConfig(existingApp.name!);
+        return await this.getWebAppConfig(existingApp.name!, existingStorageBucket);
       }
       
       // Create new web app
@@ -49,7 +50,7 @@ export class FirebaseAppDeployer {
       console.log(`Web app created: ${webApp.appId}`);
       
       // Get the config
-      const config = await this.getWebAppConfig(webApp.name!);
+      const config = await this.getWebAppConfig(webApp.name!, existingStorageBucket);
       console.log('Firebase config retrieved successfully');
       
       return config;
@@ -143,8 +144,11 @@ export class FirebaseAppDeployer {
     throw new Error('Failed to get created web app details from operation response');
   }
   
-  private async getWebAppConfig(webAppName: string): Promise<FirebaseConfig> {
+  private async getWebAppConfig(webAppName: string, existingStorageBucket?: string): Promise<FirebaseConfig> {
     console.log(`Getting SDK config for web app: ${webAppName}`);
+    if (existingStorageBucket) {
+      console.log(`Using provided storage bucket: ${existingStorageBucket}`);
+    }
     
     // Get the web app details first to ensure it exists
     const { data: webApp } = await this.firebasemanagement.projects.webApps.get({
@@ -168,6 +172,13 @@ export class FirebaseAppDeployer {
     
     if (sdkConfig && sdkConfig.apiKey) {
       console.log('Successfully retrieved SDK config with API key');
+      
+      // If we have an existing storage bucket from state, use it instead of what SDK config returned
+      if (existingStorageBucket) {
+        console.log(`Overriding SDK config storageBucket (${sdkConfig.storageBucket}) with state bucket (${existingStorageBucket})`);
+        sdkConfig.storageBucket = existingStorageBucket;
+      }
+      
       return sdkConfig;
     }
     
@@ -186,13 +197,18 @@ export class FirebaseAppDeployer {
       apiKey: apiKey,
       authDomain: `${projectId}.firebaseapp.com`,
       projectId: projectId,
-      storageBucket: `${projectId}.firebasestorage.app`,
+      storageBucket: existingStorageBucket || `${projectId}.firebasestorage.app`,
       messagingSenderId: projectNumber,
       appId: appId,
       measurementId: undefined // This would need Analytics to be enabled
     };
     
     console.log('Manually constructed Firebase config:', JSON.stringify(finalConfig, null, 2));
+    if (existingStorageBucket) {
+      console.log(`Used provided storage bucket: ${existingStorageBucket}`);
+    } else {
+      console.log(`Used fallback storage bucket: ${projectId}.firebasestorage.app`);
+    }
     return finalConfig;
   }
   
