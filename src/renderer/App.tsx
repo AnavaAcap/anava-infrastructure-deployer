@@ -6,7 +6,7 @@ import AIModeSelectionPage from './pages/AIModeSelectionPage';
 import ConfigurationPage from './pages/ConfigurationPage';
 import DeploymentPage from './pages/DeploymentPage';
 import CompletionPage from './pages/CompletionPage';
-import { CameraDiscoveryPage } from './pages/camera/CameraDiscoveryPage';
+import { EnhancedCameraDiscoveryPage } from './pages/camera/EnhancedCameraDiscoveryPage';
 import { ACAPDeploymentPage } from './pages/camera/ACAPDeploymentPage';
 import { ACAPManager } from './pages/camera/ACAPManager';
 import NavigationSidebar, { NavigationView } from './components/NavigationSidebar';
@@ -180,7 +180,7 @@ function App() {
 
       case 'camera-discovery':
         return (
-          <CameraDiscoveryPage
+          <EnhancedCameraDiscoveryPage
             onCamerasSelected={handleCamerasSelected}
             deploymentConfig={deploymentResult}
             onSkip={() => setCurrentView('welcome')}

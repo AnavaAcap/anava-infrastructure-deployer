@@ -34,6 +34,8 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
   const [aiStudioApiKey, setAiStudioApiKey] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [anavaKey, setAnavaKey] = useState('');
+  const [customerId, setCustomerId] = useState('');
 
   const handleDeploy = () => {
     // Automatically configure CORS for Anava cameras
@@ -52,6 +54,8 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
       aiMode,
       aiStudioApiKey: aiMode === 'ai-studio' ? aiStudioApiKey : undefined,
       adminPassword,
+      anavaKey,
+      customerId,
     };
 
     onComplete(config);
@@ -215,6 +219,28 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
             ),
           }}
           sx={{ mt: 2 }}
+        />
+        
+        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 3 }}>
+          Anava Configuration
+        </Typography>
+        
+        <TextField
+          fullWidth
+          label="Anava Key"
+          value={anavaKey}
+          onChange={(e) => setAnavaKey(e.target.value)}
+          helperText="Your Anava license key (optional)"
+          placeholder="Enter your Anava key"
+        />
+        
+        <TextField
+          fullWidth
+          label="Customer ID"
+          value={customerId}
+          onChange={(e) => setCustomerId(e.target.value)}
+          helperText="Your customer identifier (optional)"
+          placeholder="Enter your customer ID"
         />
       </Stack>
       

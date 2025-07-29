@@ -21,6 +21,8 @@ export interface DeploymentConfig {
   aiMode?: 'vertex' | 'ai-studio';  // Which AI path to use
   aiStudioApiKey?: string;           // API key for AI Studio
   adminPassword?: string;            // Password for admin user
+  anavaKey?: string;                 // Anava license key
+  customerId?: string;               // Customer identifier
 }
 
 export interface DeploymentSteps {
@@ -76,6 +78,7 @@ export interface DeploymentResult {
   warning?: string;
   aiMode?: 'vertex' | 'ai-studio';
   aiStudioApiKey?: string;
+  gcsBucketName?: string;
 }
 
 export interface AuthStatus {

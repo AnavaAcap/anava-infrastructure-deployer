@@ -55,7 +55,7 @@ declare global {
       listBillingAccounts: () => Promise<{ accounts: any[]; error?: string }>;
       testAuthStep: (params: any) => Promise<any>;
       // Camera-related APIs
-      scanNetworkCameras: () => Promise<any[]>;
+      scanNetworkCameras: (options?: { networkRange?: string }) => Promise<any[]>;
       onCameraScanProgress: (callback: (data: { ip: string; status: string }) => void) => () => void;
       quickScanCamera: (ip: string, username: string, password: string) => Promise<any[]>;
       testCameraCredentials: (cameraId: string, ip: string, username: string, password: string) => Promise<any>;
@@ -63,11 +63,20 @@ declare global {
       uninstallACAP: (camera: any, appName: string) => Promise<any>;
       listInstalledACAPs: (camera: any) => Promise<string[]>;
       configureCamera: (camera: any, config: any) => Promise<any>;
+      pushCameraSettings: (ip: string, username: string, password: string, configPayload: any) => Promise<any>;
+      getCameraSettings: (ip: string, username: string, password: string) => Promise<any>;
+      getNetworkInterfaces: () => Promise<any[]>;
       // ACAP download APIs
       acap: {
         getReleases: () => Promise<any[]>;
         download: (release: any) => Promise<any>;
         getLocalPath: (filename: string) => Promise<string>;
+      };
+      // Config cache APIs
+      config: {
+        getCached: () => Promise<any>;
+        getAllCached: () => Promise<any[]>;
+        clearCached: () => Promise<boolean>;
       };
     };
   }

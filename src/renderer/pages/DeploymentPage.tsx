@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Button,
@@ -43,8 +43,18 @@ interface DeploymentPageProps {
   onLogout?: () => void;
 }
 
+interface StepDefinition {
+  key: string;
+  label: string;
+  note?: string;
+  subSteps?: Array<{
+    key: string;
+    label: string;
+  }>;
+}
+
 // Get deployment steps based on AI mode
-const getDeploymentSteps = (config: DeploymentConfig | null) => {
+const getDeploymentSteps = (config: DeploymentConfig | null): StepDefinition[] => {
   if (config?.aiMode === 'ai-studio') {
     // Minimal steps for AI Studio mode
     return [
@@ -54,7 +64,7 @@ const getDeploymentSteps = (config: DeploymentConfig | null) => {
     ];
   }
 
-  // Full deployment steps for Vertex AI mode
+  // Full deployment steps for Vertex AI mode - FIXED ORDER
   return [
     { key: 'authenticate', label: 'Authentication' },
     { key: 'enableApis', label: 'Enable APIs' },
@@ -77,6 +87,15 @@ const getDeploymentSteps = (config: DeploymentConfig | null) => {
   ];
 };
 
+interface StepStatus {
+  status: 'pending' | 'in_progress' | 'completed' | 'error';
+  progress: number;
+  message?: string;
+  subStep?: string;
+  elapsedTime?: number;
+  lastUpdate?: number;
+}
+
 const DeploymentPage: React.FC<DeploymentPageProps> = ({
   project,
   config,
@@ -93,80 +112,152 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
   
   // Get deployment steps based on AI mode
   const deploymentSteps = getDeploymentSteps(config);
+  
+  // Track step statuses separately to maintain order
+  const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>(() => {
+    const initial: Record<string, StepStatus> = {};
+    deploymentSteps.forEach(step => {
+      initial[step.key] = { status: 'pending', progress: 0 };
+    });
+    return initial;
+  });
+  
+  const stepTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
 
   useEffect(() => {
     // Set up event listeners
     window.electronAPI.deployment.onProgress((prog) => {
       setProgress(prog);
-      // Don't add progress messages to logs anymore, we'll use dedicated log messages
+      
+      // Update step statuses based on progress
+      if (prog.currentStep) {
+        setStepStatuses(prev => {
+          const updated = { ...prev };
+          
+          // Mark all previous steps as completed
+          let foundCurrent = false;
+          deploymentSteps.forEach(step => {
+            if (step.key === prog.currentStep) {
+              foundCurrent = true;
+              updated[step.key] = {
+                status: 'in_progress',
+                progress: prog.stepProgress || 0,
+                message: prog.message || prog.detail,
+                subStep: prog.subStep,
+                lastUpdate: Date.now()
+              };
+              
+              // Start elapsed time tracking
+              if (!stepTimersRef.current[step.key]) {
+                const startTime = Date.now();
+                stepTimersRef.current[step.key] = setInterval(() => {
+                  setStepStatuses(s => ({
+                    ...s,
+                    [step.key]: {
+                      ...s[step.key],
+                      elapsedTime: Math.floor((Date.now() - startTime) / 1000)
+                    }
+                  }));
+                }, 1000);
+              }
+            } else if (!foundCurrent && updated[step.key].status !== 'completed') {
+              // Mark previous steps as completed
+              updated[step.key] = {
+                status: 'completed',
+                progress: 100,
+                message: updated[step.key].message
+              };
+              // Clear timer
+              if (stepTimersRef.current[step.key]) {
+                clearInterval(stepTimersRef.current[step.key]);
+                delete stepTimersRef.current[step.key];
+              }
+            }
+          });
+          
+          return updated;
+        });
+      }
     });
-    
+
     window.electronAPI.deployment.onLog((message) => {
-      addLog(`${new Date().toLocaleTimeString()} ${message}`);
+      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
     });
 
     window.electronAPI.deployment.onError((err) => {
       setError(err.message || 'An error occurred during deployment');
-      addLog(`ERROR: ${err.message}`);
+      
+      // Mark current step as error
+      if (progress?.currentStep) {
+        setStepStatuses(prev => ({
+          ...prev,
+          [progress.currentStep]: {
+            ...prev[progress.currentStep],
+            status: 'error',
+            message: err.message
+          }
+        }));
+      }
     });
 
     window.electronAPI.deployment.onComplete((result) => {
-      if (result.success) {
-        addLog('Deployment completed successfully!');
-      }
+      // Mark all steps as completed
+      setStepStatuses(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(key => {
+          updated[key] = { ...updated[key], status: 'completed', progress: 100 };
+        });
+        return updated;
+      });
+      
+      // Clear all timers
+      Object.values(stepTimersRef.current).forEach(timer => clearInterval(timer));
+      stepTimersRef.current = {};
+      
       onComplete(result);
     });
 
     // Start deployment
-    if (existingDeployment) {
-      window.electronAPI.deployment.resume(existingDeployment.deploymentId);
-    } else if (config) {
-      window.electronAPI.deployment.start({
-        ...config,
-        projectId: project.projectId,
-      });
+    if (config && !existingDeployment) {
+      window.electronAPI.deployment.start(config);
+    } else if (existingDeployment) {
+      window.electronAPI.deployment.resume(existingDeployment.id);
     }
 
     return () => {
-      // Cleanup would go here
+      // Cleanup timers
+      Object.values(stepTimersRef.current).forEach(timer => clearInterval(timer));
     };
-  }, []);
+  }, [config, existingDeployment, onComplete]);
 
-  const addLog = (message: string) => {
-    setLogs(prev => [...prev, message]);
-  };
-
-  const handlePause = async () => {
+  const handlePause = () => {
     if (isPaused) {
-      // Resume
-      if (existingDeployment) {
-        await window.electronAPI.deployment.resume(existingDeployment.deploymentId);
-      }
+      window.electronAPI.deployment.resume(existingDeployment?.id || '');
     } else {
-      // Pause
-      await window.electronAPI.deployment.pause();
+      window.electronAPI.deployment.pause();
     }
     setIsPaused(!isPaused);
   };
 
-  const getStepStatus = (stepKey: string) => {
-    if (!progress) return 'pending';
-    if (progress.currentStep === stepKey) return 'in_progress';
-    
-    const stepIndex = deploymentSteps.findIndex(s => s.key === stepKey);
-    const currentIndex = deploymentSteps.findIndex(s => s.key === progress.currentStep);
-    
-    if (stepIndex < currentIndex) return 'completed';
-    return 'pending';
+  const formatElapsedTime = (seconds?: number): string => {
+    if (!seconds) return '';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s elapsed`;
   };
 
-  const getStepIcon = (status: string) => {
+  const getStepIcon = (status: StepStatus['status']) => {
     switch (status) {
       case 'completed':
         return <CheckCircle color="success" />;
       case 'in_progress':
-        return <RotateRight sx={{ animation: `${rotate} 1s linear infinite` }} color="primary" />;
-      case 'failed':
+        return (
+          <RotateRight 
+            color="primary" 
+            sx={{ animation: `${rotate} 2s linear infinite` }}
+          />
+        );
+      case 'error':
         return <Error color="error" />;
       default:
         return <RadioButtonUnchecked color="disabled" />;
@@ -174,28 +265,18 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
   };
 
   return (
-    <Paper elevation={3} sx={{ p: 6 }}>
-      <TopBar 
-        title="Deployment Progress" 
-        showLogout={!!onLogout}
-        onLogout={onLogout}
-      />
+    <Paper sx={{ p: 3, maxWidth: 800, mx: 'auto' }}>
+      <Typography variant="h5" gutterBottom>
+        Deploying Infrastructure
+      </Typography>
+      
+      <Typography variant="body2" color="text.secondary" paragraph>
+        Setting up your GCP infrastructure for project <strong>{project.projectId}</strong>
+      </Typography>
       
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
           {error}
-        </Alert>
-      )}
-      
-      {config?.aiMode === 'ai-studio' && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            AI Studio Mode Deployment
-          </Typography>
-          <Typography variant="body2">
-            Deploying with Google AI Studio for direct API access to Gemini models. 
-            Cloud Functions and API Gateway steps will be skipped.
-          </Typography>
         </Alert>
       )}
       
@@ -214,15 +295,24 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
       
       <List>
         {deploymentSteps.map((step) => {
-          const status = getStepStatus(step.key);
-          const isCurrentStep = progress?.currentStep === step.key;
+          const stepStatus = stepStatuses[step.key];
+          const isCurrentStep = stepStatus.status === 'in_progress';
           
           return (
             <React.Fragment key={step.key}>
               <ListItem>
-                <ListItemIcon>{getStepIcon(status)}</ListItemIcon>
+                <ListItemIcon>{getStepIcon(stepStatus.status)}</ListItemIcon>
                 <ListItemText
-                  primary={step.label}
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {step.label}
+                      {isCurrentStep && stepStatus.elapsedTime && (
+                        <Typography variant="caption" color="text.secondary">
+                          ({formatElapsedTime(stepStatus.elapsedTime)})
+                        </Typography>
+                      )}
+                    </Box>
+                  }
                   secondary={
                     <React.Fragment>
                       {isCurrentStep && step.note && (
@@ -234,37 +324,38 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
                           {step.note}
                         </Typography>
                       )}
-                      {isCurrentStep && (progress?.detail || progress?.message)}
+                      {stepStatus.message}
                     </React.Fragment>
                   }
                   primaryTypographyProps={{
                     fontWeight: isCurrentStep ? 'bold' : 'normal',
                   }}
                 />
-                {isCurrentStep && progress && (
+                {isCurrentStep && (
                   <Box sx={{ minWidth: 100 }}>
                     <LinearProgress
                       variant="determinate"
-                      value={progress.stepProgress}
+                      value={stepStatus.progress}
                       sx={{ height: 4, borderRadius: 2 }}
                     />
                   </Box>
                 )}
               </ListItem>
               
-              {/* Show sub-steps for API Gateway when it's the current step */}
-              {isCurrentStep && step.subSteps && progress?.subStep && (
+              {/* Show sub-steps for API Gateway */}
+              {isCurrentStep && step.subSteps && stepStatus.subStep && (
                 <Box sx={{ pl: 9, pr: 2 }}>
                   {step.subSteps.map((subStep) => {
-                    const isCurrentSubStep = progress.subStep === subStep.key;
+                    const isCurrentSubStep = stepStatus.subStep === subStep.key;
+                    const subStepIndex = step.subSteps!.findIndex(s => s.key === stepStatus.subStep);
+                    const currentSubStepIndex = step.subSteps!.findIndex(s => s.key === subStep.key);
                     const subStepStatus = isCurrentSubStep ? 'in_progress' : 
-                      (step.subSteps.findIndex(s => s.key === progress.subStep) > 
-                       step.subSteps.findIndex(s => s.key === subStep.key) ? 'completed' : 'pending');
+                      (subStepIndex > currentSubStepIndex ? 'completed' : 'pending');
                     
                     return (
                       <ListItem key={subStep.key} dense>
                         <ListItemIcon sx={{ minWidth: 36 }}>
-                          {getStepIcon(subStepStatus)}
+                          {getStepIcon(subStepStatus as StepStatus['status'])}
                         </ListItemIcon>
                         <ListItemText
                           primary={subStep.label}
@@ -274,11 +365,11 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
                             color: isCurrentSubStep ? 'primary' : 'text.secondary',
                           }}
                         />
-                        {isCurrentSubStep && progress && (
+                        {isCurrentSubStep && (
                           <Box sx={{ minWidth: 80 }}>
                             <LinearProgress
                               variant="determinate"
-                              value={progress.stepProgress}
+                              value={stepStatus.progress}
                               sx={{ height: 3, borderRadius: 2 }}
                             />
                           </Box>

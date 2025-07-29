@@ -49,7 +49,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listBillingAccounts: () => ipcRenderer.invoke('list-billing-accounts'),
   testAuthStep: (params: any) => ipcRenderer.invoke('test-auth-step', params),
   // Camera-related APIs
-  scanNetworkCameras: () => ipcRenderer.invoke('scan-network-cameras'),
+  scanNetworkCameras: (options?: { networkRange?: string }) => 
+    ipcRenderer.invoke('scan-network-cameras', options),
   onCameraScanProgress: (callback: (data: { ip: string; status: string }) => void) => {
     ipcRenderer.on('camera-scan-progress', (_, data) => callback(data));
     // Return cleanup function
@@ -63,10 +64,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   uninstallACAP: (camera: any, appName: string) => ipcRenderer.invoke('uninstall-acap', camera, appName),
   listInstalledACAPs: (camera: any) => ipcRenderer.invoke('list-installed-acaps', camera),
   configureCamera: (camera: any, config: any) => ipcRenderer.invoke('configure-camera', camera, config),
+  pushCameraSettings: (ip: string, username: string, password: string, configPayload: any) =>
+    ipcRenderer.invoke('push-camera-settings', ip, username, password, configPayload),
+  getCameraSettings: (ip: string, username: string, password: string) =>
+    ipcRenderer.invoke('get-camera-settings', ip, username, password),
+  getNetworkInterfaces: () => ipcRenderer.invoke('get-network-interfaces'),
   // ACAP download APIs
   acap: {
     getReleases: () => ipcRenderer.invoke('acap:get-releases'),
     download: (release: any) => ipcRenderer.invoke('acap:download', release),
     getLocalPath: (filename: string) => ipcRenderer.invoke('acap:get-local-path', filename),
+  },
+  // Config cache APIs
+  config: {
+    getCached: () => ipcRenderer.invoke('config:getCached'),
+    getAllCached: () => ipcRenderer.invoke('config:getAllCached'),
+    clearCached: () => ipcRenderer.invoke('config:clearCached'),
   },
 });
