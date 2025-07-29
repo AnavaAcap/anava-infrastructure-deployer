@@ -219,6 +219,9 @@ export class DeploymentEngine extends EventEmitter {
             console.log(`👤 Admin user configured: ${adminEmail}`);
           }
           
+          // Get the GCS bucket name from resources
+          const gcsBucketName = state.steps.setupFirestore?.resources?.gcsBucketName || `${state.projectId}-anava-analytics`;
+          
           this.emitComplete({
             success: true,
             apiGatewayUrl: gatewayUrl,
@@ -228,6 +231,7 @@ export class DeploymentEngine extends EventEmitter {
             adminEmail: adminEmail,
             aiMode: state.configuration.aiMode,
             aiStudioApiKey: state.configuration.aiStudioApiKey,
+            gcsBucketName: gcsBucketName,
             warning: hasPlaceholderFunctions ? 'Cloud Functions build failed - you may need to deploy them manually' : undefined
           });
           break;
@@ -1204,7 +1208,38 @@ export class DeploymentEngine extends EventEmitter {
       message: 'Deploying Firestore security rules and indexes...',
     });
     
+    // Create GCS bucket for camera storage
+    this.emitProgress({
+      currentStep: 'setupFirestore',
+      stepProgress: 60,
+      totalProgress: 87.5,
+      message: 'Creating GCS bucket for camera storage...',
+    });
+    
+    try {
+      const { CloudStorageDeployer } = await import('./cloudStorageDeployer');
+      const storageDeployer = new CloudStorageDeployer(this.gcpAuth.oauth2Client!, state.projectId, state.region);
+      const bucketName = `${state.projectId}-anava-analytics`;
+      
+      logCallback(`Creating GCS bucket: ${bucketName}`);
+      await storageDeployer.createBucket(bucketName);
+      
+      this.stateManager.updateStepResource('setupFirestore', 'gcsBucketName', bucketName);
+      logCallback(`✅ GCS bucket created: ${bucketName}`);
+    } catch (error: any) {
+      logCallback(`⚠️ Failed to create GCS bucket: ${error.message}`);
+      logCallback(`⚠️ You may need to create the bucket manually: ${state.projectId}-anava-analytics`);
+      // Non-fatal - continue with deployment
+    }
+    
     // Deploy Firestore security rules and indexes only (no Firebase Storage)
+    this.emitProgress({
+      currentStep: 'setupFirestore',
+      stepProgress: 80,
+      totalProgress: 87.5,
+      message: 'Deploying Firestore security rules and indexes...',
+    });
+    
     await this.firestoreRulesDeployer.deploySecurityRules(state.projectId, logCallback);
     this.stateManager.updateStepResource('setupFirestore', 'databaseId', '(default)');
     this.stateManager.updateStepResource('setupFirestore', 'rulesDeployed', true);
@@ -1216,7 +1251,7 @@ export class DeploymentEngine extends EventEmitter {
       currentStep: 'setupFirestore',
       stepProgress: 100,
       totalProgress: 87.5,
-      message: 'Firebase setup complete - Auth and Firestore configured',
+      message: 'Firebase setup complete - Auth, Firestore, and GCS bucket configured',
     });
   }
 

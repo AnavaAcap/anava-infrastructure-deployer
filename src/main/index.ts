@@ -10,6 +10,7 @@ import { CameraConfigurationService } from './services/camera/cameraConfiguratio
 import { ProjectCreatorService } from './services/projectCreatorService';
 import { AuthTestService } from './services/authTestService';
 import { getLogger } from './utils/logger';
+import { configCacheService } from './services/configCache';
 
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
 const logger = getLogger();
@@ -184,6 +185,28 @@ ipcMain.handle('auth:logout', async () => {
   return { success: true };
 });
 
+// Config cache handlers
+ipcMain.handle('config:getCached', async () => {
+  const user = await gcpOAuthService.getCurrentUser();
+  if (user?.email) {
+    return configCacheService.getConfig(user.email);
+  }
+  return null;
+});
+
+ipcMain.handle('config:getAllCached', async () => {
+  return configCacheService.getAllConfigs();
+});
+
+ipcMain.handle('config:clearCached', async () => {
+  const user = await gcpOAuthService.getCurrentUser();
+  if (user?.email) {
+    configCacheService.clearConfig(user.email);
+    return true;
+  }
+  return false;
+});
+
 ipcMain.handle('app:get-log-path', () => {
   return logger.getLogFilePath();
 });
@@ -232,8 +255,30 @@ ipcMain.on('deployment:subscribe', (event) => {
     event.sender.send('deployment:error', error);
   });
 
-  deploymentEngine.on('complete', (result) => {
+  deploymentEngine.on('complete', async (result) => {
     event.sender.send('deployment:complete', result);
+    
+    // Save the deployment config to cache
+    if (result.success) {
+      const user = await gcpOAuthService.getCurrentUser();
+      const state = stateManager.getState();
+      if (state && user?.email) {
+        configCacheService.saveConfig(user.email, {
+          ...state.configuration,
+          apiGatewayUrl: result.apiGatewayUrl,
+          apiKey: result.apiKey,
+          firebaseConfig: result.firebaseConfig,
+          projectId: state.projectId,
+          region: state.region,
+          aiMode: state.configuration.aiMode,
+          anavaKey: state.configuration.anavaKey,
+          customerId: state.configuration.customerId,
+          aiStudioApiKey: state.configuration.aiStudioApiKey,
+          gcsBucketName: result.gcsBucketName,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
   });
   
   deploymentEngine.on('log', (message) => {

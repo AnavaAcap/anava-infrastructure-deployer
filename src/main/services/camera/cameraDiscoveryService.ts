@@ -31,8 +31,8 @@ export class CameraDiscoveryService {
   }
 
   private setupIPC() {
-    ipcMain.handle('scan-network-cameras', async (event) => {
-      return this.scanNetworkForCameras(event.sender);
+    ipcMain.handle('scan-network-cameras', async (event, options?: { networkRange?: string }) => {
+      return this.scanNetworkForCameras(event.sender, options);
     });
     
     ipcMain.handle('quick-scan-camera', async (_event, ip: string, username = 'root', password = 'pass') => {
@@ -42,6 +42,29 @@ export class CameraDiscoveryService {
     ipcMain.handle('test-camera-credentials', async (_event, cameraId: string, ip: string, username: string, password: string) => {
       console.log(`=== Testing credentials for camera ${cameraId} at ${ip} ===`);
       return this.testCameraCredentials(ip, username, password);
+    });
+
+    ipcMain.handle('get-network-interfaces', async () => {
+      const interfaces = os.networkInterfaces();
+      const result = [];
+      
+      for (const [name, addresses] of Object.entries(interfaces)) {
+        if (addresses) {
+          for (const address of addresses) {
+            if (address.family === 'IPv4' && !address.internal) {
+              result.push({
+                interface: name,
+                address: address.address,
+                netmask: address.netmask,
+                family: address.family,
+                internal: address.internal
+              });
+            }
+          }
+        }
+      }
+      
+      return result;
     });
   }
 
@@ -113,22 +136,34 @@ export class CameraDiscoveryService {
     }
   }
 
-  async scanNetworkForCameras(sender?: WebContents): Promise<Camera[]> {
+  async scanNetworkForCameras(sender?: WebContents, options?: { networkRange?: string }): Promise<Camera[]> {
     try {
-      const networkInterfaces = os.networkInterfaces();
       const networks = [];
       
-      // Get all network interfaces
-      for (const [name, addresses] of Object.entries(networkInterfaces)) {
-        if (addresses) {
-          for (const address of addresses) {
-            if (address.family === 'IPv4' && !address.internal) {
-              networks.push({
-                interface: name,
-                address: address.address,
-                netmask: address.netmask,
-                network: this.getNetworkAddress(address.address, address.netmask)
-              });
+      if (options?.networkRange) {
+        // Use custom network range if provided
+        const [baseIp, subnet] = options.networkRange.split('/');
+        networks.push({
+          interface: 'custom',
+          address: baseIp,
+          netmask: this.subnetToNetmask(parseInt(subnet)),
+          network: options.networkRange
+        });
+      } else {
+        // Use all network interfaces
+        const networkInterfaces = os.networkInterfaces();
+        
+        for (const [name, addresses] of Object.entries(networkInterfaces)) {
+          if (addresses) {
+            for (const address of addresses) {
+              if (address.family === 'IPv4' && !address.internal) {
+                networks.push({
+                  interface: name,
+                  address: address.address,
+                  netmask: address.netmask,
+                  network: this.getNetworkAddress(address.address, address.netmask)
+                });
+              }
             }
           }
         }
@@ -412,6 +447,16 @@ export class CameraDiscoveryService {
       (num >>> 16) & 255,
       (num >>> 8) & 255,
       num & 255
+    ].join('.');
+  }
+
+  private subnetToNetmask(subnet: number): string {
+    const mask = (0xffffffff << (32 - subnet)) >>> 0;
+    return [
+      (mask >>> 24) & 255,
+      (mask >>> 16) & 255,
+      (mask >>> 8) & 255,
+      mask & 255
     ].join('.');
   }
 }
