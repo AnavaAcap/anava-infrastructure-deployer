@@ -36,13 +36,17 @@ jobs:
         node-version: '20'
         cache: 'npm'
 
-    - name: Install dependencies
+    - name: Install dependencies (Windows)
+      if: matrix.os == 'windows-latest'
       run: |
-        npm ci
-        # Force install platform-specific dependencies for rollup
-        npm install @rollup/rollup-win32-x64-msvc --no-save --force || true
-        npm install @rollup/rollup-darwin-x64 --no-save --force || true
-        npm install @rollup/rollup-darwin-arm64 --no-save --force || true
+        Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
+        Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
+        npm install
+      shell: pwsh
+      
+    - name: Install dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: npm ci
 
     - name: Build Electron app
       run: npm run dist:${{ matrix.platform }}
