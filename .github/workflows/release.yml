@@ -39,9 +39,14 @@ jobs:
     - name: Install dependencies (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
-        Remove-Item -Force package-lock.json -ErrorAction SilentlyContinue
-        npm install
+        # Update npm to latest version first
+        npm install -g npm@latest
+        
+        # Explicitly pre-install the problematic rollup module
+        npm install @rollup/rollup-win32-x64-msvc --no-save
+        
+        # Now run standard install with package-lock.json
+        npm ci
       shell: pwsh
       
     - name: Install dependencies (macOS)
