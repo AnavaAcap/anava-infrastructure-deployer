@@ -1,6 +1,6 @@
 {
   "name": "anava-vision",
-  "version": "0.9.62",
+  "version": "0.9.63",
   "description": "Anava Vision - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
@@ -104,10 +104,6 @@
       "gatekeeperAssess": false,
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist"
-    },
-    "win": {
-      "target": "nsis",
-      "icon": "assets/icon.png"
     },
     "linux": {
       "target": "AppImage",
