@@ -1,6 +1,6 @@
 {
   "name": "anava-vision",
-  "version": "0.9.60",
+  "version": "0.9.62",
   "description": "Anava Vision - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
@@ -20,7 +20,8 @@
     "dist:linux": "npm run build && electron-builder --linux",
     "test": "jest",
     "lint": "eslint . --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky"
   },
   "keywords": [
     "anava",
@@ -37,6 +38,7 @@
       "output": "release"
     },
     "publish": null,
+    "afterSign": "scripts/notarize.js",
     "files": [
       "dist/**/*",
       "node_modules/**/*",
@@ -98,9 +100,10 @@
           ]
         }
       ],
-      "identity": null,
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist"
     },
     "win": {
       "target": "nsis",
@@ -125,6 +128,7 @@
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
     "eslint": "^9.31.0",
+    "husky": "^9.1.7",
     "jest": "^30.0.4",
     "ts-jest": "^29.4.0",
     "typescript": "^5.8.3",

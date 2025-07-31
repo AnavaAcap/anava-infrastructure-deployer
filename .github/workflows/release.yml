@@ -42,17 +42,44 @@ jobs:
         # Update npm to latest version first
         npm install -g npm@latest
         
+        # Clear npm cache to avoid stale issues
+        npm cache clean --force
+        
         # Run the clean install first
         npm ci
         
         # NOW patch the installation by adding the missing native module
         # This happens AFTER npm ci, so it won't be deleted
         npm install @rollup/rollup-win32-x64-msvc --no-save
+        
+        # Also ensure other Windows-specific build tools are available
+        npm install node-gyp --no-save
       shell: pwsh
       
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: npm ci
+
+    - name: Validate signing configuration (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        echo "Validating macOS signing configuration..."
+        node scripts/validate-signing-config.js
+        
+        # Check that secrets are available
+        if [ -z "${{ secrets.APPLE_ID }}" ]; then
+          echo "::error::APPLE_ID secret is not set"
+          exit 1
+        fi
+        if [ -z "${{ secrets.APPLE_ID_PASSWORD }}" ]; then
+          echo "::error::APPLE_ID_PASSWORD secret is not set"
+          exit 1
+        fi
+        if [ -z "${{ secrets.APPLE_TEAM_ID }}" ]; then
+          echo "::error::APPLE_TEAM_ID secret is not set"
+          exit 1
+        fi
+        echo "✅ All required secrets are configured"
 
     - name: Build Electron app
       run: npm run dist:${{ matrix.platform }}
