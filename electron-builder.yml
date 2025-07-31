@@ -2,6 +2,7 @@ appId: com.anava.infrastructure-deployer
 productName: Anava Infrastructure Deployer
 directories:
   output: release
+afterSign: scripts/notarize.js
 files:
   - dist/**/*
   - node_modules/**/*
@@ -10,6 +11,13 @@ files:
   - !node_modules/**/*.map
   - !**/*.ts
   - !**/tsconfig.json
+extraResources:
+  - from: terraform
+    to: terraform
+    filter:
+      - "**/*"
+asarUnpack:
+  - node_modules/ping/**/*
 mac:
   category: public.app-category.developer-tools
   icon: assets/icon.icns
@@ -17,10 +25,32 @@ mac:
   gatekeeperAssess: false
   entitlements: assets/entitlements.mac.plist
   entitlementsInherit: assets/entitlements.mac.plist
+  notarize:
+    teamId: 3JVZNWGRYT
 win:
   icon: assets/icon.ico
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+  requestedExecutionLevel: requireAdministrator  # Required for network operations
+  publisherName: Anava Inc.
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Anava Vision
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  installerHeaderIcon: assets/icon.ico
+  perMachine: true
+  menuCategory: true
+  warningsAsErrors: false
+  license: LICENSE.md  # Add if you have a license file
+  
 linux:
   icon: assets/icon.png
   target:
