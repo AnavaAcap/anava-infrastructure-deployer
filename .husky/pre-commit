@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+
+# Run signing validation if package.json or related files are changed
+if git diff --cached --name-only | grep -qE "(package\.json|electron-builder\.yml|notarize\.js|entitlements.*\.plist)"; then
+  echo "📝 Changes detected in signing-related files, validating configuration..."
+  node scripts/validate-signing-config.js || {
+    echo "❌ Signing configuration validation failed!"
+    echo "Please fix the issues before committing."
+    exit 1
+  }
+fi
+
+# Run linting on staged files
+npm run lint
+
+# Run tests if test files are changed
+if git diff --cached --name-only | grep -qE "\.(test|spec)\.(ts|tsx|js|jsx)$"; then
+  npm test
+fi
