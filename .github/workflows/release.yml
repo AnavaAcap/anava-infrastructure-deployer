@@ -50,10 +50,14 @@ jobs:
         
         # NOW patch the installation by adding the missing native module
         # This happens AFTER npm ci, so it won't be deleted
-        npm install @rollup/rollup-win32-x64-msvc --no-save
+        # Force the installation even if it's an optional dependency
+        npm install @rollup/rollup-win32-x64-msvc --force --no-save
         
-        # Also ensure other Windows-specific build tools are available
-        npm install node-gyp --no-save
+        # Verify the module was installed
+        if (!(Test-Path "node_modules/@rollup/rollup-win32-x64-msvc")) {
+          Write-Error "Failed to install @rollup/rollup-win32-x64-msvc"
+          exit 1
+        }
       shell: pwsh
       
     - name: Install dependencies (macOS)
