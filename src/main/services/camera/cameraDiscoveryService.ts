@@ -1,9 +1,9 @@
 import { ipcMain, WebContents } from 'electron';
-import ping from 'ping';
 import axios from 'axios';
 import { spawn } from 'child_process';
 import os from 'os';
 import crypto from 'crypto';
+import net from 'net';
 
 export interface Camera {
   id: string;
@@ -52,10 +52,12 @@ export class CameraDiscoveryService {
         if (addresses) {
           for (const address of addresses) {
             if (address.family === 'IPv4' && !address.internal) {
+              const network = this.getNetworkAddress(address.address, address.netmask);
               result.push({
                 interface: name,
                 address: address.address,
                 netmask: address.netmask,
+                network: network,
                 family: address.family,
                 internal: address.internal
               });
@@ -64,6 +66,7 @@ export class CameraDiscoveryService {
         }
       }
       
+      console.log('Network interfaces detected:', result);
       return result;
     });
   }
@@ -72,17 +75,14 @@ export class CameraDiscoveryService {
     try {
       console.log(`=== Quick scanning camera at ${ip} with credentials ${username}:${password} ===`);
       
-      // First check if the IP is reachable
-      console.log(`Step 1: Checking if ${ip} is reachable...`);
-      const pingResult = await ping.promise.probe(ip, {
-        timeout: 5,
-        min_reply: 1
-      });
+      // First check if the IP is reachable via TCP
+      console.log(`Step 1: Checking if ${ip} is reachable via TCP...`);
+      const isReachable = await this.checkTCPConnection(ip, 80);
       
-      console.log(`Ping result for ${ip}:`, pingResult);
+      console.log(`TCP probe result for ${ip}:`, isReachable ? 'reachable' : 'not reachable');
       
-      if (!pingResult.alive) {
-        console.log(`❌ ${ip} is not reachable via ping`);
+      if (!isReachable) {
+        console.log(`❌ ${ip} is not reachable via TCP on port 80`);
         return [];
       }
       
@@ -140,6 +140,9 @@ export class CameraDiscoveryService {
     try {
       const networks = [];
       
+      console.log('=== Starting network scan ===');
+      console.log('Options:', options);
+      
       if (options?.networkRange) {
         // Use custom network range if provided
         const [baseIp, subnet] = options.networkRange.split('/');
@@ -149,33 +152,41 @@ export class CameraDiscoveryService {
           netmask: this.subnetToNetmask(parseInt(subnet)),
           network: options.networkRange
         });
+        console.log('Using custom network range:', options.networkRange);
       } else {
         // Use all network interfaces
         const networkInterfaces = os.networkInterfaces();
+        console.log('Scanning all network interfaces...');
         
         for (const [name, addresses] of Object.entries(networkInterfaces)) {
           if (addresses) {
             for (const address of addresses) {
               if (address.family === 'IPv4' && !address.internal) {
+                const network = this.getNetworkAddress(address.address, address.netmask);
                 networks.push({
                   interface: name,
                   address: address.address,
                   netmask: address.netmask,
-                  network: this.getNetworkAddress(address.address, address.netmask)
+                  network: network
                 });
+                console.log(`Found interface ${name}: ${address.address} -> ${network}`);
               }
             }
           }
         }
       }
 
+      console.log(`Total networks to scan: ${networks.length}`);
       const cameras: Camera[] = [];
       
       for (const network of networks) {
+        console.log(`\nScanning network: ${network.network} (${network.interface})`);
         const networkCameras = await this.scanNetwork(network, sender);
+        console.log(`Found ${networkCameras.length} cameras on ${network.network}`);
         cameras.push(...networkCameras);
       }
 
+      console.log(`\n=== Scan complete. Total cameras found: ${cameras.length} ===`);
       return cameras;
     } catch (error) {
       console.error('Error scanning for cameras:', error);
@@ -238,41 +249,82 @@ export class CameraDiscoveryService {
 
   private async checkForCamera(ip: string, sender?: WebContents): Promise<Camera | null> {
     try {
-      // First, ping the IP to see if it's alive
-      const pingResult = await ping.promise.probe(ip, {
-        timeout: 2,
-        min_reply: 1
-      });
+      // First, try TCP connection to check if the device is alive
+      console.log(`  Checking ${ip} for camera...`);
+      const startTime = Date.now();
+      const isAlive = await this.checkTCPConnection(ip, 80, 1000); // Quick 1s check for batch scanning
       
-      if (!pingResult.alive) {
-        return null;
+      if (!isAlive) {
+        // Try common camera ports before giving up
+        const commonPorts = [443, 8080, 8000];
+        let foundPort = false;
+        for (const port of commonPorts) {
+          if (await this.checkTCPConnection(ip, port, 500)) {
+            console.log(`  ✓ Device alive at ${ip}:${port}`);
+            foundPort = true;
+            break;
+          }
+        }
+        if (!foundPort) {
+          return null;
+        }
+      } else {
+        const responseTime = Date.now() - startTime;
+        console.log(`✅ Device alive at ${ip} (TCP response time: ${responseTime}ms)`);
       }
-      
-      console.log(`Checking device at ${ip}...`);
       
       // Send progress update
       if (sender) {
         sender.send('camera-scan-progress', { ip, status: 'checking' });
       }
       
-      // Check for Axis-specific endpoints
+      // Check for Axis-specific endpoints with increased timeout
+      console.log(`  Checking for Axis camera at http://${ip}/axis-cgi/param.cgi...`);
       try {
         const axisCheck = await axios.get(`http://${ip}/axis-cgi/param.cgi`, {
-          timeout: 1000,
-          validateStatus: () => true
+          timeout: 5000, // Increased to 5000ms for slow networks
+          validateStatus: () => true,
+          maxRedirects: 0 // Don't follow redirects
         });
+        
+        console.log(`  HTTP response from ${ip}: status=${axisCheck.status}`);
         
         if (axisCheck.status === 401 || axisCheck.status === 200) {
           // This is likely an Axis device, validate it
-          console.log(`  ✓ Found Axis device at ${ip}`);
+          console.log(`  ✓ Found Axis device at ${ip} (HTTP ${axisCheck.status})`);
           return await this.checkAxisCamera(ip, 'root', 'pass');
+        } else {
+          console.log(`  ❌ Not an Axis device at ${ip} (HTTP ${axisCheck.status})`);
         }
-      } catch (e) {
-        // Not an Axis device
+      } catch (e: any) {
+        console.log(`  ❌ HTTP check failed for ${ip}: ${e.message}`);
+        
+        // If it's a timeout or connection error, try a basic HTTP check on port 80
+        if (e.code === 'ECONNREFUSED' || e.code === 'ETIMEDOUT' || e.code === 'ENOTFOUND') {
+          return null;
+        }
+        
+        // For other errors, it might still be an Axis camera with different settings
+        console.log(`  Attempting alternative check for ${ip}...`);
+        try {
+          const basicCheck = await axios.get(`http://${ip}`, {
+            timeout: 3000,
+            validateStatus: () => true,
+            maxRedirects: 0
+          });
+          
+          if (basicCheck.status === 401 && basicCheck.headers['www-authenticate']?.includes('Digest')) {
+            console.log(`  ✓ Found device with digest auth at ${ip}, checking if Axis...`);
+            return await this.checkAxisCamera(ip, 'root', 'pass');
+          }
+        } catch (basicError) {
+          // Ignore basic check errors
+        }
       }
       
       return null;
-    } catch (error) {
+    } catch (error: any) {
+      console.error(`  ❌ Error checking ${ip}: ${error.message}`);
       return null;
     }
   }
@@ -329,30 +381,42 @@ export class CameraDiscoveryService {
 
   private async digestAuth(ip: string, username: string, password: string, path: string): Promise<string | null> {
     try {
+      console.log(`    Attempting digest auth to ${ip}${path}...`);
+      
       // First request to get the digest challenge
       const response1 = await axios.get(`http://${ip}${path}`, {
-        timeout: 3000,
+        timeout: 5000, // 5s timeout for slow networks
         validateStatus: () => true
       });
 
+      console.log(`    Initial response: ${response1.status}`);
+      
       if (response1.status === 401) {
         const wwwAuth = response1.headers['www-authenticate'];
+        console.log(`    WWW-Authenticate header: ${wwwAuth}`);
+        
         if (wwwAuth && wwwAuth.includes('Digest')) {
           const digestData = this.parseDigestAuth(wwwAuth);
           const authHeader = this.buildDigestHeader(username, password, 'GET', path, digestData);
           
+          console.log(`    Sending authenticated request...`);
           const response2 = await axios.get(`http://${ip}${path}`, {
             headers: { 'Authorization': authHeader },
-            timeout: 3000
+            timeout: 5000 // Increased timeout
           });
 
+          console.log(`    Authenticated response: ${response2.status}`);
           if (response2.status === 200) {
             return response2.data;
           }
         }
+      } else if (response1.status === 200) {
+        // Some cameras might not require auth for certain endpoints
+        console.log(`    Endpoint accessible without auth`);
+        return response1.data;
       }
     } catch (error: any) {
-      console.log('Digest auth error:', error.message);
+      console.log(`    Digest auth error: ${error.message}`);
     }
     return null;
   }
@@ -382,7 +446,11 @@ export class CameraDiscoveryService {
 
   private async getMACAddress(ip: string): Promise<string | null> {
     try {
-      const arp = spawn('arp', ['-n', ip]);
+      const isWindows = process.platform === 'win32';
+      const arpCommand = 'arp';
+      const arpArgs = isWindows ? ['-a', ip] : ['-n', ip];
+      
+      const arp = spawn(arpCommand, arpArgs);
       
       return new Promise((resolve) => {
         let output = '';
@@ -392,6 +460,7 @@ export class CameraDiscoveryService {
         });
         
         arp.on('close', () => {
+          // Windows and macOS/Linux have slightly different MAC address formats in ARP output
           const macMatch = output.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
           resolve(macMatch ? macMatch[0] : null);
         });
@@ -412,11 +481,29 @@ export class CameraDiscoveryService {
     
     const networkParts = ipParts.map((part, index) => part & maskParts[index]);
     
-    // Calculate subnet bits
-    const subnetBits = maskParts.reduce((bits, part) => {
-      return bits + part.toString(2).split('1').length - 1;
-    }, 0);
+    // Calculate subnet bits by counting consecutive 1s in the entire netmask
+    let subnetBits = 0;
+    for (const part of maskParts) {
+      if (part === 255) {
+        subnetBits += 8;
+      } else if (part > 0) {
+        // Count the 1s in the partial octet
+        let val = part;
+        while (val > 0) {
+          if (val & 0x80) {
+            subnetBits++;
+            val = (val << 1) & 0xFF;
+          } else {
+            break;
+          }
+        }
+        break; // No more 1s after this octet
+      } else {
+        break; // Reached 0, no more subnet bits
+      }
+    }
     
+    console.log(`Network calculation: IP=${ip}, Netmask=${netmask}, Network=${networkParts.join('.')}, Subnet bits=${subnetBits}`);
     return networkParts.join('.') + '/' + subnetBits;
   }
 
@@ -458,5 +545,41 @@ export class CameraDiscoveryService {
       (mask >>> 8) & 255,
       mask & 255
     ].join('.');
+  }
+
+  private async checkTCPConnection(ip: string, port: number, timeout: number = 3000): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = new net.Socket();
+
+      const timer = setTimeout(() => {
+        socket.destroy();
+        resolve(false);
+      }, timeout);
+
+      socket.on('connect', () => {
+        clearTimeout(timer);
+        socket.destroy();
+        resolve(true);
+      });
+
+      socket.on('error', () => {
+        clearTimeout(timer);
+        socket.destroy();
+        resolve(false);
+      });
+
+      socket.on('timeout', () => {
+        clearTimeout(timer);
+        socket.destroy();
+        resolve(false);
+      });
+
+      try {
+        socket.connect(port, ip);
+      } catch (e) {
+        clearTimeout(timer);
+        resolve(false);
+      }
+    });
   }
 }

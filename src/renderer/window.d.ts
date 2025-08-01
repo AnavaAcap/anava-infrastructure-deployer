@@ -56,7 +56,17 @@ declare global {
       testAuthStep: (params: any) => Promise<any>;
       // Camera-related APIs
       scanNetworkCameras: (options?: { networkRange?: string }) => Promise<any[]>;
+      enhancedScanNetwork: (options?: { 
+        networkRange?: string;
+        concurrent?: number;
+        timeout?: number;
+        ports?: number[];
+        useServiceDiscovery?: boolean;
+        credentials?: Array<{ username: string; password: string }>;
+      }) => Promise<any[]>;
+      discoverServiceCameras: () => Promise<any[]>;
       onCameraScanProgress: (callback: (data: { ip: string; status: string }) => void) => () => void;
+      onCameraDiscovered: (callback: (camera: any) => void) => () => void;
       quickScanCamera: (ip: string, username: string, password: string) => Promise<any[]>;
       testCameraCredentials: (cameraId: string, ip: string, username: string, password: string) => Promise<any>;
       deployACAP: (camera: any, acapPath: string) => Promise<any>;

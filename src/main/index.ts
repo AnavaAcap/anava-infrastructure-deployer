@@ -1,9 +1,9 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, Notification } from 'electron';
 import path from 'path';
 import { DeploymentEngine } from './services/deploymentEngine';
 import { StateManager } from './services/stateManager';
 import { GCPOAuthService } from './services/gcpOAuthService';
-import { CameraDiscoveryService } from './services/camera/cameraDiscoveryService';
+import { OptimizedCameraDiscoveryService } from './services/camera/optimizedCameraDiscoveryService';
 import { ACAPDeploymentService } from './services/camera/acapDeploymentService';
 import { ACAPDownloaderService } from './services/camera/acapDownloaderService';
 import { CameraConfigurationService } from './services/camera/cameraConfigurationService';
@@ -33,9 +33,19 @@ function createWindow() {
       nodeIntegration: false,
     },
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    icon: path.join(__dirname, '../../assets/icon.png'),
+    icon: process.platform === 'win32' 
+      ? path.join(__dirname, '../../assets/icon.ico')
+      : path.join(__dirname, '../../assets/icon.png'),
     backgroundColor: '#FAFAFA',
     show: false, // Don't show until ready
+    // Windows-specific title bar customization
+    ...(process.platform === 'win32' && {
+      titleBarOverlay: {
+        color: '#FAFAFA',
+        symbolColor: '#333333',
+        height: 32
+      }
+    })
   });
 
   // Show window when ready to prevent visual flash
@@ -63,8 +73,35 @@ function createWindow() {
   });
 }
 
+// Windows Defender check function
+function checkWindowsDefender() {
+  try {
+    const installPath = app.getPath('exe');
+    // Check if running from Program Files or another system directory
+    if (installPath.includes('Program Files') || installPath.includes('Program Files (x86)')) {
+      // Show notification about potential Windows Defender interference
+      setTimeout(() => {
+        new Notification({
+          title: 'Windows Security Notice',
+          body: 'If deployment is slow, consider adding Anava Vision to Windows Defender exclusions for better performance.',
+          icon: path.join(__dirname, '../../assets/icon.ico')
+        }).show();
+      }, 5000); // Show after 5 seconds to not overwhelm on startup
+    }
+  } catch (error) {
+    // Silent fail - not critical
+    logger.debug('Windows Defender check failed:', error);
+  }
+}
+
 app.whenReady().then(() => {
   logger.info('App ready, initializing services...');
+  
+  // Windows-specific DPI scaling
+  if (process.platform === 'win32') {
+    app.commandLine.appendSwitch('high-dpi-support', '1');
+    app.commandLine.appendSwitch('force-device-scale-factor', '1');
+  }
   
   // Initialize services
   stateManager = new StateManager();
@@ -72,12 +109,46 @@ app.whenReady().then(() => {
   deploymentEngine = new DeploymentEngine(stateManager, gcpOAuthService);
   
   // Initialize camera services
-  new CameraDiscoveryService();
+  // Only use one discovery service to avoid duplicate IPC handlers
+  new OptimizedCameraDiscoveryService();
   new ACAPDeploymentService();
   new ACAPDownloaderService();
   new CameraConfigurationService();
   new ProjectCreatorService(gcpOAuthService);
   new AuthTestService();
+  
+  // Setup Windows Jump List
+  if (process.platform === 'win32') {
+    app.setJumpList([
+      {
+        type: 'custom',
+        name: 'Recent Actions',
+        items: [
+          {
+            type: 'task',
+            title: 'New Deployment',
+            description: 'Start a new infrastructure deployment',
+            program: process.execPath,
+            args: '--new-deployment',
+            iconPath: process.execPath,
+            iconIndex: 0
+          },
+          {
+            type: 'task',
+            title: 'Discover Cameras',
+            description: 'Scan network for cameras',
+            program: process.execPath,
+            args: '--discover-cameras',
+            iconPath: process.execPath,
+            iconIndex: 0
+          }
+        ]
+      },
+      {
+        type: 'recent'
+      }
+    ]);
+  }
 
   // Create application menu with standard shortcuts
   const template: any[] = [
@@ -129,6 +200,11 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(menu);
 
   createWindow();
+  
+  // Check for Windows Defender potential issues
+  if (process.platform === 'win32') {
+    checkWindowsDefender();
+  }
   
   // Disable right-click context menu in production
   if (!isDevelopment) {
@@ -249,14 +325,37 @@ ipcMain.handle('deployment:pause', async () => {
 ipcMain.on('deployment:subscribe', (event) => {
   deploymentEngine.on('progress', (progress) => {
     event.sender.send('deployment:progress', progress);
+    
+    // Update Windows taskbar progress
+    if (process.platform === 'win32' && mainWindow) {
+      const overallProgress = progress.overallProgress / 100;
+      mainWindow.setProgressBar(overallProgress);
+    }
   });
 
   deploymentEngine.on('error', (error) => {
     event.sender.send('deployment:error', error);
+    
+    // Flash taskbar on error (Windows)
+    if (process.platform === 'win32' && mainWindow) {
+      mainWindow.flashFrame(true);
+      mainWindow.setProgressBar(-1); // Remove progress bar
+    }
   });
 
   deploymentEngine.on('complete', async (result) => {
     event.sender.send('deployment:complete', result);
+    
+    // Clear Windows taskbar progress on completion
+    if (process.platform === 'win32' && mainWindow) {
+      mainWindow.setProgressBar(-1); // Remove progress bar
+      // Show completion notification
+      new Notification({
+        title: 'Deployment Complete',
+        body: 'Your Anava Vision deployment has completed successfully!',
+        icon: path.join(__dirname, '../../assets/icon.ico')
+      }).show();
+    }
     
     // Save the deployment config to cache
     if (result.success) {

@@ -51,12 +51,14 @@ interface Camera {
   id: string;
   ip: string;
   port: number;
+  protocol?: 'http' | 'https';
   type: string;
   model: string;
   manufacturer: string;
   mac: string | null;
   capabilities: string[];
   discoveredAt: string;
+  discoveryMethod?: 'scan' | 'mdns' | 'ssdp' | 'manual';
   status: 'accessible' | 'requires_auth';
   authenticated?: boolean;
   credentials?: {
@@ -96,6 +98,9 @@ export const EnhancedCameraDiscoveryPage: React.FC<EnhancedCameraDiscoveryPagePr
   const [getConfigDialog, setGetConfigDialog] = useState<Camera | null>(null);
   const [cachedConfig, setCachedConfig] = useState<any>(null);
   const [loadingCache, setLoadingCache] = useState(false);
+  const [useEnhancedScanning, setUseEnhancedScanning] = useState(true);
+  const [discoveredCount, setDiscoveredCount] = useState(0);
+  const [scanStartTime, setScanStartTime] = useState<number | null>(null);
 
   useEffect(() => {
     // Load saved credentials from localStorage
@@ -144,6 +149,8 @@ export const EnhancedCameraDiscoveryPage: React.FC<EnhancedCameraDiscoveryPagePr
   const scanForCameras = async (customRange?: string) => {
     setScanning(true);
     setError(null);
+    setDiscoveredCount(0);
+    setScanStartTime(Date.now());
     setScanProgress('Initializing network scan...');
     
     // Set up progress listener
@@ -151,9 +158,39 @@ export const EnhancedCameraDiscoveryPage: React.FC<EnhancedCameraDiscoveryPagePr
       setScanProgress(`Scanning ${data.ip}...`);
     });
     
+    // Set up real-time camera discovery listener for enhanced scanning
+    let removeDiscoveryListener: (() => void) | null = null;
+    if (useEnhancedScanning && window.electronAPI.onCameraDiscovered) {
+      removeDiscoveryListener = window.electronAPI.onCameraDiscovered((camera) => {
+        setCameras(prev => {
+          const existing = prev.find(c => c.ip === camera.ip);
+          if (existing) {
+            return prev.map(c => c.ip === camera.ip ? camera : c);
+          }
+          return [...prev, camera];
+        });
+        setDiscoveredCount(prev => prev + 1);
+      });
+    }
+    
     try {
-      const options = customRange ? { networkRange: customRange } : undefined;
-      const discoveredCameras = await window.electronAPI.scanNetworkCameras(options);
+      let discoveredCameras: Camera[];
+      
+      if (useEnhancedScanning && window.electronAPI.enhancedScanNetwork) {
+        // Use the new enhanced scanning with concurrent and service discovery
+        const options = {
+          networkRange: customRange,
+          concurrent: 20,
+          useServiceDiscovery: true,
+          ports: [443, 80, 8080, 8000, 8443]
+        };
+        setScanProgress('Starting service discovery and network scan...');
+        discoveredCameras = await window.electronAPI.enhancedScanNetwork(options);
+      } else {
+        // Use the original scanning method
+        const options = customRange ? { networkRange: customRange } : undefined;
+        discoveredCameras = await window.electronAPI.scanNetworkCameras(options);
+      }
       
       // Auto-authenticate with default credentials if available
       if (defaultCredentials.password) {
@@ -188,7 +225,11 @@ export const EnhancedCameraDiscoveryPage: React.FC<EnhancedCameraDiscoveryPagePr
     } finally {
       setScanning(false);
       setScanProgress('');
+      setScanStartTime(null);
       removeListener();
+      if (removeDiscoveryListener) {
+        removeDiscoveryListener();
+      }
     }
   };
 
@@ -284,38 +325,27 @@ export const EnhancedCameraDiscoveryPage: React.FC<EnhancedCameraDiscoveryPagePr
     // Extract project ID from various possible locations
     const projectId = config.projectId || config.firebaseConfig?.projectId || '';
     
+    // Return format expected by setInstallerConfig endpoint
     return {
-      key: "root.BatonAnalytic.SystemConfig",
-      value: {
-        // Firebase Configuration
-        FirebaseApiKey: config.firebaseConfig?.apiKey || config.firebaseApiKey || '',
-        FirebaseAuthDomain: config.firebaseConfig?.authDomain || `${projectId}.firebaseapp.com`,
-        FirebaseProjectId: projectId,
-        FirebaseStorageBucket: config.firebaseConfig?.storageBucket || `${projectId}.appspot.com`,
-        FirebaseMessagingSenderId: config.firebaseConfig?.messagingSenderId || '',
-        FirebaseAppId: config.firebaseConfig?.appId || '',
-        FirebaseDatabaseId: '(default)',
-        
-        // Gemini/Vertex AI Configuration
-        // Note: aiMode is 'vertex' not 'vertex-ai' based on the export
-        GeminiApiKey: config.aiMode === 'ai-studio' ? (config.aiStudioApiKey || '') : '',
-        VertexApiGatewayUrl: config.aiMode === 'vertex' ? (config.apiGatewayUrl || '') : '',
-        VertexApiGatewayKey: config.aiMode === 'vertex' ? (config.apiKey || '') : '',
-        VertexGcpProjectId: projectId,
-        VertexGcpRegion: config.region || 'us-central1',
-        VertexGcsBucketName: config.gcsBucketName || (projectId ? `${projectId}-anava-analytics` : ''),
-        
-        // Anava Configuration
-        AnavaKey: config.anavaKey || '',
-        CustomerId: config.customerId || '',
-        
-        // Other settings that might exist
-        Model: 'gemini-2.0-flash-lite',
-        PreFilterModel: '',
-        TalkdownBuffer: 5,
-        ViewArea: '1',
-        ActiveMonitoring: true
-      }
+      firebase: {
+        apiKey: config.firebaseConfig?.apiKey || config.firebaseApiKey || '',
+        authDomain: config.firebaseConfig?.authDomain || `${projectId}.firebaseapp.com`,
+        projectId: projectId,
+        storageBucket: config.firebaseConfig?.storageBucket || `${projectId}.appspot.com`,
+        messagingSenderId: config.firebaseConfig?.messagingSenderId || '',
+        appId: config.firebaseConfig?.appId || '',
+        databaseId: '(default)'
+      },
+      gemini: {
+        apiKey: config.aiMode === 'ai-studio' ? (config.aiStudioApiKey || '') : '',
+        vertexApiGatewayUrl: config.aiMode === 'vertex' ? (config.apiGatewayUrl || '') : '',
+        vertexApiGatewayKey: config.aiMode === 'vertex' ? (config.apiKey || '') : '',
+        vertexGcpProjectId: projectId,
+        vertexGcpRegion: config.region || 'us-central1',
+        vertexGcsBucketName: config.gcsBucketName || (projectId ? `${projectId}-anava-analytics` : '')
+      },
+      anavaKey: config.anavaKey || '',
+      customerId: config.customerId || ''
     };
   };
 
@@ -523,6 +553,21 @@ export const EnhancedCameraDiscoveryPage: React.FC<EnhancedCameraDiscoveryPagePr
                 <NetworkScanIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                 Automatic Discovery
               </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={useEnhancedScanning}
+                    onChange={(e) => setUseEnhancedScanning(e.target.checked)}
+                    size="small"
+                  />
+                }
+                label={
+                  <Typography variant="caption">
+                    Enhanced Scanning (Concurrent + Service Discovery)
+                  </Typography>
+                }
+                sx={{ mb: 1 }}
+              />
               <Button
                 variant="contained"
                 startIcon={scanning ? <CircularProgress size={20} /> : <SearchIcon />}
@@ -532,21 +577,24 @@ export const EnhancedCameraDiscoveryPage: React.FC<EnhancedCameraDiscoveryPagePr
               >
                 {scanning ? 'Scanning Network...' : 'Scan Local Network'}
               </Button>
-              {scanning && scanProgress && (
+              {scanning && (
                 <Box sx={{ mt: 2 }}>
                   <LinearProgress />
-                  <Typography 
-                    variant="caption" 
-                    sx={{ 
-                      display: 'block', 
-                      mt: 1, 
-                      color: 'text.secondary',
-                      fontFamily: 'monospace',
-                      fontSize: '0.75rem'
-                    }}
-                  >
-                    {scanProgress}
-                  </Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {scanProgress}
+                    </Typography>
+                    {discoveredCount > 0 && (
+                      <Typography variant="caption" color="success.main">
+                        Found {discoveredCount} camera{discoveredCount !== 1 ? 's' : ''}
+                      </Typography>
+                    )}
+                  </Box>
+                  {scanStartTime && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      Elapsed: {Math.round((Date.now() - scanStartTime) / 1000)}s
+                    </Typography>
+                  )}
                 </Box>
               )}
             </CardContent>
@@ -693,6 +741,15 @@ export const EnhancedCameraDiscoveryPage: React.FC<EnhancedCameraDiscoveryPagePr
                       {camera.model}
                       {camera.authenticated && (
                         <CheckCircleIcon color="success" fontSize="small" />
+                      )}
+                      {camera.protocol === 'https' && (
+                        <Chip label="HTTPS" color="primary" size="small" sx={{ height: 20 }} />
+                      )}
+                      {camera.discoveryMethod === 'mdns' && (
+                        <Chip label="mDNS" color="info" size="small" sx={{ height: 20 }} />
+                      )}
+                      {camera.discoveryMethod === 'ssdp' && (
+                        <Chip label="SSDP" color="info" size="small" sx={{ height: 20 }} />
                       )}
                       {camera.configurationStatus === 'success' && (
                         <Chip label="Configured" color="success" size="small" />

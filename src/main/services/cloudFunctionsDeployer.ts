@@ -3,6 +3,7 @@ import { OAuth2Client } from 'google-auth-library';
 import fs from 'fs';
 import path from 'path';
 import archiver from 'archiver';
+import os from 'os';
 
 export class CloudFunctionsDeployer {
   private storage = google.storage('v1');
@@ -85,7 +86,7 @@ export class CloudFunctionsDeployer {
   private async uploadSourceCode(bucketName: string, functionName: string, sourceDir: string): Promise<string> {
     const timestamp = Date.now();
     const zipFileName = `${functionName}-${timestamp}.zip`;
-    const zipFilePath = path.join('/tmp', zipFileName);
+    const zipFilePath = path.join(os.tmpdir(), zipFileName);
 
     // Create a zip archive of the source directory
     await this.createZipArchive(sourceDir, zipFilePath);

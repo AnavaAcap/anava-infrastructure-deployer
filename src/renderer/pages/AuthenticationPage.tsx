@@ -367,8 +367,8 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
                       return displayName.includes(query) || projectId.includes(query);
                     });
                     
-                    const displayProjects = filteredProjects.slice(0, 50);
-                    const hasMore = filteredProjects.length > 50;
+                    const displayProjects = filteredProjects.slice(0, 200);
+                    const hasMore = filteredProjects.length > 200;
                     
                     return [
                       // Add "No Project" option for AI Studio mode
@@ -401,7 +401,7 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
                       ...(hasMore ? [
                         <MenuItem key="__more__" disabled>
                           <Typography color="text.secondary" variant="caption">
-                            {filteredProjects.length - 50} more projects... Use search to filter
+                            {filteredProjects.length - 200} more projects... Use search to filter
                           </Typography>
                         </MenuItem>
                       ] : [])
