@@ -51,10 +51,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Camera-related APIs
   scanNetworkCameras: (options?: { networkRange?: string }) => 
     ipcRenderer.invoke('scan-network-cameras', options),
+  enhancedScanNetwork: (options?: { 
+    networkRange?: string;
+    concurrent?: number;
+    timeout?: number;
+    ports?: number[];
+    useServiceDiscovery?: boolean;
+    credentials?: Array<{ username: string; password: string }>;
+  }) => ipcRenderer.invoke('enhanced-scan-network', options),
+  discoverServiceCameras: () => ipcRenderer.invoke('discover-service-cameras'),
   onCameraScanProgress: (callback: (data: { ip: string; status: string }) => void) => {
     ipcRenderer.on('camera-scan-progress', (_, data) => callback(data));
     // Return cleanup function
     return () => ipcRenderer.removeAllListeners('camera-scan-progress');
+  },
+  onCameraDiscovered: (callback: (camera: any) => void) => {
+    ipcRenderer.on('camera-discovered', (_, camera) => callback(camera));
+    // Return cleanup function
+    return () => ipcRenderer.removeAllListeners('camera-discovered');
   },
   quickScanCamera: (ip: string, username: string, password: string) => 
     ipcRenderer.invoke('quick-scan-camera', ip, username, password),
