@@ -9,15 +9,17 @@ import CompletionPage from './pages/CompletionPage';
 import { EnhancedCameraDiscoveryPage } from './pages/camera/EnhancedCameraDiscoveryPage';
 import { ACAPDeploymentPage } from './pages/camera/ACAPDeploymentPage';
 import { ACAPManager } from './pages/camera/ACAPManager';
+import { MagicalWelcomePage } from './pages/MagicalWelcomePage';
+import { MagicalDiscoveryPage } from './pages/MagicalDiscoveryPage';
 import NavigationSidebar, { NavigationView } from './components/NavigationSidebar';
 import TopBar from './components/TopBar';
 import { anavaTheme } from './theme/anavaTheme';
 import AppFooter from './components/AppFooter';
 import RetroEasterEgg from './components/RetroEasterEgg';
-import { DeploymentState, DeploymentConfig, GCPProject } from '../types';
+import { DeploymentState, DeploymentConfig, GCPProject, CameraInfo } from '../types';
 
 function App() {
-  const [currentView, setCurrentView] = useState<NavigationView>('welcome');
+  const [currentView, setCurrentView] = useState<NavigationView>('magical-welcome');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [selectedAIMode, setSelectedAIMode] = useState<'vertex' | 'ai-studio' | null>(null);
   const [selectedProject, setSelectedProject] = useState<GCPProject | null>(null);
@@ -26,6 +28,8 @@ function App() {
   const [selectedCameras, setSelectedCameras] = useState<any[]>([]);
   const [deploymentComplete, setDeploymentComplete] = useState(false);
   const [camerasConfigured, setCamerasConfigured] = useState(false);
+  const [magicalMode, setMagicalMode] = useState(true);
+  const [magicalCamera, setMagicalCamera] = useState<CameraInfo | null>(null);
 
   useEffect(() => {
     // Subscribe to deployment events
@@ -231,6 +235,35 @@ function App() {
           </Box>
         );
 
+      case 'magical-welcome':
+        return (
+          <MagicalWelcomePage
+            onTryMagic={() => setCurrentView('magical-discovery')}
+            onTraditionalSetup={() => {
+              setMagicalMode(false);
+              setCurrentView('welcome');
+            }}
+          />
+        );
+
+      case 'magical-discovery':
+        return (
+          <MagicalDiscoveryPage
+            onComplete={(camera) => {
+              setMagicalCamera(camera);
+              // Could transition to a magical completion view
+            }}
+            onError={(error) => {
+              console.error('Magical discovery failed:', error);
+              // Could show error state
+            }}
+            onCancel={() => {
+              setMagicalMode(false);
+              setCurrentView('welcome');
+            }}
+          />
+        );
+
       default:
         return null;
     }
@@ -240,28 +273,36 @@ function App() {
     <ThemeProvider theme={anavaTheme}>
       <CssBaseline />
       <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-        <TopBar onLogout={handleLogout} />
+        {!magicalMode && <TopBar onLogout={handleLogout} />}
         
-        <NavigationSidebar
-          currentView={currentView}
-          onViewChange={handleViewChange}
-          deploymentComplete={deploymentComplete}
-          camerasConfigured={camerasConfigured}
-        />
+        {!magicalMode && (
+          <NavigationSidebar
+            currentView={currentView}
+            onViewChange={handleViewChange}
+            deploymentComplete={deploymentComplete}
+            camerasConfigured={camerasConfigured}
+          />
+        )}
         
         <Box
           component="main"
           sx={{
             flexGrow: 1,
-            bgcolor: 'background.default',
-            marginTop: '48px', // Account for TopBar height
+            bgcolor: magicalMode ? '#0A0E27' : 'background.default',
+            marginTop: magicalMode ? 0 : '48px', // Account for TopBar height
             position: 'relative',
           }}
         >
-          <Container maxWidth="lg" sx={{ py: 4 }}>
-            {renderContent()}
-          </Container>
-          <AppFooter />
+          {magicalMode ? (
+            renderContent()
+          ) : (
+            <>
+              <Container maxWidth="lg" sx={{ py: 4 }}>
+                {renderContent()}
+              </Container>
+              <AppFooter />
+            </>
+          )}
         </Box>
       </Box>
       <RetroEasterEgg trigger="konami" />

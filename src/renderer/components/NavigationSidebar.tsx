@@ -27,7 +27,9 @@ export type NavigationView =
   | 'camera-discovery' 
   | 'acap-manager'
   | 'camera-deployment' 
-  | 'status';
+  | 'status'
+  | 'magical-welcome'
+  | 'magical-discovery';
 
 interface NavigationSidebarProps {
   currentView: NavigationView;
