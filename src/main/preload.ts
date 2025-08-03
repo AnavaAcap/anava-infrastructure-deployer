@@ -95,4 +95,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAllCached: () => ipcRenderer.invoke('config:getAllCached'),
     clearCached: () => ipcRenderer.invoke('config:clearCached'),
   },
+  // Magical experience APIs
+  magical: {
+    checkStatus: () => ipcRenderer.invoke('magical:check-status'),
+    startExperience: () => ipcRenderer.invoke('magical:start-experience'),
+    analyzeCustom: (params: { query: string; camera: any }) => 
+      ipcRenderer.invoke('magical:analyze-custom', params),
+    cancel: () => ipcRenderer.invoke('magical:cancel'),
+    subscribe: () => ipcRenderer.send('magical:subscribe'),
+    onProgress: (callback: (progress: any) => void) => {
+      ipcRenderer.on('magical:progress', (_, progress) => callback(progress));
+    },
+    onRateLimit: (callback: (data: any) => void) => {
+      ipcRenderer.on('magical:rate-limit', (_, data) => callback(data));
+    },
+    onLowQuota: (callback: (data: any) => void) => {
+      ipcRenderer.on('magical:low-quota', (_, data) => callback(data));
+    },
+    onCancelled: (callback: () => void) => {
+      ipcRenderer.on('magical:cancelled', callback);
+    },
+  },
 });

@@ -88,6 +88,33 @@ declare global {
         getAllCached: () => Promise<any[]>;
         clearCached: () => Promise<boolean>;
       };
+      // Magical experience APIs
+      magical: {
+        checkStatus: () => Promise<{ success: boolean; status?: any; error?: string }>;
+        startExperience: () => Promise<{
+          success: boolean;
+          camera?: any;
+          firstInsight?: string;
+          error?: string;
+          deviceStatus?: any;
+        }>;
+        analyzeCustom: (params: { query: string; camera: any }) => Promise<{
+          success: boolean;
+          response?: string;
+          error?: string;
+        }>;
+        cancel: () => Promise<{ success: boolean }>;
+        subscribe: () => void;
+        onProgress: (callback: (progress: {
+          stage: 'discovering' | 'configuring' | 'awakening' | 'analyzing' | 'complete' | 'error';
+          message: string;
+          progress: number;
+          detail?: string;
+        }) => void) => void;
+        onRateLimit: (callback: (data: { message: string; upgradeUrl: string }) => void) => void;
+        onLowQuota: (callback: (data: { remaining: number; total: number }) => void) => void;
+        onCancelled: (callback: () => void) => void;
+      };
     };
   }
 }

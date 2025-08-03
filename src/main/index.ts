@@ -11,6 +11,8 @@ import { ProjectCreatorService } from './services/projectCreatorService';
 import { AuthTestService } from './services/authTestService';
 import { getLogger } from './utils/logger';
 import { configCacheService } from './services/configCache';
+import { fastStartService } from './services/fastStartService';
+import { magicalProxyService } from './services/magicalProxyService';
 
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
 const logger = getLogger();
@@ -450,4 +452,73 @@ ipcMain.handle('deployment:validate', async (_, params: {
       error: error.message || 'Validation failed'
     };
   }
+});
+
+// Magical Experience IPC Handlers
+ipcMain.handle('magical:check-status', async () => {
+  try {
+    const status = await magicalProxyService.checkDeviceStatus();
+    return { success: true, status };
+  } catch (error: any) {
+    logger.error('Failed to check magical status:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('magical:start-experience', async () => {
+  try {
+    logger.info('Starting magical experience...');
+    
+    // Subscribe to progress events
+    const progressHandler = (progress: any) => {
+      mainWindow?.webContents.send('magical:progress', progress);
+    };
+    
+    fastStartService.on('progress', progressHandler);
+    
+    const result = await fastStartService.startMagicalExperience();
+    
+    // Clean up listener
+    fastStartService.off('progress', progressHandler);
+    
+    return result;
+  } catch (error: any) {
+    logger.error('Magical experience failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('magical:analyze-custom', async (_, params: {
+  query: string;
+  camera: any;
+}) => {
+  try {
+    const response = await fastStartService.processUserQuery(params.query, params.camera);
+    return { success: true, response };
+  } catch (error: any) {
+    logger.error('Custom analysis failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.on('magical:subscribe', (event) => {
+  // Rate limit events
+  magicalProxyService.on('rateLimitExceeded', (data) => {
+    event.sender.send('magical:rate-limit', data);
+  });
+  
+  // Low quota warning
+  magicalProxyService.on('lowQuota', (data) => {
+    event.sender.send('magical:low-quota', data);
+  });
+  
+  // Cancelled
+  fastStartService.on('cancelled', () => {
+    event.sender.send('magical:cancelled');
+  });
+});
+
+ipcMain.handle('magical:cancel', async () => {
+  fastStartService.cancel();
+  return { success: true };
 });

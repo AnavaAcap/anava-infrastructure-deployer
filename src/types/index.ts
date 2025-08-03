@@ -87,6 +87,19 @@ export interface AuthStatus {
   error?: string;
 }
 
+export interface CameraInfo {
+  ip: string;
+  model: string;
+  manufacturer: string;
+  mac: string;
+  hostname: string;
+  port: number;
+  protocol: 'http' | 'https';
+  authenticated?: boolean;
+  username?: string;
+  password?: string;
+}
+
 declare global {
   interface Window {
     electronAPI: {
