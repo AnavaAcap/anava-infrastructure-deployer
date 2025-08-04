@@ -166,100 +166,70 @@ export class OptimizedCameraDiscoveryService {
       console.log(`Service discovery found ${serviceCameras.length} cameras`);
     }
     
-    // Then do active scanning
+    // Then do active scanning with unified camera/speaker detection
     const networks = this.getNetworksToScan(options?.networkRange);
     console.log(`Active scanning ${networks.length} networks...`);
     
-    const queue = new PQueue({ concurrency: options?.concurrent || 20 });
     const ports = options?.ports || [...DEFAULT_CAMERA_PORTS.priority, ...DEFAULT_CAMERA_PORTS.common];
     
     for (const network of networks) {
       console.log(`Scanning network: ${network.network}`);
       const ips = this.getIPsInRange(network.network);
       
-      // Randomize IP order to avoid triggering IDS
-      const shuffledIPs = this.shuffle(ips.filter(ip => !discoveredIPs.has(ip)));
+      // Track what we've found on this network
+      let networkCamera: Camera | null = null;
+      let networkSpeaker: { ip: string; username: string; password: string; authenticated: boolean } | null = null;
       
-      const scanTasks = shuffledIPs.map(ip => 
-        queue.add(async () => {
-          const camera = await this.scanIP(ip, ports, options?.credentials || DEFAULT_CREDENTIALS, sender);
-          if (camera) {
-            cameras.push(camera);
-            discoveredIPs.add(ip);
+      // Sequential scan for this network to find camera + speaker efficiently
+      for (const ip of ips) {
+        // Skip already discovered IPs
+        if (discoveredIPs.has(ip)) continue;
+        
+        // If we already have both camera and speaker for this network, stop
+        if (networkCamera && networkSpeaker) {
+          console.log(`Found both camera and speaker on network ${network.network}, stopping scan`);
+          break;
+        }
+        
+        const result = await this.scanIP(ip, ports, options?.credentials || DEFAULT_CREDENTIALS, sender, networkSpeaker || undefined);
+        
+        if (result.camera) {
+          networkCamera = result.camera;
+          cameras.push(result.camera);
+          discoveredIPs.add(ip);
+          
+          // If we already had a speaker, it's been attached to the camera
+          if (networkSpeaker) {
+            console.log(`Camera ${result.camera.ip} paired with previously found speaker ${networkSpeaker.ip}`);
+          }
+          
+          // Send real-time update
+          if (sender) {
+            console.log(`[Camera Discovery] Sending camera-discovered event for ${result.camera.ip}, status: ${result.camera.status}, manufacturer: ${result.camera.manufacturer}`);
+            sender.send('camera-discovered', result.camera);
+          }
+        } else if (result.speaker && !networkSpeaker) {
+          networkSpeaker = result.speaker;
+          console.log(`Found speaker ${result.speaker.ip}, continuing to look for camera on network ${network.network}`);
+          
+          // If we already have a camera on this network, attach the speaker
+          if (networkCamera && !networkCamera.speaker) {
+            networkCamera.speaker = networkSpeaker;
+            console.log(`Attached speaker ${networkSpeaker.ip} to existing camera ${networkCamera.ip}`);
             
-            // Send real-time update
+            // Send update
             if (sender) {
-              console.log(`[Camera Discovery] Sending camera-discovered event for ${camera.ip}, status: ${camera.status}, manufacturer: ${camera.manufacturer}`);
-              sender.send('camera-discovered', camera);
+              sender.send('camera-discovered', networkCamera);
             }
           }
-        })
-      );
-      
-      await Promise.all(scanTasks);
-    }
-    
-    // After finding all cameras, check if we need to find speakers
-    if (cameras.length > 0) {
-      console.log('=== Checking for speakers ===');
-      
-      // Get all unique networks from cameras
-      const cameraNetworks = new Set<string>();
-      for (const camera of cameras) {
-        const ipParts = camera.ip.split('.');
-        if (ipParts.length === 4) {
-          cameraNetworks.add(`${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`);
         }
       }
       
-      // For each network with cameras, scan the full /24 for speakers
-      for (const network of cameraNetworks) {
-        console.log(`Scanning ${network}.0/24 for speakers...`);
-        
-        let speakerFound = false;
-        const ips = this.getIPsInRange(network + '.0/24');
-        
-        for (const ip of ips) {
-          // Skip if this IP is already a camera
-          if (cameras.some(c => c.ip === ip)) continue;
-          
-          // Check if it's a speaker
-          for (const port of [80, 443]) {
-            if (speakerFound) break;
-            
-            const protocol = port === 443 ? 'https' : 'http';
-            
-            if (await this.checkTCPConnection(ip, port, 500)) {
-              // Try credentials
-              for (const cred of options?.credentials || DEFAULT_CREDENTIALS) {
-                const speaker = await this.checkAxisSpeaker(ip, cred.username, cred.password, port, protocol);
-                if (speaker) {
-                  console.log(`Found speaker at ${ip} on network ${network}`);
-                  speakerFound = true;
-                  
-                  // Assign this speaker to all cameras on the same network
-                  for (const camera of cameras) {
-                    const camNetwork = camera.ip.split('.').slice(0, 3).join('.');
-                    if (camNetwork === network && !camera.speaker) {
-                      camera.speaker = speaker;
-                      console.log(`Assigned speaker ${speaker.ip} to camera ${camera.ip}`);
-                      
-                      // Send update
-                      if (sender) {
-                        sender.send('camera-discovered', camera);
-                      }
-                    }
-                  }
-                  break;
-                }
-              }
-            }
-          }
-        }
-        
-        if (!speakerFound) {
-          console.log(`No speaker found on network ${network}`);
-        }
+      if (!networkCamera) {
+        console.log(`No camera found on network ${network.network}`);
+      }
+      if (!networkSpeaker) {
+        console.log(`No speaker found on network ${network.network}`);
       }
     }
     
@@ -364,15 +334,15 @@ export class OptimizedCameraDiscoveryService {
             headers.SERVER?.toLowerCase().includes('axis') ||
             headers.SERVER?.toLowerCase().includes('camera')) {
           
-          const camera = await this.scanIP(
+          const result = await this.scanIP(
             rinfo.address,
             [...DEFAULT_CAMERA_PORTS.priority],
             DEFAULT_CREDENTIALS
           );
           
-          if (camera) {
-            camera.discoveryMethod = 'ssdp';
-            cameras.push(camera);
+          if (result.camera) {
+            result.camera.discoveryMethod = 'ssdp';
+            cameras.push(result.camera);
           }
         }
       });
@@ -393,8 +363,12 @@ export class OptimizedCameraDiscoveryService {
     ip: string,
     ports: number[],
     credentials: Array<{ username: string; password: string }>,
-    sender?: WebContents
-  ): Promise<Camera | null> {
+    sender?: WebContents,
+    existingSpeaker?: { ip: string; username: string; password: string; authenticated: boolean }
+  ): Promise<{ 
+    camera?: Camera; 
+    speaker?: { ip: string; username: string; password: string; authenticated: boolean } 
+  }> {
     console.log(`Scanning ${ip}...`);
     
     // Send progress update
@@ -409,18 +383,57 @@ export class OptimizedCameraDiscoveryService {
       if (await this.checkTCPConnection(ip, port, 1000)) {
         console.log(`  Found open port ${port} on ${ip}`);
         
-        // Try each credential
+        // Try each credential to identify what type of device this is
         for (const cred of credentials) {
-          const camera = await this.checkAxisCamera(ip, cred.username, cred.password, port, protocol);
-          if (camera) {
-            console.log(`  ✓ Found camera at ${ip}:${port} with ${cred.username}:${cred.password}`);
-            return camera;
+          try {
+            // First, try to get basic device info
+            const response = await this.digestAuth(
+              ip,
+              cred.username,
+              cred.password,
+              '/axis-cgi/param.cgi?action=list&group=Brand',
+              port,
+              protocol
+            );
+            
+            if (response && response.includes('Brand=AXIS')) {
+              const typeMatch = response.match(/ProdType=([^\r\n]+)/);
+              const productType = typeMatch ? typeMatch[1] : '';
+              
+              // Check if it's a speaker
+              if (productType.toLowerCase().includes('speaker') || 
+                  productType.toLowerCase().includes('audio') ||
+                  productType.toLowerCase().includes('sound')) {
+                console.log(`  ✓ Found Axis speaker (${productType}) at ${ip}`);
+                return {
+                  speaker: {
+                    ip,
+                    username: cred.username,
+                    password: cred.password,
+                    authenticated: true
+                  }
+                };
+              } else {
+                // It's a camera
+                const camera = await this.checkAxisCamera(ip, cred.username, cred.password, port, protocol);
+                if (camera) {
+                  console.log(`  ✓ Found camera at ${ip}:${port} with ${cred.username}:${cred.password}`);
+                  // If we already found a speaker, attach it to the camera
+                  if (existingSpeaker) {
+                    camera.speaker = existingSpeaker;
+                  }
+                  return { camera };
+                }
+              }
+            }
+          } catch (error) {
+            // Try next credential
           }
         }
       }
     }
     
-    return null;
+    return {};
   }
 
   async quickScanSpecificCamera(ip: string, username = 'root', password = 'pass'): Promise<Camera[]> {
@@ -552,50 +565,6 @@ export class OptimizedCameraDiscoveryService {
     }
   }
 
-  private async checkAxisSpeaker(
-    ip: string,
-    username: string,
-    password: string,
-    port = 80,
-    protocol: 'http' | 'https' = 'http'
-  ): Promise<{ ip: string; username: string; password: string; authenticated: boolean } | null> {
-    try {
-      console.log(`  Checking Axis speaker at ${protocol}://${ip}:${port}`);
-      
-      // Try to get device info with digest auth
-      const response = await this.digestAuth(
-        ip,
-        username,
-        password,
-        '/axis-cgi/param.cgi?action=list&group=Brand',
-        port,
-        protocol
-      );
-      
-      if (response && response.includes('Brand=AXIS')) {
-        const typeMatch = response.match(/ProdType=([^\r\n]+)/);
-        const productType = typeMatch ? typeMatch[1] : '';
-        
-        // Check if it's a speaker device
-        if (productType.toLowerCase().includes('speaker') || 
-            productType.toLowerCase().includes('audio') ||
-            productType.toLowerCase().includes('sound')) {
-          console.log(`  ✓ Found Axis speaker (${productType})`);
-          return {
-            ip,
-            username,
-            password,
-            authenticated: true
-          };
-        }
-      }
-      
-      return null;
-    } catch (error: any) {
-      console.error(`  ✗ Error checking speaker:`, error.message);
-      return null;
-    }
-  }
 
 
   private async digestAuth(
@@ -914,15 +883,15 @@ export class OptimizedCameraDiscoveryService {
         const promise = queue.add(async () => {
           if (foundCamera) return;
           
-          const camera = await this.scanIP(ip, ports, credentials, undefined);
+          const result = await this.scanIP(ip, ports, credentials, undefined);
           
-          if (camera && !foundCamera) {
-            const isAxis = camera.manufacturer?.toLowerCase().includes('axis');
-            const isAccessible = camera.status === 'accessible' || camera.authenticated === true;
+          if (result.camera && !foundCamera) {
+            const isAxis = result.camera.manufacturer?.toLowerCase().includes('axis');
+            const isAccessible = result.camera.status === 'accessible' || result.camera.authenticated === true;
             
             if (isAxis && isAccessible) {
-              console.log(`[Pre-Discovery] Found accessible Axis camera at ${camera.ip}`);
-              this.preDiscoveredCameras = [camera];
+              console.log(`[Pre-Discovery] Found accessible Axis camera at ${result.camera.ip}`);
+              this.preDiscoveredCameras = [result.camera];
               foundCamera = true;
               queue.clear(); // Stop all pending scans
             }
