@@ -597,47 +597,6 @@ export class OptimizedCameraDiscoveryService {
     }
   }
 
-  private async scanForSpeakerOnSameNetwork(
-    cameraIP: string,
-    credentials: Array<{ username: string; password: string }>
-  ): Promise<{ ip: string; username: string; password: string; authenticated: boolean } | null> {
-    // Extract the /24 network from camera IP
-    const ipParts = cameraIP.split('.');
-    if (ipParts.length !== 4) return null;
-    
-    const networkBase = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`;
-    console.log(`Scanning for speakers on ${networkBase}.0/24 network...`);
-    
-    // Common ports for Axis speakers
-    const speakerPorts = [80, 443, 8080];
-    
-    // Scan all IPs in the same /24 network
-    for (let i = 1; i <= 254; i++) {
-      const ip = `${networkBase}.${i}`;
-      
-      // Skip the camera IP
-      if (ip === cameraIP) continue;
-      
-      // Check each port
-      for (const port of speakerPorts) {
-        const protocol = port === 443 ? 'https' : 'http';
-        
-        if (await this.checkTCPConnection(ip, port, 500)) {
-          // Try each credential
-          for (const cred of credentials) {
-            const speaker = await this.checkAxisSpeaker(ip, cred.username, cred.password, port, protocol);
-            if (speaker) {
-              console.log(`  ✓ Found speaker at ${ip}:${port} with ${cred.username}:${cred.password}`);
-              return speaker;
-            }
-          }
-        }
-      }
-    }
-    
-    console.log(`  No speakers found on ${networkBase}.0/24`);
-    return null;
-  }
 
   private async digestAuth(
     ip: string,
