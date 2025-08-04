@@ -55,14 +55,9 @@ export const MagicalWelcomePage: React.FC<MagicalWelcomePageProps> = ({
   onTraditionalSetup
 }) => {
   const [particles, setParticles] = useState<Particle[]>([]);
-  const [isChecking, setIsChecking] = useState(true);
-  const [canUseMagic, setCanUseMagic] = useState(true);
-  const [magicMessage, setMagicMessage] = useState('');
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   useEffect(() => {
-    // Check if device can use magical demo
-    checkMagicalStatus();
-
     // Generate particles
     const newParticles: Particle[] = [];
     for (let i = 0; i < 20; i++) {
@@ -76,21 +71,27 @@ export const MagicalWelcomePage: React.FC<MagicalWelcomePageProps> = ({
     setParticles(newParticles);
   }, []);
 
-  const checkMagicalStatus = async () => {
+  const handleTryMagic = async () => {
+    setIsAuthenticating(true);
     try {
-      const result = await window.electronAPI.magical.checkStatus();
-      if (result.success && result.status) {
-        if (result.status.status === 'limit_reached') {
-          setCanUseMagic(false);
-          setMagicMessage('Demo limit reached. Please use traditional setup.');
-        } else if (result.status.requests_remaining < 10) {
-          setMagicMessage(`Only ${result.status.requests_remaining} demo requests remaining`);
+      // First check if already authenticated
+      const authStatus = await window.electronAPI.auth.check();
+      
+      if (!authStatus.authenticated) {
+        // Need to authenticate
+        const loginResult = await window.electronAPI.auth.login();
+        if (!loginResult) {
+          // User cancelled login
+          setIsAuthenticating(false);
+          return;
         }
       }
+      
+      // Now authenticated, proceed to magic
+      onTryMagic();
     } catch (error) {
-      console.error('Failed to check magical status:', error);
-    } finally {
-      setIsChecking(false);
+      console.error('Authentication failed:', error);
+      setIsAuthenticating(false);
     }
   };
 
@@ -126,7 +127,7 @@ export const MagicalWelcomePage: React.FC<MagicalWelcomePageProps> = ({
           />
         ))}
 
-        <Fade in={!isChecking} timeout={1000}>
+        <Fade in timeout={1000}>
           <Box sx={{ textAlign: 'center', zIndex: 1 }}>
             {/* Logo with glow */}
             <Box
@@ -186,8 +187,8 @@ export const MagicalWelcomePage: React.FC<MagicalWelcomePageProps> = ({
             <Button
               variant="contained"
               size="large"
-              onClick={onTryMagic}
-              disabled={isChecking || !canUseMagic}
+              onClick={handleTryMagic}
+              disabled={isAuthenticating}
               startIcon={<AutoAwesomeIcon />}
               sx={{
                 py: 2,
@@ -198,21 +199,15 @@ export const MagicalWelcomePage: React.FC<MagicalWelcomePageProps> = ({
                 textTransform: 'none',
                 position: 'relative',
                 overflow: 'hidden',
-                background: canUseMagic 
-                  ? 'linear-gradient(135deg, #0066FF 0%, #00D4FF 100%)'
-                  : '#333',
+                background: 'linear-gradient(135deg, #0066FF 0%, #00D4FF 100%)',
                 color: '#FFFFFF',
-                boxShadow: canUseMagic 
-                  ? '0 4px 20px rgba(0, 102, 255, 0.4)'
-                  : 'none',
+                boxShadow: '0 4px 20px rgba(0, 102, 255, 0.4)',
                 transition: 'all 0.3s ease',
                 '&:hover': {
-                  transform: canUseMagic ? 'translateY(-2px)' : 'none',
-                  boxShadow: canUseMagic 
-                    ? '0 8px 30px rgba(0, 102, 255, 0.6)'
-                    : 'none',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 8px 30px rgba(0, 102, 255, 0.6)',
                 },
-                '&::before': canUseMagic ? {
+                '&::before': {
                   content: '""',
                   position: 'absolute',
                   top: 0,
@@ -222,35 +217,19 @@ export const MagicalWelcomePage: React.FC<MagicalWelcomePageProps> = ({
                   background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%)',
                   backgroundSize: '200% 100%',
                   animation: `${shimmer} 3s linear infinite`,
-                } : {},
+                },
                 '&:disabled': {
                   background: '#333',
                   color: '#666',
                 },
               }}
             >
-              {isChecking ? (
+              {isAuthenticating ? (
                 <CircularProgress size={24} sx={{ color: '#FFF' }} />
-              ) : canUseMagic ? (
-                'Try AI on My Network'
               ) : (
-                'Demo Limit Reached'
+                'Try AI on My Network'
               )}
             </Button>
-
-            {/* Magic message */}
-            {magicMessage && (
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  color: '#F59E0B',
-                  mt: 2,
-                  fontSize: '0.9rem',
-                }}
-              >
-                {magicMessage}
-              </Typography>
-            )}
 
             {/* Traditional setup link */}
             <Typography 

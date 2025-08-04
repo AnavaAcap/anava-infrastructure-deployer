@@ -12,7 +12,8 @@ import { AuthTestService } from './services/authTestService';
 import { getLogger } from './utils/logger';
 import { configCacheService } from './services/configCache';
 import { fastStartService } from './services/fastStartService';
-import { magicalProxyService } from './services/magicalProxyService';
+import { AIStudioService } from './services/aiStudioService';
+import { google } from 'googleapis';
 
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
 const logger = getLogger();
@@ -455,19 +456,89 @@ ipcMain.handle('deployment:validate', async (_, params: {
 });
 
 // Magical Experience IPC Handlers
-ipcMain.handle('magical:check-status', async () => {
+ipcMain.handle('magical:generate-api-key', async () => {
   try {
-    const status = await magicalProxyService.checkDeviceStatus();
-    return { success: true, status };
+    if (!gcpOAuthService.oauth2Client) {
+      throw new Error('Not authenticated');
+    }
+
+    const user = await gcpOAuthService.getCurrentUser();
+    if (!user) {
+      throw new Error('No user authenticated');
+    }
+
+    // Check for existing project or use AI Studio without project
+    const projects = await gcpOAuthService.listProjects();
+    let projectId = null;
+    
+    if (projects && projects.length > 0) {
+      // Use the first available project
+      projectId = projects[0].projectId;
+    }
+
+    const aiStudioService = new AIStudioService(gcpOAuthService.oauth2Client);
+    
+    if (projectId) {
+      try {
+        // Enable required APIs
+        await aiStudioService.enableGenerativeLanguageAPI(projectId);
+        
+        // Also enable API Keys API if needed
+        try {
+          const serviceusage = google.serviceusage({ version: 'v1', auth: gcpOAuthService.oauth2Client });
+          await serviceusage.services.enable({
+            name: `projects/${projectId}/services/apikeys.googleapis.com`,
+          });
+          logger.info('[Magical] API Keys API enabled');
+        } catch (err: any) {
+          if (!err.message?.includes('already enabled')) {
+            logger.warn('[Magical] Could not enable API Keys API:', err.message);
+          }
+        }
+        
+        const apiKey = await aiStudioService.getOrCreateAPIKey(projectId);
+        
+        if (apiKey) {
+          logger.info('[Magical] Successfully generated/retrieved API key');
+          return { success: true, apiKey, projectId };
+        } else {
+          logger.warn('[Magical] API key creation returned null, attempting retry...');
+          // Try one more time with a delay
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          const retryKey = await aiStudioService.getOrCreateAPIKey(projectId);
+          if (retryKey) {
+            return { success: true, apiKey: retryKey, projectId };
+          }
+        }
+      } catch (keyError: any) {
+        logger.error('[Magical] Error during API key generation:', keyError);
+        // Don't immediately fall back to manual - return the error
+        return { 
+          success: false, 
+          error: `Failed to generate API key: ${keyError.message}`,
+          needsManual: false // Let the UI decide when to show manual option
+        };
+      }
+    }
+    
+    // Only open manual creation as absolute last resort
+    logger.info('[Magical] No project available or multiple failures, falling back to manual creation');
+    await aiStudioService.openAIStudioConsole();
+    return { 
+      success: false, 
+      needsManual: true,
+      message: 'Please create an API key in AI Studio and paste it below'
+    };
+    
   } catch (error: any) {
-    logger.error('Failed to check magical status:', error);
+    logger.error('Failed to generate API key:', error);
     return { success: false, error: error.message };
   }
 });
 
-ipcMain.handle('magical:start-experience', async () => {
+ipcMain.handle('magical:start-experience', async (_, apiKey: string) => {
   try {
-    logger.info('Starting magical experience...');
+    logger.info('Starting magical experience with user API key...');
     
     // Subscribe to progress events
     const progressHandler = (progress: any) => {
@@ -476,7 +547,7 @@ ipcMain.handle('magical:start-experience', async () => {
     
     fastStartService.on('progress', progressHandler);
     
-    const result = await fastStartService.startMagicalExperience();
+    const result = await fastStartService.startMagicalExperience(apiKey);
     
     // Clean up listener
     fastStartService.off('progress', progressHandler);
@@ -501,17 +572,40 @@ ipcMain.handle('magical:analyze-custom', async (_, params: {
   }
 });
 
+ipcMain.handle('magical:connect-to-camera', async (_, params: {
+  apiKey: string;
+  ip: string;
+  username: string;
+  password: string;
+}) => {
+  try {
+    logger.info(`Connecting to camera at ${params.ip} with ${params.username}...`);
+    
+    // Subscribe to progress events
+    const progressHandler = (progress: any) => {
+      mainWindow?.webContents.send('magical:progress', progress);
+    };
+    
+    fastStartService.on('progress', progressHandler);
+    
+    const result = await fastStartService.connectToSpecificCamera(
+      params.apiKey,
+      params.ip,
+      params.username,
+      params.password
+    );
+    
+    // Clean up listener
+    fastStartService.off('progress', progressHandler);
+    
+    return result;
+  } catch (error: any) {
+    logger.error('Manual camera connection failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.on('magical:subscribe', (event) => {
-  // Rate limit events
-  magicalProxyService.on('rateLimitExceeded', (data) => {
-    event.sender.send('magical:rate-limit', data);
-  });
-  
-  // Low quota warning
-  magicalProxyService.on('lowQuota', (data) => {
-    event.sender.send('magical:low-quota', data);
-  });
-  
   // Cancelled
   fastStartService.on('cancelled', () => {
     event.sender.send('magical:cancelled');

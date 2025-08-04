@@ -11,6 +11,7 @@ import { ACAPDeploymentPage } from './pages/camera/ACAPDeploymentPage';
 import { ACAPManager } from './pages/camera/ACAPManager';
 import { MagicalWelcomePage } from './pages/MagicalWelcomePage';
 import { MagicalDiscoveryPage } from './pages/MagicalDiscoveryPage';
+import { MagicalAPIKeyPage } from './pages/MagicalAPIKeyPage';
 import NavigationSidebar, { NavigationView } from './components/NavigationSidebar';
 import TopBar from './components/TopBar';
 import { anavaTheme } from './theme/anavaTheme';
@@ -238,11 +239,23 @@ function App() {
       case 'magical-welcome':
         return (
           <MagicalWelcomePage
-            onTryMagic={() => setCurrentView('magical-discovery')}
+            onTryMagic={() => setCurrentView('magical-api-key')}
             onTraditionalSetup={() => {
               setMagicalMode(false);
               setCurrentView('welcome');
             }}
+          />
+        );
+
+      case 'magical-api-key':
+        return (
+          <MagicalAPIKeyPage
+            onKeyGenerated={(apiKey) => {
+              // Store the API key in window for the discovery page to use
+              (window as any).__magicalApiKey = apiKey;
+              setCurrentView('magical-discovery');
+            }}
+            onBack={() => setCurrentView('magical-welcome')}
           />
         );
 

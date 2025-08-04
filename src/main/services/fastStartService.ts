@@ -5,10 +5,11 @@
 
 import { EventEmitter } from 'events';
 import { getLogger } from '../utils/logger';
-import { magicalProxyService } from './magicalProxyService';
+import { MagicalAIService } from './magicalAIService';
 import { CameraInfo } from '../../types';
 import axios from 'axios';
 import crypto from 'crypto';
+import os from 'os';
 
 const logger = getLogger();
 
@@ -17,7 +18,7 @@ interface MagicalResult {
   camera?: CameraInfo;
   firstInsight?: string;
   error?: string;
-  deviceStatus?: any;
+  apiKey?: string;
 }
 
 interface MagicalProgress {
@@ -30,33 +31,25 @@ interface MagicalProgress {
 export class FastStartService extends EventEmitter {
   private abortController?: AbortController;
   private configTimeout = 5000; // 5 seconds for configuration
+  private aiService?: MagicalAIService;
 
   constructor() {
     super();
   }
 
   /**
-   * Start the magical experience
+   * Start the magical experience with user's API key
    */
-  async startMagicalExperience(): Promise<MagicalResult> {
+  async startMagicalExperience(apiKey: string): Promise<MagicalResult> {
     logger.info('Starting magical experience...');
     this.abortController = new AbortController();
+    this.aiService = new MagicalAIService(apiKey);
 
     try {
-      // Check if device can use magical demo
-      this.updateProgress('discovering', 'Checking demo availability...', 5);
-      const { allowed, reason } = await magicalProxyService.canUseMagicalDemo();
-      if (!allowed) {
-        throw new Error(reason || 'Demo not available');
-      }
-
       // Start parallel operations
       this.updateProgress('discovering', 'Searching for intelligent cameras...', 10);
       
-      const [camera, deviceStatus] = await Promise.all([
-        this.findFirstCamera(),
-        magicalProxyService.checkDeviceStatus()
-      ]);
+      const camera = await this.findFirstCamera();
 
       if (!camera) {
         throw new Error('No compatible cameras found on your network');
@@ -83,7 +76,7 @@ export class FastStartService extends EventEmitter {
         success: true,
         camera,
         firstInsight,
-        deviceStatus
+        apiKey
       };
 
     } catch (error) {
@@ -108,25 +101,82 @@ export class FastStartService extends EventEmitter {
   }
 
   /**
-   * Find first camera with anava/baton credentials
+   * Find first camera with anava/baton or axis/baton credentials
    */
   private async findFirstCamera(): Promise<CameraInfo | null> {
+    // Try common credentials
+    const credentialsList = [
+      { username: 'anava', password: 'baton' },
+      { username: 'axis', password: 'baton' },
+      { username: 'root', password: 'pass' },
+      { username: 'root', password: 'root' },
+      { username: 'admin', password: 'admin' },
+      { username: 'root', password: '' }  // Some cameras have no password
+    ];
+    
+    // First, try recently connected IPs from ARP/netstat
+    const recentIPs = await this.getRecentlyConnectedIPs();
+    if (recentIPs.length > 0) {
+      logger.info(`Found ${recentIPs.length} recently connected IPs, checking those first`);
+      
+      // Process recent IPs in parallel batches
+      const recentBatchSize = 10;
+      for (let i = 0; i < recentIPs.length; i += recentBatchSize) {
+        if (this.abortController?.signal.aborted) break;
+        
+        const batch = recentIPs.slice(i, i + recentBatchSize);
+        logger.info(`Checking recent IPs batch: ${batch.join(', ')}`);
+        
+        // Test all IPs in parallel
+        const promises: Promise<CameraInfo | null>[] = [];
+        for (const ip of batch) {
+          // Only test port 80 first for speed
+          promises.push(this.quickTestCamera(ip, credentialsList));
+        }
+        
+        const results = await Promise.allSettled(promises);
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value) {
+            logger.info(`Found camera at: ${result.value.ip} - stopping search`);
+            return result.value;
+          }
+        }
+      }
+    }
+    
+    // If no camera found in recent connections, fall back to full scan
     const commonIPs = this.generateCommonCameraIPs();
-    const credentials = { username: 'anava', password: 'baton' };
+    logger.info(`Starting full scan across ${commonIPs.length} IPs with credentials: ${credentialsList.map(c => c.username).join(', ')}`);
     
     // Try common IPs in parallel batches
-    const batchSize = 10;
+    const batchSize = 20; // Increased batch size for faster scanning
     for (let i = 0; i < commonIPs.length; i += batchSize) {
       if (this.abortController?.signal.aborted) break;
 
       const batch = commonIPs.slice(i, i + batchSize);
-      const promises = batch.map(ip => this.tryCamera(ip, credentials));
+      logger.info(`Testing batch: ${batch.join(', ')}`);
+      
+      // Try each IP with each credential set
+      const promises: Promise<CameraInfo | null>[] = [];
+      for (const ip of batch) {
+        for (const credentials of credentialsList) {
+          promises.push(this.tryCamera(ip, credentials));
+        }
+      }
       
       try {
         const results = await Promise.allSettled(promises);
-        const success = results.find(r => r.status === 'fulfilled' && r.value);
-        if (success && success.status === 'fulfilled' && success.value) {
-          return success.value;
+        
+        // Find first successful result
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value) {
+            logger.info(`Found camera at: ${result.value.ip} - stopping all searches`);
+            // Cancel any remaining operations
+            if (this.abortController) {
+              this.abortController.abort();
+            }
+            return result.value;
+          }
         }
       } catch (error) {
         // Continue to next batch
@@ -137,7 +187,121 @@ export class FastStartService extends EventEmitter {
       this.updateProgress('discovering', 'Scanning network...', 10 + searchProgress, `Checked ${i + batchSize} addresses`);
     }
 
+    logger.warn('No cameras found with known credentials');
     return null;
+  }
+
+  /**
+   * Get recently connected IPs from ARP cache and active connections
+   */
+  private async getRecentlyConnectedIPs(): Promise<string[]> {
+    const recentIPs = new Set<string>();
+    const platform = os.platform();
+    
+    try {
+      // Get IPs from ARP cache
+      const arpIPs = await this.getARPCacheIPs(platform);
+      arpIPs.forEach(ip => recentIPs.add(ip));
+      
+      // Get IPs from active connections on ports 80/443
+      const connectedIPs = await this.getActiveConnectionIPs(platform);
+      connectedIPs.forEach(ip => recentIPs.add(ip));
+      
+      // Filter to only local subnet IPs
+      const subnets = this.getCurrentNetworkInfo();
+      const filteredIPs = Array.from(recentIPs).filter(ip => {
+        const parts = ip.split('.');
+        if (parts.length === 4) {
+          const subnet = `${parts[0]}.${parts[1]}.${parts[2]}`;
+          return subnets.includes(subnet);
+        }
+        return false;
+      });
+      
+      logger.info(`Found ${filteredIPs.length} IPs from ARP/connections: ${filteredIPs.join(', ')}`);
+      return filteredIPs;
+    } catch (error) {
+      logger.error('Failed to get recent IPs:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Get IPs from ARP cache
+   */
+  private async getARPCacheIPs(platform: string): Promise<string[]> {
+    try {
+      const { execSync } = require('child_process');
+      let output: string;
+      
+      if (platform === 'win32') {
+        // Windows: arp -a
+        output = execSync('arp -a', { encoding: 'utf8' });
+        // Parse Windows ARP output: "192.168.1.1     00-00-00-00-00-00     dynamic"
+        const ipRegex = /(\d+\.\d+\.\d+\.\d+)\s+[\da-f-]+\s+dynamic/gi;
+        const matches = [...output.matchAll(ipRegex)];
+        return matches.map(m => m[1]);
+      } else {
+        // macOS/Linux: arp -a
+        output = execSync('arp -a', { encoding: 'utf8' });
+        // Parse macOS ARP output: "? (192.168.1.1) at 00:00:00:00:00:00 on en0"
+        const ipRegex = /\((\d+\.\d+\.\d+\.\d+)\)/g;
+        const matches = [...output.matchAll(ipRegex)];
+        return matches.map(m => m[1]).filter(ip => !ip.startsWith('169.254'));
+      }
+    } catch (error) {
+      logger.debug('Failed to get ARP cache:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Get IPs from active connections on camera ports
+   */
+  private async getActiveConnectionIPs(platform: string): Promise<string[]> {
+    try {
+      const { execSync } = require('child_process');
+      let output: string;
+      const ips = new Set<string>();
+      
+      if (platform === 'win32') {
+        // Windows: netstat -n | findstr :80 :443
+        try {
+          output = execSync('netstat -n | findstr ":80 :443"', { encoding: 'utf8' });
+        } catch {
+          return [];
+        }
+        // Parse: "TCP    192.168.1.5:54321     192.168.1.100:80      ESTABLISHED"
+        const lines = output.split('\n');
+        for (const line of lines) {
+          const match = line.match(/TCP\s+\S+\s+(\d+\.\d+\.\d+\.\d+):(?:80|443)\s+ESTABLISHED/);
+          if (match) {
+            ips.add(match[1]);
+          }
+        }
+      } else {
+        // macOS/Linux: netstat -n | grep -E ':80 |:443 '
+        try {
+          output = execSync('netstat -n | grep -E ":80 |:443 " | grep ESTABLISHED', { encoding: 'utf8' });
+        } catch {
+          return [];
+        }
+        // Parse: "tcp4  0  0  192.168.1.5.54321  192.168.1.100.80  ESTABLISHED"
+        const lines = output.split('\n');
+        for (const line of lines) {
+          // Extract remote IP from connection
+          const match = line.match(/\s(\d+\.\d+\.\d+\.\d+)\.(?:80|443)\s+ESTABLISHED/);
+          if (match) {
+            ips.add(match[1]);
+          }
+        }
+      }
+      
+      return Array.from(ips);
+    } catch (error) {
+      logger.debug('Failed to get active connections:', error);
+      return [];
+    }
   }
 
   /**
@@ -146,29 +310,166 @@ export class FastStartService extends EventEmitter {
   private generateCommonCameraIPs(): string[] {
     const ips: string[] = [];
     
-    // Common camera ranges
-    const ranges = [
-      { subnet: '192.168.1', start: 100, end: 110 },
-      { subnet: '192.168.1', start: 200, end: 210 },
-      { subnet: '192.168.0', start: 100, end: 110 },
-      { subnet: '192.168.0', start: 200, end: 210 },
-      { subnet: '10.0.0', start: 100, end: 110 },
-    ];
-
-    // Add common specific IPs first
-    ips.push('192.168.1.100', '192.168.1.101', '192.168.1.200', '192.168.1.201');
-
-    // Then add ranges
-    ranges.forEach(range => {
-      for (let i = range.start; i <= range.end; i++) {
-        const ip = `${range.subnet}.${i}`;
+    // Get current network subnets, prioritized by primary interfaces
+    const subnets = this.getCurrentNetworkInfo();
+    
+    // Strategy: Scan detected subnets with prioritization
+    // 1. First, scan common camera IPs on primary subnet
+    // 2. Then scan full primary subnet  
+    // 3. Only scan common IPs on secondary subnets
+    
+    for (let i = 0; i < subnets.length; i++) {
+      const subnet = subnets[i];
+      const isPrimary = i === 0;
+      
+      // For faster discovery, add common camera IPs first
+      const commonCameraIPs = [100, 101, 200, 201, 64, 88, 99, 2, 10, 20, 30, 50, 60, 70, 80, 90, 110, 150, 156, 125, 126, 155, 157, 158];
+      for (const lastOctet of commonCameraIPs) {
+        const ip = `${subnet}.${lastOctet}`;
         if (!ips.includes(ip)) {
           ips.push(ip);
         }
       }
-    });
+      
+      // For primary subnet, scan everything; for secondary, just common ranges
+      if (isPrimary) {
+        // Scan full primary subnet
+        for (let j = 1; j <= 254; j++) {
+          const ip = `${subnet}.${j}`;
+          if (!ips.includes(ip)) {
+            ips.push(ip);
+          }
+        }
+      } else {
+        // For secondary subnets, just scan common ranges
+        const ranges = [
+          { start: 50, end: 70 },   // Common DHCP range
+          { start: 100, end: 120 }, // Common static IP range
+          { start: 200, end: 210 }  // Another common range
+        ];
+        
+        for (const range of ranges) {
+          for (let j = range.start; j <= range.end; j++) {
+            const ip = `${subnet}.${j}`;
+            if (!ips.includes(ip)) {
+              ips.push(ip);
+            }
+          }
+        }
+      }
+    }
+    
+    // Only add fallback IPs if we have no detected subnets or very few IPs
+    if (ips.length < 50) {
+      logger.warn(`Only ${ips.length} IPs found from network detection, adding fallback common camera IPs`);
+      const fallbackSubnets = ['192.168.1', '192.168.0'];
+      for (const fallback of fallbackSubnets) {
+        if (!subnets.includes(fallback)) {
+          // Just add the most common camera IPs for fallback subnets
+          const commonCameraIPs = [100, 101, 200, 201];
+          for (const lastOctet of commonCameraIPs) {
+            const ip = `${fallback}.${lastOctet}`;
+            if (!ips.includes(ip)) {
+              ips.push(ip);
+            }
+          }
+        }
+      }
+    }
 
+    logger.info(`Generated ${ips.length} IPs to scan (primary subnets: ${subnets.slice(0, 2).join(', ')})`);
     return ips;
+  }
+
+  /**
+   * Get current network subnets, prioritizing primary interfaces
+   */
+  private getCurrentNetworkInfo(): string[] {
+    const subnets: string[] = [];
+    
+    try {
+      const interfaces = os.networkInterfaces();
+      const platform = os.platform();
+      
+      // Define primary interface names by platform
+      const primaryInterfaces = platform === 'win32' 
+        ? ['Ethernet', 'Wi-Fi', 'Local Area Connection'] // Windows
+        : ['en0', 'eth0', 'en1', 'eth1']; // macOS/Linux
+      
+      // First, try to get subnets from primary interfaces
+      for (const primaryName of primaryInterfaces) {
+        // Check both exact match and case-insensitive for Windows
+        let ifaces = interfaces[primaryName];
+        
+        if (!ifaces && platform === 'win32') {
+          // On Windows, interface names might have different casing or include numbers
+          const lowerPrimary = primaryName.toLowerCase();
+          for (const ifaceName of Object.keys(interfaces)) {
+            if (ifaceName.toLowerCase().includes(lowerPrimary)) {
+              ifaces = interfaces[ifaceName];
+              logger.info(`Matched Windows interface: ${ifaceName} for ${primaryName}`);
+              break;
+            }
+          }
+        }
+        
+        if (ifaces) {
+          for (const iface of ifaces) {
+            if (!iface.internal && iface.family === 'IPv4') {
+              const parts = iface.address.split('.');
+              if (parts.length === 4) {
+                // Skip link-local addresses (169.254.x.x)
+                if (parts[0] === '169' && parts[1] === '254') {
+                  continue;
+                }
+                const subnet = `${parts[0]}.${parts[1]}.${parts[2]}`;
+                if (!subnets.includes(subnet)) {
+                  logger.info(`Found primary network ${primaryName}: ${iface.address} (subnet: ${subnet})`);
+                  subnets.push(subnet);
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // Then add any other interfaces (like VPN, etc)
+      for (const name of Object.keys(interfaces)) {
+        // Skip if already processed as primary
+        if (primaryInterfaces.some(p => p.toLowerCase() === name.toLowerCase())) {
+          continue;
+        }
+        
+        for (const iface of interfaces[name] || []) {
+          if (!iface.internal && iface.family === 'IPv4') {
+            const parts = iface.address.split('.');
+            if (parts.length === 4) {
+              // Skip link-local addresses (169.254.x.x)
+              if (parts[0] === '169' && parts[1] === '254') {
+                continue;
+              }
+              const subnet = `${parts[0]}.${parts[1]}.${parts[2]}`;
+              if (!subnets.includes(subnet)) {
+                logger.info(`Found secondary network ${name}: ${iface.address} (subnet: ${subnet})`);
+                subnets.push(subnet);
+              }
+            }
+          }
+        }
+      }
+      
+      logger.info(`Network scan order: ${subnets.join(', ')}`);
+    } catch (error) {
+      logger.error('Failed to get network info:', error);
+    }
+    
+    // If no networks found, return common defaults
+    if (subnets.length === 0) {
+      logger.warn('No networks detected, using defaults');
+      return ['192.168.1', '192.168.0', '10.0.0'];
+    }
+    
+    return subnets;
   }
 
   /**
@@ -176,26 +477,58 @@ export class FastStartService extends EventEmitter {
    */
   private async tryCamera(ip: string, credentials: { username: string; password: string }): Promise<CameraInfo | null> {
     try {
-      // Try HTTPS first, then HTTP
-      for (const protocol of ['https', 'http']) {
-        for (const port of [443, 80]) {
+      // Try HTTP first (more common), then HTTPS
+      for (const protocol of ['http', 'https']) {
+        for (const port of protocol === 'https' ? [443, 8443] : [80, 8080]) {
           if (this.abortController?.signal.aborted) return null;
 
           const baseURL = `${protocol}://${ip}:${port}`;
           
           try {
-            // Try to get device info using VAPIX
-            const response = await axios.get(`${baseURL}/axis-cgi/param.cgi?action=list&group=Brand`, {
-              auth: credentials,
-              timeout: 500,
+            // First, check if port is open with a simple request
+            const checkResponse = await axios.get(baseURL, {
+              timeout: 300, // Reduced timeout for faster scanning
               validateStatus: () => true,
-              signal: this.abortController?.signal
+              signal: this.abortController?.signal,
+              maxRedirects: 0,
+              // Disable SSL verification for self-signed certificates
+              httpsAgent: protocol === 'https' ? new (require('https').Agent)({
+                rejectUnauthorized: false
+              }) : undefined
             });
+            
+            // If we get any response, try VAPIX with digest auth
+            if (checkResponse.status > 0) {
+              try {
+                const response = await this.digestAuth(
+                  `${baseURL}/axis-cgi/param.cgi?action=list&group=Brand`,
+                  credentials.username,
+                  credentials.password
+                );
 
-            if (response.status === 200) {
+              if (response.status === 200 && response.data) {
+              // Verify it's actually an Axis camera
+              const responseData = String(response.data);
+              if (!responseData.includes('Brand=AXIS') && !responseData.includes('Brand.Brand=AXIS')) {
+                logger.debug(`Not an Axis camera at ${ip} - no AXIS brand found`);
+                return null;
+              }
+              
+              logger.info(`SUCCESS: Found Axis camera at ${ip} with ${credentials.username}/${credentials.password}`);
+              
               // Parse camera info
-              const model = this.parseVAPIXResponse(response.data, 'Brand.ProdNbr');
-              const brand = this.parseVAPIXResponse(response.data, 'Brand.Brand');
+              const model = this.parseVAPIXResponse(responseData, 'Brand.ProdNbr');
+              const brand = this.parseVAPIXResponse(responseData, 'Brand.Brand');
+              const productType = this.parseVAPIXResponse(responseData, 'Brand.ProdType');
+              
+              // Filter out non-camera devices
+              if (productType && (
+                productType.toLowerCase().includes('speaker') || 
+                productType.toLowerCase().includes('audio') ||
+                productType.toLowerCase().includes('sound'))) {
+                logger.debug(`Skipping non-camera Axis device at ${ip} (${productType})`);
+                return null;
+              }
               
               return {
                 ip,
@@ -209,9 +542,25 @@ export class FastStartService extends EventEmitter {
                 username: credentials.username,
                 password: credentials.password
               };
+            } else if (response.status === 401) {
+              logger.debug(`AUTH FAILED at ${ip} with ${credentials.username} (401)`);
             }
-          } catch (error) {
-            // Try next combination
+              } catch (digestError: any) {
+                // Digest auth failed, only log non-401 errors
+                if (!digestError.message?.includes('401')) {
+                  logger.debug(`Digest auth error at ${ip} with ${credentials.username}: ${digestError.message}`);
+                }
+              }
+            } // Close the port check if
+          } catch (error: any) {
+            // Only log connection errors for debugging
+            if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+              // Silent - camera not at this address
+            } else if (error.message?.includes('certificate')) {
+              // Silent - SSL certificate issues are common
+            } else {
+              logger.debug(`Error testing ${ip}: ${error.message}`);
+            }
           }
         }
       }
@@ -232,9 +581,78 @@ export class FastStartService extends EventEmitter {
   }
 
   /**
-   * Configure camera with magical proxy settings
+   * Simple digest auth implementation
+   */
+  private async digestAuth(url: string, username: string, password: string): Promise<any> {
+    try {
+      // First request to get challenge
+      const isHttps = url.startsWith('https');
+      const response1 = await axios.get(url, {
+        validateStatus: () => true,
+        timeout: 2000,
+        signal: this.abortController?.signal,
+        httpsAgent: isHttps ? new (require('https').Agent)({
+          rejectUnauthorized: false
+        }) : undefined
+      });
+      
+      if (response1.status !== 401) {
+        return response1;
+      }
+      
+      const wwwAuth = response1.headers['www-authenticate'];
+      if (!wwwAuth || !wwwAuth.includes('Digest')) {
+        throw new Error('No digest auth challenge');
+      }
+      
+      // Parse digest parameters
+      const authParams: any = {};
+      const regex = /(\w+)=(?:"([^"]*)"|([^,]*))/g;
+      let match;
+      while ((match = regex.exec(wwwAuth)) !== null) {
+        authParams[match[1]] = match[2] || match[3];
+      }
+      
+      const nc = '00000001';
+      const cnonce = crypto.randomBytes(8).toString('hex');
+      const uri = new URL(url).pathname + new URL(url).search;
+      
+      // Calculate response
+      const md5 = (str: string) => crypto.createHash('md5').update(str).digest('hex');
+      const ha1 = md5(`${username}:${authParams.realm}:${password}`);
+      const ha2 = md5(`GET:${uri}`);
+      const response = md5(`${ha1}:${authParams.nonce}:${nc}:${cnonce}:${authParams.qop}:${ha2}`);
+      
+      // Build authorization header
+      const authHeader = `Digest username="${username}", realm="${authParams.realm}", nonce="${authParams.nonce}", uri="${uri}", algorithm="${authParams.algorithm || 'MD5'}", response="${response}", qop=${authParams.qop}, nc=${nc}, cnonce="${cnonce}"`;
+      
+      // Second request with auth
+      const response2 = await axios.get(url, {
+        headers: {
+          'Authorization': authHeader
+        },
+        timeout: 2000,
+        signal: this.abortController?.signal,
+        httpsAgent: isHttps ? new (require('https').Agent)({
+          rejectUnauthorized: false
+        }) : undefined
+      });
+      
+      return response2;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Configure camera with user's AI Studio settings
    */
   private async configureCameraForMagic(camera: CameraInfo): Promise<void> {
+    if (!this.aiService) {
+      throw new Error('AI service not initialized');
+    }
+
+    // Use minimal config for magical experience with user's API key
     const config = {
       firebase: {
         apiKey: "demo-api-key",
@@ -246,13 +664,14 @@ export class FastStartService extends EventEmitter {
         databaseId: "(default)"
       },
       gemini: {
-        magicalProxyUrl: process.env.AI_PROXY_URL || "https://ai-proxy-anava-magical-backend.cloudfunctions.net/ai-proxy",
-        magicalProxyKey: "demo-mode",
-        vertexGcpProjectId: "anava-magical-backend",
+        apiKey: this.aiService.getApiKey(), // Use the user's API key
+        vertexApiGatewayUrl: "",
+        vertexApiGatewayKey: "",
+        vertexGcpProjectId: "anava-magical",
         vertexGcpRegion: "us-central1",
         vertexGcsBucketName: "anava-magical-analytics"
       },
-      anavaKey: `demo-${crypto.randomBytes(8).toString('hex')}`,
+      anavaKey: `magical-${crypto.randomBytes(8).toString('hex')}`,
       customerId: "magical-demo"
     };
 
@@ -291,6 +710,10 @@ export class FastStartService extends EventEmitter {
    * Capture first frame and get AI analysis
    */
   private async captureAndAnalyzeFirstFrame(camera: CameraInfo): Promise<string> {
+    if (!this.aiService) {
+      throw new Error('AI service not initialized');
+    }
+
     try {
       // Capture snapshot from camera
       const snapshotUrl = `${camera.protocol}://${camera.ip}:${camera.port}/axis-cgi/jpg/image.cgi`;
@@ -308,7 +731,7 @@ export class FastStartService extends EventEmitter {
       const base64 = Buffer.from(response.data).toString('base64');
       
       // Get magical first insight
-      const insight = await magicalProxyService.generateFirstInsight(base64);
+      const insight = await this.aiService.generateFirstInsight(base64);
       
       return insight;
       
@@ -320,9 +743,67 @@ export class FastStartService extends EventEmitter {
   }
 
   /**
+   * Connect to a specific camera with manual IP and credentials
+   */
+  async connectToSpecificCamera(apiKey: string, ip: string, username: string, password: string): Promise<MagicalResult> {
+    logger.info(`Manual connection to camera at ${ip}...`);
+    this.abortController = new AbortController();
+    this.aiService = new MagicalAIService(apiKey);
+
+    try {
+      this.updateProgress('discovering', `Connecting to ${ip}...`, 20);
+      
+      // Try to connect to the camera with provided credentials
+      const camera = await this.tryCamera(ip, { username, password });
+      
+      if (!camera) {
+        throw new Error(`Failed to connect to camera at ${ip}. Please check the IP address and credentials.`);
+      }
+
+      this.updateProgress('configuring', `Found camera at ${camera.ip}`, 40);
+
+      // Configure camera with magical settings
+      await this.configureCameraForMagic(camera);
+      
+      this.updateProgress('awakening', 'AI is learning to see...', 60);
+
+      // Deploy ACAP (simulated for now)
+      await this.deployACAPQuickly(camera);
+
+      this.updateProgress('analyzing', 'Capturing first glimpse...', 80);
+
+      // Get first frame and analyze
+      const firstInsight = await this.captureAndAnalyzeFirstFrame(camera);
+
+      this.updateProgress('complete', 'Magic complete!', 100);
+
+      return {
+        success: true,
+        camera,
+        firstInsight,
+        apiKey
+      };
+
+    } catch (error) {
+      logger.error('Manual connection failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Connection failed';
+      this.updateProgress('error', errorMessage, 0);
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
+  }
+
+  /**
    * Process user's analysis request
    */
   async processUserQuery(query: string, camera: CameraInfo): Promise<string> {
+    if (!this.aiService) {
+      throw new Error('AI service not initialized');
+    }
+
     try {
       // Capture current frame
       const snapshotUrl = `${camera.protocol}://${camera.ip}:${camera.port}/axis-cgi/jpg/image.cgi`;
@@ -339,12 +820,98 @@ export class FastStartService extends EventEmitter {
       const base64 = Buffer.from(response.data).toString('base64');
       
       // Analyze with user's prompt
-      return await magicalProxyService.analyzeWithUserPrompt(base64, query);
+      return await this.aiService.analyzeWithUserPrompt(base64, query);
       
     } catch (error) {
       logger.error('Failed to process user query:', error);
       throw new Error('Failed to analyze scene');
     }
+  }
+
+  /**
+   * Quick test camera - optimized for speed
+   * Tests only port 80 first, with all credentials in parallel
+   */
+  private async quickTestCamera(ip: string, credentialsList: { username: string; password: string }[]): Promise<CameraInfo | null> {
+    if (this.abortController?.signal.aborted) return null;
+    
+    try {
+      const baseURL = `http://${ip}:80`;
+      
+      // First, quick TCP check to see if port 80 is even open
+      const isOpen = await new Promise<boolean>((resolve) => {
+        const net = require('net');
+        const socket = new net.Socket();
+        const timer = setTimeout(() => {
+          socket.destroy();
+          resolve(false);
+        }, 200); // Very short timeout for TCP check
+        
+        socket.on('connect', () => {
+          clearTimeout(timer);
+          socket.destroy();
+          resolve(true);
+        });
+        
+        socket.on('error', () => {
+          clearTimeout(timer);
+          socket.destroy();
+          resolve(false);
+        });
+        
+        socket.connect(80, ip);
+      });
+      
+      if (!isOpen) {
+        return null;
+      }
+      
+      // Port is open, try all credentials in parallel
+      const promises = credentialsList.map(async (creds) => {
+        try {
+          const response = await this.digestAuth(
+            `${baseURL}/axis-cgi/param.cgi?action=list&group=Brand`,
+            creds.username,
+            creds.password
+          );
+          
+          if (response.status === 200 && response.data) {
+            const responseData = String(response.data);
+            if (responseData.includes('Brand=AXIS') || responseData.includes('Brand.Brand=AXIS')) {
+              logger.info(`QUICK HIT: Found Axis camera at ${ip} with ${creds.username}/${creds.password}`);
+              
+              return {
+                ip,
+                model: this.parseVAPIXResponse(responseData, 'Brand.ProdNbr') || 'Unknown Axis Camera',
+                manufacturer: 'Axis',
+                mac: '',
+                hostname: '',
+                port: 80,
+                protocol: 'http' as const,
+                authenticated: true,
+                username: creds.username,
+                password: creds.password
+              };
+            }
+          }
+        } catch (error) {
+          // Silent fail for this credential
+        }
+        return null;
+      });
+      
+      // Race all credential attempts
+      const results = await Promise.allSettled(promises);
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
+          return result.value;
+        }
+      }
+    } catch (error) {
+      // Silent fail
+    }
+    
+    return null;
   }
 
   /**
