@@ -98,6 +98,12 @@ export interface CameraInfo {
   authenticated?: boolean;
   username?: string;
   password?: string;
+  speaker?: {
+    ip: string;
+    username: string;
+    password: string;
+    authenticated: boolean;
+  };
 }
 
 declare global {

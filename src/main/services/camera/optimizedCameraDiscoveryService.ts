@@ -31,6 +31,12 @@ export interface Camera {
   httpsUrl?: string;
   authenticated?: boolean;
   error?: string;
+  speaker?: {
+    ip: string;
+    username: string;
+    password: string;
+    authenticated: boolean;
+  };
 }
 
 interface DiscoveryOptions {
@@ -191,6 +197,26 @@ export class OptimizedCameraDiscoveryService {
       );
       
       await Promise.all(scanTasks);
+    }
+    
+    // After finding all cameras, scan for speakers on their networks
+    console.log('=== Scanning for speakers on camera networks ===');
+    for (const camera of cameras) {
+      if (camera.authenticated && camera.credentials) {
+        const speaker = await this.scanForSpeakerOnSameNetwork(
+          camera.ip, 
+          options?.credentials || DEFAULT_CREDENTIALS
+        );
+        if (speaker) {
+          camera.speaker = speaker;
+          console.log(`Camera ${camera.ip} paired with speaker ${speaker.ip}`);
+          
+          // Send update with speaker info
+          if (sender) {
+            sender.send('camera-discovered', camera);
+          }
+        }
+      }
     }
     
     const endTime = Date.now();
@@ -480,6 +506,93 @@ export class OptimizedCameraDiscoveryService {
       console.error(`  ✗ Error checking camera:`, error.message);
       return null;
     }
+  }
+
+  private async checkAxisSpeaker(
+    ip: string,
+    username: string,
+    password: string,
+    port = 80,
+    protocol: 'http' | 'https' = 'http'
+  ): Promise<{ ip: string; username: string; password: string; authenticated: boolean } | null> {
+    try {
+      console.log(`  Checking Axis speaker at ${protocol}://${ip}:${port}`);
+      
+      // Try to get device info with digest auth
+      const response = await this.digestAuth(
+        ip,
+        username,
+        password,
+        '/axis-cgi/param.cgi?action=list&group=Brand',
+        port,
+        protocol
+      );
+      
+      if (response && response.includes('Brand=AXIS')) {
+        const typeMatch = response.match(/ProdType=([^\r\n]+)/);
+        const productType = typeMatch ? typeMatch[1] : '';
+        
+        // Check if it's a speaker device
+        if (productType.toLowerCase().includes('speaker') || 
+            productType.toLowerCase().includes('audio') ||
+            productType.toLowerCase().includes('sound')) {
+          console.log(`  ✓ Found Axis speaker (${productType})`);
+          return {
+            ip,
+            username,
+            password,
+            authenticated: true
+          };
+        }
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.error(`  ✗ Error checking speaker:`, error.message);
+      return null;
+    }
+  }
+
+  private async scanForSpeakerOnSameNetwork(
+    cameraIP: string,
+    credentials: Array<{ username: string; password: string }>
+  ): Promise<{ ip: string; username: string; password: string; authenticated: boolean } | null> {
+    // Extract the /24 network from camera IP
+    const ipParts = cameraIP.split('.');
+    if (ipParts.length !== 4) return null;
+    
+    const networkBase = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`;
+    console.log(`Scanning for speakers on ${networkBase}.0/24 network...`);
+    
+    // Common ports for Axis speakers
+    const speakerPorts = [80, 443, 8080];
+    
+    // Scan all IPs in the same /24 network
+    for (let i = 1; i <= 254; i++) {
+      const ip = `${networkBase}.${i}`;
+      
+      // Skip the camera IP
+      if (ip === cameraIP) continue;
+      
+      // Check each port
+      for (const port of speakerPorts) {
+        const protocol = port === 443 ? 'https' : 'http';
+        
+        if (await this.checkTCPConnection(ip, port, 500)) {
+          // Try each credential
+          for (const cred of credentials) {
+            const speaker = await this.checkAxisSpeaker(ip, cred.username, cred.password, port, protocol);
+            if (speaker) {
+              console.log(`  ✓ Found speaker at ${ip}:${port} with ${cred.username}:${cred.password}`);
+              return speaker;
+            }
+          }
+        }
+      }
+    }
+    
+    console.log(`  No speakers found on ${networkBase}.0/24`);
+    return null;
   }
 
   private async digestAuth(
