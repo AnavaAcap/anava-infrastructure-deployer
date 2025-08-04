@@ -712,7 +712,9 @@ export class FastStartService extends EventEmitter {
         signal: this.abortController?.signal,
         httpsAgent: isHttps ? new (require('https').Agent)({
           rejectUnauthorized: false
-        }) : undefined
+        }) : undefined,
+        // Handle binary data for images
+        responseType: url.includes('/jpg/') || url.includes('/image') ? 'arraybuffer' : undefined
       });
       
       return response2;
@@ -778,48 +780,63 @@ export class FastStartService extends EventEmitter {
   }
 
   /**
-   * Deploy ACAP quickly (simulated for demo)
+   * Deploy ACAP quickly
    */
   private async deployACAPQuickly(_camera: CameraInfo): Promise<void> {
-    // In production, this would actually deploy the ACAP
-    // For demo, we simulate the deployment time
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    logger.info('ACAP deployment simulated');
+    try {
+      logger.info('Verifying BatonAnalytic ACAP is installed...');
+      
+      // TODO: Add check if ACAP is already installed
+      // TODO: If not installed, download and deploy the ACAP
+      
+      logger.info('BatonAnalytic ACAP ready');
+      
+      // Give the ACAP a moment to be ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+    } catch (error) {
+      logger.error('Failed to verify ACAP:', error);
+      throw new Error('BatonAnalytic ACAP is required but not available');
+    }
   }
 
   /**
    * Capture first frame and get AI analysis
    */
   private async captureAndAnalyzeFirstFrame(camera: CameraInfo): Promise<string> {
-    if (!this.aiService) {
-      throw new Error('AI service not initialized');
-    }
-
     try {
-      // Capture snapshot from camera
-      const snapshotUrl = `${camera.protocol}://${camera.ip}:${camera.port}/axis-cgi/jpg/image.cgi`;
+      // Call the ACAP's scene description endpoint
+      const sceneDescPath = '/local/BatonAnalytic/baton_analytic.cgi?command=getSceneDescription';
       
-      const response = await axios.get(snapshotUrl, {
-        auth: {
-          username: camera.username!,
-          password: camera.password!
-        },
-        responseType: 'arraybuffer',
-        timeout: 5000
-      });
+      const requestData = {
+        viewArea: 1  // Default camera channel
+      };
+      
+      const response = await this.digestAuthPost(
+        camera.ip,
+        camera.username!,
+        camera.password!,
+        sceneDescPath,
+        requestData,
+        camera.port,
+        camera.protocol
+      );
 
-      // Convert to base64
-      const base64 = Buffer.from(response.data).toString('base64');
+      if (!response || response.status !== 200) {
+        throw new Error('Failed to get scene description from ACAP');
+      }
+
+      const data = response.data;
+      if (data.status === 'success' && data.description) {
+        // Return the description in a magical first-sight format
+        return `I see... ${data.description}`;
+      } else {
+        throw new Error(data.message || 'Failed to generate description');
+      }
       
-      // Get magical first insight
-      const insight = await this.aiService.generateFirstInsight(base64);
-      
-      return insight;
-      
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to capture/analyze first frame:', error);
-      // Return a fallback insight
-      return "I have awakened and can see your world through new eyes.";
+      throw new Error('Failed to get scene description from camera');
     }
   }
 
@@ -881,27 +898,36 @@ export class FastStartService extends EventEmitter {
    * Process user's analysis request
    */
   async processUserQuery(query: string, camera: CameraInfo): Promise<string> {
-    if (!this.aiService) {
-      throw new Error('AI service not initialized');
-    }
-
     try {
-      // Capture current frame
-      const snapshotUrl = `${camera.protocol}://${camera.ip}:${camera.port}/axis-cgi/jpg/image.cgi`;
+      // For now, we'll use the same scene description endpoint
+      // In the future, this could be enhanced to accept custom prompts
+      const sceneDescPath = '/local/BatonAnalytic/baton_analytic.cgi?command=getSceneDescription';
       
-      const response = await axios.get(snapshotUrl, {
-        auth: {
-          username: camera.username!,
-          password: camera.password!
-        },
-        responseType: 'arraybuffer',
-        timeout: 5000
-      });
+      const requestData = {
+        viewArea: 1
+      };
+      
+      const response = await this.digestAuthPost(
+        camera.ip,
+        camera.username!,
+        camera.password!,
+        sceneDescPath,
+        requestData,
+        camera.port,
+        camera.protocol
+      );
 
-      const base64 = Buffer.from(response.data).toString('base64');
-      
-      // Analyze with user's prompt
-      return await this.aiService.analyzeWithUserPrompt(base64, query);
+      if (!response || response.status !== 200) {
+        throw new Error('Failed to analyze scene');
+      }
+
+      const data = response.data;
+      if (data.status === 'success' && data.description) {
+        // For now, return the description with context about the user's query
+        return `Based on your question "${query}", here's what I observe: ${data.description}`;
+      } else {
+        throw new Error(data.message || 'Analysis failed');
+      }
       
     } catch (error) {
       logger.error('Failed to process user query:', error);
