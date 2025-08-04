@@ -120,11 +120,60 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
     // Don't auto-start, wait for user to either enter IP or scan
     subscribeToEvents();
     
-    // Check for pre-discovered cameras
-    checkPreDiscoveredCameras();
+    // Check for pre-discovered cameras immediately and periodically
+    const checkAndAutoConnect = async () => {
+      const result = await window.electronAPI.camera.getPreDiscoveredCameras();
+      if (result.cameras.length > 0) {
+        // FOUND A CAMERA - START IMMEDIATELY!
+        console.log('CAMERA FOUND - STARTING AUTOMATIC CONNECTION!');
+        const firstCamera = result.cameras[0];
+        const apiKey = (window as any).__magicalApiKey;
+        
+        if (apiKey) {
+          // Hide manual form IMMEDIATELY
+          setManualMode(false);
+          setProgress({
+            stage: 'configuring',
+            message: `Connecting to camera at ${firstCamera.ip}...`,
+            progress: 40
+          });
+          
+          // Connect NOW
+          const connectResult = await window.electronAPI.magical.connectToCamera({
+            apiKey,
+            ip: firstCamera.ip,
+            username: firstCamera.credentials?.username || 'root',
+            password: firstCamera.credentials?.password || 'pass'
+          });
+          
+          if (connectResult.success && connectResult.camera) {
+            setCamera(connectResult.camera);
+            setFirstInsight(connectResult.firstInsight || '');
+            startCameraFeed(connectResult.camera);
+            onComplete(connectResult.camera);
+          }
+        }
+        return true;
+      }
+      return false;
+    };
+    
+    // Check immediately
+    checkAndAutoConnect();
+    
+    // Keep checking every 500ms until we find a camera or timeout
+    const interval = setInterval(async () => {
+      const found = await checkAndAutoConnect();
+      if (found) {
+        clearInterval(interval);
+      }
+    }, 500);
+    
+    // Stop checking after 15 seconds
+    setTimeout(() => clearInterval(interval), 15000);
 
     return () => {
-      // Cleanup
+      clearInterval(interval);
       window.electronAPI.magical.cancel();
     };
   }, []);
@@ -227,55 +276,6 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
     });
   };
 
-  const checkPreDiscoveredCameras = async () => {
-    try {
-      const result = await window.electronAPI.camera.getPreDiscoveredCameras();
-      if (result.cameras.length > 0 && result.isComplete) {
-        console.log(`Found ${result.cameras.length} pre-discovered cameras!`);
-        const firstCamera = result.cameras[0];
-        
-        // Get the API key
-        const apiKey = (window as any).__magicalApiKey;
-        if (!apiKey) {
-          console.error('No API key available for auto-connect');
-          return;
-        }
-        
-        // Automatically start the magical experience!
-        setManualMode(false); // Hide manual form
-        setProgress({
-          stage: 'discovering',
-          message: `Found camera at ${firstCamera.ip} - connecting automatically!`,
-          progress: 30
-        });
-        
-        // Small delay for UI feedback
-        setTimeout(async () => {
-          const connectResult = await window.electronAPI.magical.connectToCamera({
-            apiKey,
-            ip: firstCamera.ip,
-            username: firstCamera.credentials?.username || 'root',
-            password: firstCamera.credentials?.password || 'pass'
-          });
-          
-          if (connectResult.success && connectResult.camera) {
-            setCamera(connectResult.camera);
-            setFirstInsight(connectResult.firstInsight || '');
-            startCameraFeed(connectResult.camera);
-            onComplete(connectResult.camera);
-          } else {
-            // Fall back to manual mode if auto-connect fails
-            setManualMode(true);
-            setManualIp(firstCamera.ip);
-            setErrorMessage(connectResult.error || 'Auto-connect failed');
-            setShowError(true);
-          }
-        }, 500);
-      }
-    } catch (error) {
-      console.log('No pre-discovered cameras available');
-    }
-  };
 
   const startCameraFeed = async (cameraInfo: CameraInfo) => {
     // In a real implementation, this would connect to the camera's MJPEG stream
