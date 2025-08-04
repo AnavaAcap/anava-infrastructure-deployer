@@ -59,10 +59,12 @@ export class FastStartService extends EventEmitter {
       // Configure camera with magical settings
       await this.configureCameraForMagic(camera);
       
-      this.updateProgress('awakening', 'AI is learning to see...', 60);
+      this.updateProgress('awakening', 'Installing AI vision capabilities...', 50);
 
-      // Deploy ACAP (simulated for now - in production would actually deploy)
+      // Deploy ACAP
       await this.deployACAPQuickly(camera);
+      
+      this.updateProgress('awakening', 'AI is learning to see...', 70);
 
       this.updateProgress('analyzing', 'Capturing first glimpse...', 80);
 
@@ -782,21 +784,69 @@ export class FastStartService extends EventEmitter {
   /**
    * Deploy ACAP quickly
    */
-  private async deployACAPQuickly(_camera: CameraInfo): Promise<void> {
+  private async deployACAPQuickly(camera: CameraInfo): Promise<void> {
     try {
-      logger.info('Verifying BatonAnalytic ACAP is installed...');
+      logger.info('Checking if BatonAnalytic ACAP is installed...');
       
-      // TODO: Add check if ACAP is already installed
-      // TODO: If not installed, download and deploy the ACAP
+      // Check if ACAP is already installed
+      const acapDeployService = require('./acapDeploymentService').acapDeploymentService;
+      const installedACAPs = await acapDeployService.listInstalledACAPs(camera);
       
-      logger.info('BatonAnalytic ACAP ready');
+      const isInstalled = installedACAPs.some((acap: any) => 
+        acap.name?.toLowerCase().includes('batonanalytic') ||
+        acap.packagename?.toLowerCase().includes('batonanalytic')
+      );
       
-      // Give the ACAP a moment to be ready
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (isInstalled) {
+        logger.info('BatonAnalytic ACAP is already installed');
+        return;
+      }
+      
+      logger.info('BatonAnalytic ACAP not found, downloading and installing...');
+      
+      // Get the latest ACAP release
+      const acapService = require('./acapDownloadService').acapDownloadService;
+      const releases = await acapService.getLatestReleases();
+      
+      if (!releases || releases.length === 0) {
+        throw new Error('No ACAP releases found');
+      }
+      
+      // Find the BatonAnalytic ACAP for the appropriate architecture
+      // Prefer armv7hf for most Axis cameras
+      const batonRelease = releases.find((r: any) => 
+        r.name.includes('BatonAnalytic') && r.name.includes('armv7hf')
+      ) || releases.find((r: any) => 
+        r.name.includes('BatonAnalytic') && r.name.includes('aarch64')
+      );
+      
+      if (!batonRelease) {
+        throw new Error('No compatible BatonAnalytic ACAP found in releases');
+      }
+      
+      logger.info(`Found ACAP release: ${batonRelease.name}`);
+      
+      // Download the ACAP
+      const acapPath = await acapService.downloadRelease(batonRelease);
+      logger.info(`Downloaded ACAP to: ${acapPath}`);
+      
+      // Deploy to camera
+      logger.info('Installing ACAP on camera...');
+      const deployResult = await acapDeployService.deployACAP(camera, acapPath);
+      
+      if (!deployResult.success) {
+        throw new Error(`ACAP deployment failed: ${deployResult.error}`);
+      }
+      
+      logger.info('BatonAnalytic ACAP installed successfully');
+      
+      // Give the ACAP time to start up
+      logger.info('Waiting for ACAP to initialize...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
       
     } catch (error) {
-      logger.error('Failed to verify ACAP:', error);
-      throw new Error('BatonAnalytic ACAP is required but not available');
+      logger.error('Failed to deploy ACAP:', error);
+      throw new Error('BatonAnalytic ACAP deployment failed');
     }
   }
 
@@ -863,10 +913,12 @@ export class FastStartService extends EventEmitter {
       // Configure camera with magical settings
       await this.configureCameraForMagic(camera);
       
-      this.updateProgress('awakening', 'AI is learning to see...', 60);
+      this.updateProgress('awakening', 'Installing AI vision capabilities...', 50);
 
-      // Deploy ACAP (simulated for now)
+      // Deploy ACAP
       await this.deployACAPQuickly(camera);
+      
+      this.updateProgress('awakening', 'AI is learning to see...', 70);
 
       this.updateProgress('analyzing', 'Capturing first glimpse...', 80);
 
