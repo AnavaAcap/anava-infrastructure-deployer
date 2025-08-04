@@ -95,14 +95,14 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
         '& .MuiDrawer-paper': {
           width: 240,
           boxSizing: 'border-box',
-          backgroundColor: '#f5f5f5',
-          borderRight: '1px solid #e0e0e0',
+          backgroundColor: theme => theme.palette.mode === 'dark' ? theme.palette.background.paper : '#f5f5f5',
+          borderRight: theme => `1px solid ${theme.palette.divider}`,
           marginTop: '48px', // Account for TopBar
         },
       }}
     >
       <Box sx={{ p: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600, color: '#333' }}>
+        <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
           Anava Vision
         </Typography>
         <Typography variant="caption" color="text.secondary">
@@ -121,9 +121,9 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               sx={{
                 borderRadius: 1,
                 '&.Mui-selected': {
-                  backgroundColor: 'primary.light',
+                  backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 212, 255, 0.08)' : 'primary.light',
                   '&:hover': {
-                    backgroundColor: 'primary.light',
+                    backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 212, 255, 0.12)' : 'primary.light',
                   },
                 },
               }}

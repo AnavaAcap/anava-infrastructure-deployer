@@ -502,7 +502,7 @@ function App() {
               renderContent()
             ) : (
               <>
-                <Container maxWidth="lg" sx={{ py: 4 }}>
+                <Container maxWidth="lg" sx={{ py: 2, minHeight: 'calc(100vh - 100px)' }}>
                   {renderContent()}
                 </Container>
                 <AppFooter />

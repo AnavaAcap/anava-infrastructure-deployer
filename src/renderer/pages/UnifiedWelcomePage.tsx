@@ -30,8 +30,12 @@ const UnifiedWelcomePage: React.FC<UnifiedWelcomePageProps> = ({
     <Fade in timeout={800}>
       <Container maxWidth="md">
         <Box sx={{ 
-          py: 6,
-          textAlign: 'center'
+          py: 3,
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 'calc(100vh - 200px)',
+          justifyContent: 'center'
         }}>
           {flowOrigin === 'magical' && (
             <Chip
