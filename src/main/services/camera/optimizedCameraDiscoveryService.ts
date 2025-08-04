@@ -60,6 +60,7 @@ export class OptimizedCameraDiscoveryService {
   private preDiscoveredCameras: Camera[] = [];
   private isPreDiscovering = false;
   private preDiscoveryComplete = false;
+  private preDiscoveryAbortController?: AbortController;
 
   constructor() {
     // Create axios instance that accepts self-signed certificates
@@ -183,6 +184,7 @@ export class OptimizedCameraDiscoveryService {
             
             // Send real-time update
             if (sender) {
+              console.log(`[Camera Discovery] Sending camera-discovered event for ${camera.ip}, status: ${camera.status}, manufacturer: ${camera.manufacturer}`);
               sender.send('camera-discovered', camera);
             }
           }
@@ -752,10 +754,31 @@ export class OptimizedCameraDiscoveryService {
       console.log(`[Pre-Discovery] Scanning primary network: ${primaryNetwork.network} (${primaryNetwork.interface})`);
 
       // Create a fake sender for the discovery process
+      // Create abort controller for pre-discovery
+      this.preDiscoveryAbortController = new AbortController();
+      let foundCamera = false;
+      
       const fakeSender = {
         send: (channel: string, ...args: any[]) => {
           if (channel === 'camera-scan-progress' || channel === 'camera-scan-update') {
             console.log(`[Pre-Discovery] ${channel}:`, args[0]);
+          }
+          
+          // Check if we found a camera and should stop
+          if (channel === 'camera-discovered' && args[0] && !foundCamera) {
+            const camera = args[0];
+            const isAxis = camera.manufacturer?.toLowerCase().includes('axis');
+            const isAccessible = camera.status === 'accessible' || 
+                               camera.status === 'requires_auth' ||
+                               camera.authenticated === true;
+            
+            if (isAxis && isAccessible) {
+              console.log(`[Pre-Discovery] Found accessible Axis camera at ${camera.ip}, stopping scan`);
+              this.preDiscoveredCameras = [camera];
+              foundCamera = true;
+              // Don't abort immediately, let current batch finish
+              setTimeout(() => this.preDiscoveryAbortController?.abort(), 100);
+            }
           }
         }
       } as WebContents;
@@ -773,12 +796,15 @@ export class OptimizedCameraDiscoveryService {
         ]
       };
 
-      const discovered = await this.enhancedScanNetwork(fakeSender, options);
-      
-      // Filter to only include accessible cameras
-      this.preDiscoveredCameras = discovered.filter(camera => 
-        camera.status === 'accessible' && camera.manufacturer.toLowerCase() === 'axis'
-      );
+      try {
+        await this.enhancedScanNetwork(fakeSender, options);
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          console.log('[Pre-Discovery] Scan aborted after finding camera');
+        } else {
+          console.error('[Pre-Discovery] Scan error:', error.message);
+        }
+      }
 
       console.log(`[Pre-Discovery] Found ${this.preDiscoveredCameras.length} accessible Axis cameras`);
       this.preDiscoveredCameras.forEach(camera => {
