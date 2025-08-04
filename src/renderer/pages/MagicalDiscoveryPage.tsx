@@ -13,7 +13,14 @@ import {
   IconButton,
   Zoom,
   ThemeProvider,
-  createTheme
+  createTheme,
+  AppBar,
+  Card,
+  CardContent,
+  CardHeader,
+  Chip,
+  Grid,
+  CircularProgress
 } from '@mui/material';
 import { keyframes } from '@mui/system';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
@@ -22,6 +29,9 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import { CameraInfo } from '../../types';
 
 // Radar sweep animation
@@ -552,27 +562,58 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
       case 'complete':
         return (
           <Box>
-            {/* Camera feed placeholder */}
-            <Paper
-              sx={{
+            {/* API Key Success Indicator */}
+            <AppBar position="static" sx={{
+              background: 'linear-gradient(90deg, #0A0E27 0%, #1a1f3a 100%)',
+              borderBottom: '1px solid rgba(16, 185, 129, 0.3)',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.2)',
+              borderRadius: 2,
+              mb: 3,
+            }}>
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                py: 1.5,
+                gap: 1.5,
+              }}>
+                <CheckCircleIcon sx={{
+                  color: '#10B981',
+                  fontSize: 24,
+                  filter: 'drop-shadow(0 0 8px rgba(16, 185, 129, 0.6))',
+                  animation: `${pulse} 2s ease-in-out infinite`,
+                }}/>
+                <Typography variant="h6" sx={{
+                  color: '#10B981',
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                }}>
+                  Gemini API Key Active
+                </Typography>
+              </Box>
+            </AppBar>
+
+            {/* Camera feed container */}
+            <Paper elevation={8} sx={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: 900,
+              mx: 'auto',
+              mb: 3,
+              overflow: 'hidden',
+              borderRadius: 3,
+              background: '#0A0E27',
+              border: '1px solid rgba(0, 102, 255, 0.2)',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                borderColor: 'rgba(0, 102, 255, 0.4)',
+                boxShadow: '0 12px 40px rgba(0, 102, 255, 0.3)',
+              }
+            }}>
+              <Box sx={{ 
                 position: 'relative',
-                width: '100%',
-                maxWidth: 800,
-                mx: 'auto',
-                mb: 4,
-                overflow: 'hidden',
-                borderRadius: 2,
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-              }}
-            >
-              <Box
-                sx={{
-                  position: 'relative',
-                  paddingTop: '56.25%', // 16:9 aspect ratio
-                  background: 'linear-gradient(45deg, #1a1f3a 0%, #0A0E27 100%)',
-                  overflow: 'hidden',
-                }}
-              >
+                paddingTop: '56.25%', // 16:9 aspect ratio
+              }}>
                 {firstImage ? (
                   <img
                     src={firstImage}
@@ -600,101 +641,292 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                 )}
                 
                 {camera && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      position: 'absolute',
-                      bottom: 8,
-                      left: 8,
-                      color: 'rgba(255, 255, 255, 0.7)',
-                      background: 'rgba(0, 0, 0, 0.5)',
-                      px: 1,
-                      py: 0.5,
-                      borderRadius: 1,
-                    }}
-                  >
-                    {camera.model} at {camera.ip}
-                  </Typography>
+                  <Box sx={{
+                    position: 'absolute',
+                    bottom: 16,
+                    left: 16,
+                    right: 16,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                  }}>
+                    <Chip 
+                      label={camera.model} 
+                      sx={{
+                        background: 'rgba(0, 0, 0, 0.6)',
+                        backdropFilter: 'blur(8px)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: 'rgba(255, 255, 255, 0.9)',
+                        fontWeight: 500,
+                      }}
+                    />
+                    <Chip 
+                      label={`📍 ${camera.ip}`} 
+                      sx={{
+                        background: 'rgba(0, 0, 0, 0.6)',
+                        backdropFilter: 'blur(8px)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: 'rgba(255, 255, 255, 0.9)',
+                        fontWeight: 500,
+                      }}
+                    />
+                  </Box>
                 )}
               </Box>
             </Paper>
 
-            {/* First insight */}
+            {/* Scene Description Container */}
             {firstInsight && (
               <Fade in timeout={1000}>
-                <Paper
-                  sx={{
-                    p: 3,
-                    mb: 4,
-                    background: 'rgba(0, 102, 255, 0.1)',
-                    border: '1px solid rgba(0, 102, 255, 0.3)',
-                  }}
-                >
-                  <Typography
-                    variant="h6"
+                <Card sx={{
+                  mb: 3,
+                  background: 'rgba(0, 102, 255, 0.05)',
+                  border: '1px solid rgba(0, 102, 255, 0.2)',
+                  borderRadius: 2,
+                }}>
+                  <CardHeader
+                    title="AI Scene Analysis"
                     sx={{
-                      fontStyle: 'italic',
-                      color: 'text.primary',
-                      textAlign: 'center',
-                      mb: 2,
+                      borderBottom: '1px solid rgba(0, 102, 255, 0.1)',
+                      '& .MuiCardHeader-title': {
+                        fontSize: '1.1rem',
+                        fontWeight: 600,
+                        color: 'rgba(255, 255, 255, 0.9)',
+                      }
                     }}
-                  >
-                    "{firstInsight}"
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
-                    — Anava Vision AI
-                  </Typography>
-                </Paper>
+                  />
+                  <CardContent sx={{
+                    maxHeight: 200,
+                    overflowY: 'auto',
+                    p: 2,
+                    '&::-webkit-scrollbar': {
+                      width: 8,
+                    },
+                    '&::-webkit-scrollbar-track': {
+                      background: 'rgba(0, 102, 255, 0.1)',
+                      borderRadius: 4,
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      background: 'rgba(0, 102, 255, 0.3)',
+                      borderRadius: 4,
+                      '&:hover': {
+                        background: 'rgba(0, 102, 255, 0.5)',
+                      }
+                    }
+                  }}>
+                    <Typography 
+                      component="pre"
+                      sx={{
+                        fontFamily: 'inherit',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        color: 'rgba(255, 255, 255, 0.8)',
+                        lineHeight: 1.6,
+                        m: 0,
+                      }}
+                    >
+                      {firstInsight}
+                    </Typography>
+                  </CardContent>
+                </Card>
               </Fade>
             )}
 
-            {/* User query input */}
-            <Box sx={{ mt: 4 }}>
-              <Typography variant="h6" sx={{ mb: 2, color: 'text.primary' }}>
-                What would you like me to watch for?
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <TextField
-                  fullWidth
-                  variant="outlined"
-                  placeholder="Ask me to find something, count objects, or analyze the scene..."
-                  value={userQuery}
-                  onChange={(e) => setUserQuery(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleUserQuery()}
-                  disabled={isAnalyzing}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      backgroundColor: 'background.paper',
-                    },
-                  }}
-                />
-                <Button
-                  variant="contained"
-                  onClick={handleUserQuery}
-                  disabled={!userQuery.trim() || isAnalyzing}
-                  endIcon={<SendIcon />}
-                  sx={{ minWidth: 120 }}
-                >
-                  {isAnalyzing ? 'Analyzing...' : 'Ask'}
-                </Button>
-              </Box>
-            </Box>
+            {/* Camera Analytics Button */}
+            {camera && (
+              <Button
+                fullWidth
+                size="large"
+                onClick={() => window.open(`http://${camera.ip}/local/BatonAnalytic/events.html`, '_blank')}
+                sx={{
+                  mb: 3,
+                  py: 2,
+                  background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  borderRadius: 2,
+                  color: 'white',
+                  fontSize: '1.1rem',
+                  fontWeight: 500,
+                  textTransform: 'none',
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #2563eb 0%, #60a5fa 100%)',
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 8px 24px rgba(59, 130, 246, 0.4)',
+                  },
+                  '&:active': {
+                    transform: 'translateY(0)',
+                  }
+                }}
+                startIcon={<DashboardIcon sx={{ fontSize: 28 }}/>}
+              >
+                <Box>
+                  <Typography variant="h6" component="div">
+                    View Camera Analytics Dashboard
+                  </Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                    Access real-time events and analytics
+                  </Typography>
+                </Box>
+              </Button>
+            )}
+
+            {/* Query Input Section */}
+            <Card sx={{
+              mb: 3,
+              background: 'rgba(0, 212, 255, 0.03)',
+              border: '1px solid rgba(0, 212, 255, 0.2)',
+              borderRadius: 2,
+            }}>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2, color: 'rgba(255, 255, 255, 0.9)' }}>
+                  💬 Ask AI About This Scene
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    maxRows={3}
+                    placeholder="What would you like to know? Try: 'Count the people' or 'Describe any motion'"
+                    value={userQuery}
+                    onChange={(e) => setUserQuery(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleUserQuery()}
+                    disabled={isAnalyzing}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        borderRadius: 2,
+                        '&.Mui-focused': {
+                          '& fieldset': {
+                            borderColor: 'rgba(0, 212, 255, 0.5)',
+                          }
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="contained"
+                    size="large"
+                    onClick={handleUserQuery}
+                    disabled={!userQuery.trim() || isAnalyzing}
+                    sx={{
+                      minWidth: 120,
+                      background: 'linear-gradient(135deg, #00D4FF 0%, #0066FF 100%)',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #00D4FF 20%, #0066FF 80%)',
+                      }
+                    }}
+                  >
+                    {isAnalyzing ? <CircularProgress size={24}/> : 'Ask'}
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
 
             {/* AI Response */}
             <Collapse in={!!aiResponse}>
-              <Paper
-                sx={{
-                  mt: 3,
-                  p: 3,
-                  background: 'rgba(0, 212, 255, 0.05)',
-                  border: '1px solid rgba(0, 212, 255, 0.2)',
-                }}
-              >
-                <Typography variant="body1" sx={{ color: 'text.primary' }}>
-                  {aiResponse}
-                </Typography>
-              </Paper>
+              <Card sx={{
+                mb: 3,
+                background: 'rgba(0, 212, 255, 0.05)',
+                border: '1px solid rgba(0, 212, 255, 0.2)',
+                borderRadius: 2,
+              }}>
+                <CardContent>
+                  <Typography 
+                    component="pre"
+                    sx={{
+                      fontFamily: 'inherit',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      color: 'rgba(255, 255, 255, 0.8)',
+                      lineHeight: 1.6,
+                      m: 0,
+                    }}
+                  >
+                    {aiResponse}
+                  </Typography>
+                </CardContent>
+              </Card>
             </Collapse>
+
+            {/* Build Infrastructure Section */}
+            <Card sx={{
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
+              border: '2px solid rgba(139, 92, 246, 0.3)',
+              borderRadius: 3,
+              overflow: 'hidden',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                borderColor: 'rgba(139, 92, 246, 0.5)',
+                boxShadow: '0 12px 40px rgba(139, 92, 246, 0.3)',
+              }
+            }}>
+              <CardContent sx={{ p: 4 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                  <RocketLaunchIcon sx={{ 
+                    fontSize: 48,
+                    color: '#8B5CF6',
+                    mr: 2,
+                    filter: 'drop-shadow(0 0 16px rgba(139, 92, 246, 0.6))',
+                  }}/>
+                  <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 700, color: 'white' }}>
+                      Build Full Infrastructure
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+                      Unlock enterprise-grade AI capabilities
+                    </Typography>
+                  </Box>
+                </Box>
+                
+                <Grid container spacing={2} sx={{ mb: 3 }}>
+                  {[
+                    { icon: '⚡', text: 'Vertex AI for unlimited processing' },
+                    { icon: '☁️', text: 'Cloud storage for video recordings' },
+                    { icon: '📹', text: 'Multi-camera management' },
+                    { icon: '📊', text: 'Advanced analytics & alerts' },
+                  ].map((feature, idx) => (
+                    <Grid item xs={12} sm={6} key={idx}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography sx={{ fontSize: 24 }}>{feature.icon}</Typography>
+                        <Typography sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                          {feature.text}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
+                
+                <Button
+                  fullWidth
+                  size="large"
+                  variant="contained"
+                  onClick={() => {
+                    // Transition to main infrastructure installer
+                    const event = new CustomEvent('navigate-to-infrastructure', {
+                      detail: {
+                        fromMagicalMode: true,
+                        apiKey: camera?.apiKey || '',
+                        cameraIp: camera?.ip
+                      }
+                    });
+                    window.dispatchEvent(event);
+                  }}
+                  sx={{
+                    py: 2,
+                    background: 'linear-gradient(135deg, #8B5CF6 0%, #A855F7 100%)',
+                    fontSize: '1.1rem',
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #9333EA 0%, #C084FC 100%)',
+                      transform: 'scale(1.02)',
+                    }
+                  }}
+                >
+                  Start Building Infrastructure →
+                </Button>
+              </CardContent>
+            </Card>
           </Box>
         );
 
