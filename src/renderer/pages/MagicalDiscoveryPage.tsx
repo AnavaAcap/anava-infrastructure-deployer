@@ -603,47 +603,44 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
       case 'analyzing':
       case 'complete':
         return (
-          <Container maxWidth={false} sx={{ maxWidth: { lg: 1400, xl: 1600 }, px: { xs: 2, sm: 3, md: 4, lg: 5 } }}>
-            {/* API Key Success Indicator */}
-            <AppBar position="static" sx={{
-              background: 'linear-gradient(90deg, #0A0E27 0%, #1a1f3a 100%)',
-              borderBottom: '1px solid rgba(16, 185, 129, 0.3)',
-              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.2)',
+          <Container maxWidth={false} sx={{ px: { xs: 2, sm: 3, md: 4 }, height: '100%' }}>
+            {/* API Key Success Indicator - Floating overlay */}
+            <Box sx={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              background: 'rgba(16, 185, 129, 0.1)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
               borderRadius: 2,
-              mb: 3,
+              px: 2,
+              py: 1,
+              zIndex: 10,
             }}>
-              <Box sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                py: 1.5,
-                gap: 1.5,
+              <CheckCircleIcon sx={{
+                color: '#10B981',
+                fontSize: 20,
+                filter: 'drop-shadow(0 0 4px rgba(16, 185, 129, 0.6))',
+              }}/>
+              <Typography variant="body2" sx={{
+                color: '#10B981',
+                fontWeight: 600,
               }}>
-                <CheckCircleIcon sx={{
-                  color: '#10B981',
-                  fontSize: 24,
-                  filter: 'drop-shadow(0 0 8px rgba(16, 185, 129, 0.6))',
-                  animation: `${pulse} 2s ease-in-out infinite`,
-                }}/>
-                <Typography variant="h6" sx={{
-                  color: '#10B981',
-                  fontWeight: 600,
-                  letterSpacing: '0.02em',
-                }}>
-                  Gemini API Key Active
-                </Typography>
-              </Box>
-            </AppBar>
+                API Key Active
+              </Typography>
+            </Box>
 
-            {/* Main content grid */}
-            <Grid container spacing={{ xs: 2, md: 3, lg: 4 }} sx={{ mt: 2 }}>
-              {/* Left column - Camera feed and analysis */}
-              <Grid item xs={12} lg={8}>
+            {/* Main content - horizontal layout */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)', gap: 2, mt: 1 }}>
+              {/* Top section - Camera feed and analysis side by side */}
+              <Box sx={{ display: 'flex', gap: 2, flex: 1, minHeight: 0 }}>
                 {/* Camera feed container */}
                 <Paper elevation={8} sx={{
                   position: 'relative',
-                  width: '100%',
-                  mb: 3,
+                  flex: '0 0 60%',
                   overflow: 'hidden',
                   borderRadius: 3,
                   background: '#0A0E27',
@@ -718,31 +715,35 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
               </Box>
             </Paper>
 
-            {/* Scene Description Container */}
-            {firstInsight && (
-              <Fade in timeout={1000}>
-                <Card sx={{
-                  mb: 3,
-                  background: 'rgba(0, 102, 255, 0.05)',
-                  border: '1px solid rgba(0, 102, 255, 0.2)',
-                  borderRadius: 2,
-                }}>
+                {/* Scene Description Container - beside camera */}
+                {firstInsight && (
+                  <Fade in timeout={1000}>
+                    <Card sx={{
+                      flex: 1,
+                      background: 'rgba(0, 102, 255, 0.05)',
+                      border: '1px solid rgba(0, 102, 255, 0.2)',
+                      borderRadius: 2,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      minHeight: 0,
+                      overflow: 'hidden',
+                    }}>
                   <CardHeader
                     title="AI Scene Analysis"
                     sx={{
                       borderBottom: '1px solid rgba(0, 102, 255, 0.1)',
+                      py: 1.5,
                       '& .MuiCardHeader-title': {
-                        fontSize: '1.1rem',
+                        fontSize: '1rem',
                         fontWeight: 600,
                         color: 'rgba(255, 255, 255, 0.9)',
                       }
                     }}
                   />
                   <CardContent sx={{
-                    minHeight: 150,
-                    maxHeight: { xs: 250, md: 350, lg: 'none' }, // No scroll on large screens
-                    overflowY: { xs: 'auto', lg: 'visible' },
-                    p: 3,
+                    flex: 1,
+                    overflowY: 'auto',
+                    p: 2,
                     '&::-webkit-scrollbar': {
                       width: 8,
                     },
@@ -763,25 +764,24 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                       fontSize: { xs: '0.875rem', md: '1rem' },
                       lineHeight: 1.8,
                     }}>
-                      {formatAIResponse(firstInsight)}
+                      {formatAIResponse(aiResponse || firstInsight)}
                     </Box>
                   </CardContent>
-                </Card>
-              </Fade>
-            )}
-              </Grid>
+                    </Card>
+                  </Fade>
+                )}
+              </Box>
 
-              {/* Right column - Actions and controls */}
-              <Grid item xs={12} lg={4}>
+              {/* Bottom section - Actions in a row */}
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                 {/* Camera Analytics Button */}
                 {camera && (
-              <Button
-                fullWidth
-                size="large"
-                onClick={() => window.open(`http://${camera.ip}/local/BatonAnalytic/events.html`, '_blank')}
-                sx={{
-                  mb: 3,
-                  py: 2,
+                  <Button
+                    size="medium"
+                    onClick={() => window.open(`http://${camera.ip}/local/BatonAnalytic/events.html`, '_blank')}
+                    sx={{
+                      px: 3,
+                      py: 1.5,
                   background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
                   border: '1px solid rgba(59, 130, 246, 0.3)',
                   borderRadius: 2,
@@ -799,44 +799,31 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                     transform: 'translateY(0)',
                   }
                 }}
-                startIcon={<DashboardIcon sx={{ fontSize: 28 }}/>}
+                startIcon={<DashboardIcon sx={{ fontSize: 20 }}/>}
               >
-                <Box>
-                  <Typography variant="h6" component="div">
-                    View Camera Analytics Dashboard
-                  </Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                    Access real-time events and analytics
-                  </Typography>
-                </Box>
+                View Analytics Dashboard
               </Button>
-            )}
+                )}
 
-            {/* Query Input Section */}
-            <Card sx={{
-              mb: 3,
-              background: 'rgba(0, 212, 255, 0.03)',
-              border: '1px solid rgba(0, 212, 255, 0.2)',
-              borderRadius: 2,
-            }}>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 2, color: 'rgba(255, 255, 255, 0.9)' }}>
-                  💬 Ask AI About This Scene
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2 }}>
+                {/* Query Input Section - Compact */}
+                <Box sx={{ 
+                  flex: 1, 
+                  display: 'flex', 
+                  gap: 1,
+                  minWidth: 300,
+                }}>
                   <TextField
+                    size="small"
                     fullWidth
-                    multiline
-                    maxRows={3}
-                    placeholder="What would you like to know? Try: 'Count the people' or 'Describe any motion'"
+                    placeholder="Ask about the scene..."
                     value={userQuery}
                     onChange={(e) => setUserQuery(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleUserQuery()}
+                    onKeyPress={(e) => e.key === 'Enter' && handleUserQuery()}
                     disabled={isAnalyzing}
                     sx={{
                       '& .MuiOutlinedInput-root': {
                         background: 'rgba(255, 255, 255, 0.05)',
-                        borderRadius: 2,
+                        borderRadius: 1,
                         '&.Mui-focused': {
                           '& fieldset': {
                             borderColor: 'rgba(0, 212, 255, 0.5)',
@@ -847,94 +834,25 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                   />
                   <Button
                     variant="contained"
-                    size="large"
+                    size="medium"
                     onClick={handleUserQuery}
                     disabled={!userQuery.trim() || isAnalyzing}
                     sx={{
-                      minWidth: 120,
+                      minWidth: 80,
                       background: 'linear-gradient(135deg, #00D4FF 0%, #0066FF 100%)',
                       '&:hover': {
                         background: 'linear-gradient(135deg, #00D4FF 20%, #0066FF 80%)',
                       }
                     }}
                   >
-                    {isAnalyzing ? <CircularProgress size={24}/> : 'Ask'}
+                    {isAnalyzing ? <CircularProgress size={20}/> : 'Ask'}
                   </Button>
                 </Box>
-              </CardContent>
-            </Card>
 
-            {/* AI Response */}
-            <Collapse in={!!aiResponse}>
-              <Card sx={{
-                mb: 3,
-                background: 'rgba(0, 212, 255, 0.05)',
-                border: '1px solid rgba(0, 212, 255, 0.2)',
-                borderRadius: 2,
-              }}>
-                <CardContent>
-                  <Box sx={{ 
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontSize: { xs: '0.875rem', md: '1rem' },
-                    lineHeight: 1.8,
-                  }}>
-                    {formatAIResponse(aiResponse)}
-                  </Box>
-                </CardContent>
-              </Card>
-            </Collapse>
 
-            {/* Build Infrastructure Section */}
-            <Card sx={{
-              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
-              border: '2px solid rgba(139, 92, 246, 0.3)',
-              borderRadius: 3,
-              overflow: 'hidden',
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                borderColor: 'rgba(139, 92, 246, 0.5)',
-                boxShadow: '0 12px 40px rgba(139, 92, 246, 0.3)',
-              }
-            }}>
-              <CardContent sx={{ p: 4 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                  <RocketLaunchIcon sx={{ 
-                    fontSize: 48,
-                    color: '#8B5CF6',
-                    mr: 2,
-                    filter: 'drop-shadow(0 0 16px rgba(139, 92, 246, 0.6))',
-                  }}/>
-                  <Box>
-                    <Typography variant="h5" sx={{ fontWeight: 700, color: 'white' }}>
-                      Build Full Infrastructure
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)' }}>
-                      Unlock enterprise-grade AI capabilities
-                    </Typography>
-                  </Box>
-                </Box>
-                
-                <Grid container spacing={2} sx={{ mb: 3 }}>
-                  {[
-                    { icon: '⚡', text: 'Vertex AI for unlimited processing' },
-                    { icon: '☁️', text: 'Cloud storage for video recordings' },
-                    { icon: '📹', text: 'Multi-camera management' },
-                    { icon: '📊', text: 'Advanced analytics & alerts' },
-                  ].map((feature, idx) => (
-                    <Grid item xs={12} sm={6} key={idx}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography sx={{ fontSize: 24 }}>{feature.icon}</Typography>
-                        <Typography sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                          {feature.text}
-                        </Typography>
-                      </Box>
-                    </Grid>
-                  ))}
-                </Grid>
-                
+                {/* Build Infrastructure Button - Compact */}
                 <Button
-                  fullWidth
-                  size="large"
+                  size="medium"
                   variant="contained"
                   onClick={() => {
                     // Transition to main infrastructure installer
@@ -948,9 +866,9 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                     window.dispatchEvent(event);
                   }}
                   sx={{
-                    py: 2,
+                    px: 3,
+                    py: 1.5,
                     background: 'linear-gradient(135deg, #8B5CF6 0%, #A855F7 100%)',
-                    fontSize: '1.1rem',
                     fontWeight: 600,
                     textTransform: 'none',
                     '&:hover': {
@@ -958,13 +876,12 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                       transform: 'scale(1.02)',
                     }
                   }}
+                  startIcon={<RocketLaunchIcon />}
                 >
-                  Start Building Infrastructure →
+                  Build Full Infrastructure
                 </Button>
-              </CardContent>
-            </Card>
-              </Grid>
-            </Grid>
+              </Box>
+            </Box>
           </Container>
         );
 

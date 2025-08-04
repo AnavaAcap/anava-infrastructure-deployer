@@ -110,29 +110,15 @@ const MagicalNavigationStepper: React.FC<MagicalNavigationStepperProps> = ({
       sx={{
         background: 'linear-gradient(180deg, rgba(10, 14, 39, 0.95) 0%, rgba(26, 31, 58, 0.95) 100%)',
         borderBottom: '1px solid rgba(0, 212, 255, 0.2)',
-        px: 4,
-        py: 2,
+        px: 3,
+        py: 1,
         position: 'sticky',
         top: 0,
         zIndex: 100,
         backdropFilter: 'blur(10px)',
       }}
     >
-      <Box sx={{ maxWidth: 800, mx: 'auto' }}>
-        <Typography
-          variant="caption"
-          sx={{
-            color: 'rgba(255, 255, 255, 0.6)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            fontSize: '0.75rem',
-            mb: 1,
-            display: 'block',
-            textAlign: 'center',
-          }}
-        >
-          Magical Installation Journey
-        </Typography>
+      <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
         
         <Stepper
           alternativeLabel
