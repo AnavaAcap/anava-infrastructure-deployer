@@ -49,6 +49,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listBillingAccounts: () => ipcRenderer.invoke('list-billing-accounts'),
   testAuthStep: (params: any) => ipcRenderer.invoke('test-auth-step', params),
   // Camera-related APIs
+  camera: {
+    getPreDiscoveredCameras: () => ipcRenderer.invoke('get-pre-discovered-cameras'),
+  },
   scanNetworkCameras: (options?: { networkRange?: string }) => 
     ipcRenderer.invoke('scan-network-cameras', options),
   enhancedScanNetwork: (options?: { 

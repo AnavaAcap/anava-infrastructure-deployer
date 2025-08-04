@@ -119,6 +119,9 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
   useEffect(() => {
     // Don't auto-start, wait for user to either enter IP or scan
     subscribeToEvents();
+    
+    // Check for pre-discovered cameras
+    checkPreDiscoveredCameras();
 
     return () => {
       // Cleanup
@@ -222,6 +225,27 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
     window.electronAPI.magical.onCancelled(() => {
       onCancel();
     });
+  };
+
+  const checkPreDiscoveredCameras = async () => {
+    try {
+      const result = await window.electronAPI.camera.getPreDiscoveredCameras();
+      if (result.cameras.length > 0) {
+        console.log(`Found ${result.cameras.length} pre-discovered cameras!`);
+        // Auto-fill the first camera's IP if found
+        const firstCamera = result.cameras[0];
+        setManualIp(firstCamera.ip);
+        
+        // Show a subtle notification
+        setProgress({
+          stage: 'discovering',
+          message: `Found camera at ${firstCamera.ip} - ready to connect!`,
+          progress: 20
+        });
+      }
+    } catch (error) {
+      console.log('No pre-discovered cameras available');
+    }
   };
 
   const startCameraFeed = async (cameraInfo: CameraInfo) => {

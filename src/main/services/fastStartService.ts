@@ -894,9 +894,9 @@ export class FastStartService extends EventEmitter {
       // Find the BatonAnalytic ACAP for the appropriate architecture
       // Prefer armv7hf for most Axis cameras
       const batonRelease = releases.find((r: any) => 
-        r.name.includes('BatonAnalytic') && r.name.includes('armv7hf')
+        (r.name.toLowerCase().includes('baton') || r.name.includes('Anava')) && r.name.includes('armv7hf')
       ) || releases.find((r: any) => 
-        r.name.includes('BatonAnalytic') && r.name.includes('aarch64')
+        (r.name.toLowerCase().includes('baton') || r.name.includes('Anava')) && r.name.includes('aarch64')
       );
       
       if (!batonRelease) {
