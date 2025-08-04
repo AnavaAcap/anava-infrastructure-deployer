@@ -834,11 +834,14 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                     variant="contained"
                     size="small"
                     onClick={() => {
+                      // Get the API key from window storage
+                      const apiKey = (window as any).__magicalApiKey;
                       const event = new CustomEvent('navigate-to-infrastructure', {
                         detail: {
                           fromMagicalMode: true,
-                          apiKey: camera?.apiKey || '',
-                          cameraIp: camera?.ip
+                          apiKey: apiKey || '',
+                          cameraIp: camera?.ip,
+                          camera: camera
                         }
                       });
                       window.dispatchEvent(event);
