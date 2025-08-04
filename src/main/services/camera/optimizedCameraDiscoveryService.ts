@@ -199,22 +199,66 @@ export class OptimizedCameraDiscoveryService {
       await Promise.all(scanTasks);
     }
     
-    // After finding all cameras, scan for speakers on their networks
-    console.log('=== Scanning for speakers on camera networks ===');
-    for (const camera of cameras) {
-      if (camera.authenticated && camera.credentials) {
-        const speaker = await this.scanForSpeakerOnSameNetwork(
-          camera.ip, 
-          options?.credentials || DEFAULT_CREDENTIALS
-        );
-        if (speaker) {
-          camera.speaker = speaker;
-          console.log(`Camera ${camera.ip} paired with speaker ${speaker.ip}`);
+    // After finding all cameras, check if we need to find speakers
+    if (cameras.length > 0) {
+      console.log('=== Checking for speakers ===');
+      
+      // Get all unique networks from cameras
+      const cameraNetworks = new Set<string>();
+      for (const camera of cameras) {
+        const ipParts = camera.ip.split('.');
+        if (ipParts.length === 4) {
+          cameraNetworks.add(`${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`);
+        }
+      }
+      
+      // For each network with cameras, scan the full /24 for speakers
+      for (const network of cameraNetworks) {
+        console.log(`Scanning ${network}.0/24 for speakers...`);
+        
+        let speakerFound = false;
+        const ips = this.getIPsInRange(network + '.0/24');
+        
+        for (const ip of ips) {
+          // Skip if this IP is already a camera
+          if (cameras.some(c => c.ip === ip)) continue;
           
-          // Send update with speaker info
-          if (sender) {
-            sender.send('camera-discovered', camera);
+          // Check if it's a speaker
+          for (const port of [80, 443]) {
+            if (speakerFound) break;
+            
+            const protocol = port === 443 ? 'https' : 'http';
+            
+            if (await this.checkTCPConnection(ip, port, 500)) {
+              // Try credentials
+              for (const cred of options?.credentials || DEFAULT_CREDENTIALS) {
+                const speaker = await this.checkAxisSpeaker(ip, cred.username, cred.password, port, protocol);
+                if (speaker) {
+                  console.log(`Found speaker at ${ip} on network ${network}`);
+                  speakerFound = true;
+                  
+                  // Assign this speaker to all cameras on the same network
+                  for (const camera of cameras) {
+                    const camNetwork = camera.ip.split('.').slice(0, 3).join('.');
+                    if (camNetwork === network && !camera.speaker) {
+                      camera.speaker = speaker;
+                      console.log(`Assigned speaker ${speaker.ip} to camera ${camera.ip}`);
+                      
+                      // Send update
+                      if (sender) {
+                        sender.send('camera-discovered', camera);
+                      }
+                    }
+                  }
+                  break;
+                }
+              }
+            }
           }
+        }
+        
+        if (!speakerFound) {
+          console.log(`No speaker found on network ${network}`);
         }
       }
     }
@@ -465,7 +509,7 @@ export class OptimizedCameraDiscoveryService {
       );
       
       if (response && response.includes('Brand=AXIS')) {
-        console.log(`  ✓ Confirmed Axis device`);
+        console.log(`  ✓ Confirmed Axis device at ${ip}`);
         const modelMatch = response.match(/ProdNbr=([^\r\n]+)/);
         const typeMatch = response.match(/ProdType=([^\r\n]+)/);
         const productType = typeMatch ? typeMatch[1] : '';
@@ -474,7 +518,7 @@ export class OptimizedCameraDiscoveryService {
         if (productType.toLowerCase().includes('speaker') || 
             productType.toLowerCase().includes('audio') ||
             productType.toLowerCase().includes('sound')) {
-          console.log(`  ✗ Not a camera (${productType})`);
+          console.log(`  ✗ Not a camera - Found speaker device: ${productType} at ${ip}`);
           return null;
         }
         
