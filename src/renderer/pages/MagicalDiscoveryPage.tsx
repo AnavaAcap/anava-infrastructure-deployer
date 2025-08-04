@@ -101,46 +101,23 @@ const magicalDarkTheme = createTheme({
   },
 });
 
-// Function to format AI response text
+// Function to format AI response text - PROPERLY
 const formatAIResponse = (text: string) => {
-  // Split into paragraphs
-  const paragraphs = text.split('\n\n').filter(p => p.trim());
+  // Replace \n\n with single line breaks and fix quotes
+  const cleanedText = text
+    .replace(/\\n\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\"/g, '"');
   
-  return paragraphs.map((para, idx) => {
-    // Check for bullet points
-    if (para.includes('•') || para.includes('-')) {
-      const items = para.split(/[•-]/).filter(Boolean);
-      return (
-        <Box component="ul" key={idx} sx={{ pl: 2, my: 2, listStyleType: 'disc' }}>
-          {items.map((item, i) => (
-            <li key={i} style={{ marginBottom: 8, color: 'rgba(255, 255, 255, 0.9)' }}>
-              {item.trim()}
-            </li>
-          ))}
-        </Box>
-      );
-    }
-    
-    // Check for single line breaks
-    if (para.includes('\n')) {
-      return (
-        <Box key={idx} sx={{ mb: 2 }}>
-          {para.split('\n').map((line, i) => (
-            <Typography key={i} sx={{ color: 'rgba(255, 255, 255, 0.9)', mb: 0.5 }}>
-              {line.trim()}
-            </Typography>
-          ))}
-        </Box>
-      );
-    }
-    
-    // Regular paragraph
-    return (
-      <Typography key={idx} paragraph sx={{ mb: 2, color: 'rgba(255, 255, 255, 0.9)' }}>
-        {para}
-      </Typography>
-    );
-  });
+  return (
+    <Typography sx={{ 
+      color: 'rgba(255, 255, 255, 0.9)', 
+      whiteSpace: 'pre-wrap',
+      wordBreak: 'break-word'
+    }}>
+      {cleanedText}
+    </Typography>
+  );
 };
 
 export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
@@ -417,7 +394,15 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
     // Show manual entry form if in manual mode
     if (manualMode && !camera) {
       return (
-        <Box sx={{ maxWidth: 600, mx: 'auto' }}>
+        <Box sx={{ 
+          maxWidth: 600, 
+          mx: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          height: '100%',
+          p: 3
+        }}>
           <Typography variant="h4" sx={{ color: 'text.primary', mb: 1, textAlign: 'center' }}>
             Connect to Your Camera
           </Typography>
@@ -500,7 +485,15 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
     switch (progress.stage) {
       case 'discovering':
         return (
-          <Box sx={{ textAlign: 'center' }}>
+          <Box sx={{ 
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100%',
+            p: 3
+          }}>
             {/* Radar animation */}
             <Box sx={{ position: 'relative', width: 300, height: 300, mx: 'auto', mb: 4 }}>
               {/* Radar circles */}
@@ -565,7 +558,15 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
       case 'configuring':
       case 'awakening':
         return (
-          <Box sx={{ textAlign: 'center' }}>
+          <Box sx={{ 
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100%',
+            p: 3
+          }}>
             {/* Neural network animation */}
             <Box sx={{ position: 'relative', width: 300, height: 300, mx: 'auto', mb: 4 }}>
               <PsychologyIcon
@@ -603,7 +604,16 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
       case 'analyzing':
       case 'complete':
         return (
-          <Container maxWidth={false} sx={{ px: { xs: 2, sm: 3, md: 4 }, height: '100%' }}>
+          <Box sx={{ 
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex', 
+            flexDirection: 'column', 
+            overflow: 'hidden'
+          }}>
             {/* API Key Success Indicator - Floating overlay */}
             <Box sx={{
               position: 'absolute',
@@ -633,53 +643,56 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
               </Typography>
             </Box>
 
-            {/* Main content - horizontal layout */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)', gap: 2, mt: 1 }}>
-              {/* Top section - Camera feed and analysis side by side */}
-              <Box sx={{ display: 'flex', gap: 2, flex: 1, minHeight: 0 }}>
-                {/* Camera feed container */}
-                <Paper elevation={8} sx={{
-                  position: 'relative',
+            {/* Main content area - with bottom padding for action bar */}
+            <Box sx={{ 
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 52, // Space for action bar
+              p: 2, 
+              display: 'flex', 
+              gap: 2,
+              overflow: 'hidden'
+            }}>
+                {/* Camera feed panel */}
+                <Paper elevation={4} sx={{
                   flex: '0 0 60%',
+                  position: 'relative',
                   overflow: 'hidden',
-                  borderRadius: 3,
-                  background: '#0A0E27',
+                  borderRadius: 2,
+                  background: '#000',
                   border: '1px solid rgba(0, 102, 255, 0.2)',
-                  transition: 'all 0.3s ease',
-                  '&:hover': {
-                    borderColor: 'rgba(0, 102, 255, 0.4)',
-                    boxShadow: '0 12px 40px rgba(0, 102, 255, 0.3)',
-                  }
+                  display: 'flex',
+                  flexDirection: 'column',
                 }}>
-              <Box sx={{ 
-                position: 'relative',
-                paddingTop: { xs: '56.25%', md: '50%', lg: '45%' }, // Wider aspect ratio on larger screens
-              }}>
-                {firstImage ? (
-                  <img
-                    src={firstImage}
-                    alt="Camera view"
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
-                  />
-                ) : (
-                  <CameraAltIcon
-                    sx={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      fontSize: 80,
-                      color: 'rgba(255, 255, 255, 0.1)',
-                    }}
-                  />
-                )}
+                  <Box sx={{ 
+                    position: 'relative',
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#000',
+                  }}>
+                    {firstImage ? (
+                      <img
+                        src={firstImage}
+                        alt="Camera view"
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    ) : (
+                      <CameraAltIcon
+                        sx={{
+                          fontSize: 80,
+                          color: 'rgba(255, 255, 255, 0.1)',
+                        }}
+                      />
+                    )}
                 
                 {camera && (
                   <Box sx={{
@@ -715,174 +728,201 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
               </Box>
             </Paper>
 
-                {/* Scene Description Container - beside camera */}
-                {firstInsight && (
-                  <Fade in timeout={1000}>
-                    <Card sx={{
-                      flex: 1,
-                      background: 'rgba(0, 102, 255, 0.05)',
-                      border: '1px solid rgba(0, 102, 255, 0.2)',
-                      borderRadius: 2,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      minHeight: 0,
-                      overflow: 'hidden',
-                    }}>
-                  <CardHeader
-                    title="AI Scene Analysis"
-                    sx={{
-                      borderBottom: '1px solid rgba(0, 102, 255, 0.1)',
-                      py: 1.5,
-                      '& .MuiCardHeader-title': {
-                        fontSize: '1rem',
-                        fontWeight: 600,
-                        color: 'rgba(255, 255, 255, 0.9)',
-                      }
-                    }}
-                  />
-                  <CardContent sx={{
+                {/* AI Analysis Panel */}
+                <Paper sx={{
+                  flex: 1,
+                  background: 'rgba(0, 102, 255, 0.03)',
+                  border: '1px solid rgba(0, 102, 255, 0.2)',
+                  borderRadius: 2,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                  p: 2,
+                }}>
+                  <Typography variant="h6" sx={{
+                    fontWeight: 600,
+                    color: 'rgba(255, 255, 255, 0.95)',
+                    mb: 1.5,
+                    fontSize: '1.1rem',
+                  }}>
+                    AI Scene Analysis
+                  </Typography>
+                  
+                  <Box sx={{
                     flex: 1,
                     overflowY: 'auto',
-                    p: 2,
+                    pr: 1,
                     '&::-webkit-scrollbar': {
-                      width: 8,
+                      width: 6,
                     },
                     '&::-webkit-scrollbar-track': {
-                      background: 'rgba(0, 102, 255, 0.1)',
-                      borderRadius: 4,
+                      background: 'rgba(0, 102, 255, 0.05)',
+                      borderRadius: 3,
                     },
                     '&::-webkit-scrollbar-thumb': {
-                      background: 'rgba(0, 102, 255, 0.3)',
-                      borderRadius: 4,
+                      background: 'rgba(0, 102, 255, 0.2)',
+                      borderRadius: 3,
                       '&:hover': {
-                        background: 'rgba(0, 102, 255, 0.5)',
+                        background: 'rgba(0, 102, 255, 0.3)',
                       }
                     }
                   }}>
-                    <Box sx={{ 
-                      fontFamily: 'Inter, system-ui, sans-serif',
-                      fontSize: { xs: '0.875rem', md: '1rem' },
-                      lineHeight: 1.8,
-                    }}>
-                      {formatAIResponse(aiResponse || firstInsight)}
-                    </Box>
-                  </CardContent>
-                    </Card>
-                  </Fade>
-                )}
+                    {firstInsight ? (
+                      formatAIResponse(aiResponse || firstInsight)
+                    ) : (
+                      <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.5)' }}>
+                        Waiting for AI analysis...
+                      </Typography>
+                    )}
+                  </Box>
+                </Paper>
               </Box>
 
-              {/* Bottom section - Actions in a row */}
-              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                {/* Camera Analytics Button */}
-                {camera && (
-                  <Button
-                    size="medium"
-                    onClick={() => window.open(`http://${camera.ip}/local/BatonAnalytic/events.html`, '_blank')}
-                    sx={{
-                      px: 3,
-                      py: 1.5,
-                  background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                  borderRadius: 2,
-                  color: 'white',
-                  fontSize: '1.1rem',
-                  fontWeight: 500,
-                  textTransform: 'none',
-                  transition: 'all 0.3s ease',
-                  '&:hover': {
-                    background: 'linear-gradient(135deg, #2563eb 0%, #60a5fa 100%)',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 8px 24px rgba(59, 130, 246, 0.4)',
-                  },
-                  '&:active': {
-                    transform: 'translateY(0)',
-                  }
-                }}
-                startIcon={<DashboardIcon sx={{ fontSize: 20 }}/>}
-              >
-                View Analytics Dashboard
-              </Button>
-                )}
+            {/* Action Bar - FIXED AT BOTTOM, NO SCROLLING */}
+            <Box sx={{ 
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 52, 
+              display: 'flex',
+              alignItems: 'center',
+              px: 2,
+              borderTop: '1px solid rgba(0, 102, 255, 0.2)',
+              background: 'rgba(10, 14, 39, 0.98)',
+              zIndex: 10,
+            }}>
+              <Box sx={{ 
+                display: 'flex', 
+                gap: 2, 
+                width: '100%',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                {/* Primary Actions Group */}
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                  {/* View Analytics Dashboard Button */}
+                  {camera && (
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => window.open(`http://${camera.ip}/local/BatonAnalytic/events.html`, '_blank')}
+                      sx={{
+                        height: 40,
+                        px: 3,
+                        background: 'linear-gradient(135deg, #1976D2 0%, #2196F3 100%)',
+                        borderRadius: 3,
+                        fontSize: '0.9rem',
+                        fontWeight: 500,
+                        textTransform: 'none',
+                        boxShadow: '0 2px 8px rgba(25, 118, 210, 0.3)',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, #1565C0 0%, #1E88E5 100%)',
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 4px 16px rgba(25, 118, 210, 0.4)',
+                        },
+                      }}
+                      startIcon={<DashboardIcon />}
+                    >
+                      View Analytics Dashboard
+                    </Button>
+                  )}
 
-                {/* Query Input Section - Compact */}
+                  {/* Build Infrastructure Button */}
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => {
+                      const event = new CustomEvent('navigate-to-infrastructure', {
+                        detail: {
+                          fromMagicalMode: true,
+                          apiKey: camera?.apiKey || '',
+                          cameraIp: camera?.ip
+                        }
+                      });
+                      window.dispatchEvent(event);
+                    }}
+                    sx={{
+                      height: 40,
+                      px: 3,
+                      background: 'linear-gradient(135deg, #8B5CF6 0%, #A855F7 100%)',
+                      borderRadius: 3,
+                      fontSize: '0.9rem',
+                      fontWeight: 500,
+                      textTransform: 'none',
+                      boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #7C3AED 0%, #9333EA 100%)',
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 4px 16px rgba(139, 92, 246, 0.4)',
+                      }
+                    }}
+                    startIcon={<RocketLaunchIcon />}
+                  >
+                    Build Full Infrastructure
+                  </Button>
+                </Box>
+
+                {/* Chat Input Section */}
                 <Box sx={{ 
-                  flex: 1, 
                   display: 'flex', 
-                  gap: 1,
-                  minWidth: 300,
+                  gap: 1.5,
+                  flex: 1,
+                  maxWidth: 600,
                 }}>
                   <TextField
-                    size="small"
                     fullWidth
-                    placeholder="Ask about the scene..."
+                    placeholder="Ask questions about this scene..."
                     value={userQuery}
                     onChange={(e) => setUserQuery(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleUserQuery()}
                     disabled={isAnalyzing}
                     sx={{
                       '& .MuiOutlinedInput-root': {
+                        height: 40,
                         background: 'rgba(255, 255, 255, 0.05)',
-                        borderRadius: 1,
-                        '&.Mui-focused': {
-                          '& fieldset': {
-                            borderColor: 'rgba(0, 212, 255, 0.5)',
-                          }
+                        borderRadius: 3,
+                        fontSize: '1rem',
+                        '& fieldset': {
+                          borderColor: 'rgba(0, 102, 255, 0.2)',
+                        },
+                        '&:hover fieldset': {
+                          borderColor: 'rgba(0, 102, 255, 0.3)',
+                        },
+                        '&.Mui-focused fieldset': {
+                          borderColor: 'rgba(0, 212, 255, 0.5)',
                         }
                       }
                     }}
                   />
                   <Button
                     variant="contained"
-                    size="medium"
+                    size="small"
                     onClick={handleUserQuery}
                     disabled={!userQuery.trim() || isAnalyzing}
                     sx={{
+                      height: 40,
                       minWidth: 80,
                       background: 'linear-gradient(135deg, #00D4FF 0%, #0066FF 100%)',
+                      borderRadius: 3,
+                      fontSize: '1rem',
+                      boxShadow: '0 2px 8px rgba(0, 102, 255, 0.3)',
                       '&:hover': {
-                        background: 'linear-gradient(135deg, #00D4FF 20%, #0066FF 80%)',
+                        background: 'linear-gradient(135deg, #00B8E6 0%, #0052CC 100%)',
+                        boxShadow: '0 4px 16px rgba(0, 102, 255, 0.4)',
+                      },
+                      '&:disabled': {
+                        background: 'rgba(0, 102, 255, 0.2)',
                       }
                     }}
                   >
-                    {isAnalyzing ? <CircularProgress size={20}/> : 'Ask'}
+                    {isAnalyzing ? <CircularProgress size={24} color="inherit" /> : 'Ask'}
                   </Button>
                 </Box>
-
-
-                {/* Build Infrastructure Button - Compact */}
-                <Button
-                  size="medium"
-                  variant="contained"
-                  onClick={() => {
-                    // Transition to main infrastructure installer
-                    const event = new CustomEvent('navigate-to-infrastructure', {
-                      detail: {
-                        fromMagicalMode: true,
-                        apiKey: camera?.apiKey || '',
-                        cameraIp: camera?.ip
-                      }
-                    });
-                    window.dispatchEvent(event);
-                  }}
-                  sx={{
-                    px: 3,
-                    py: 1.5,
-                    background: 'linear-gradient(135deg, #8B5CF6 0%, #A855F7 100%)',
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    '&:hover': {
-                      background: 'linear-gradient(135deg, #9333EA 0%, #C084FC 100%)',
-                      transform: 'scale(1.02)',
-                    }
-                  }}
-                  startIcon={<RocketLaunchIcon />}
-                >
-                  Build Full Infrastructure
-                </Button>
               </Box>
             </Box>
-          </Container>
+          </Box>
         );
 
       case 'error':
@@ -905,35 +945,42 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
   return (
     <ThemeProvider theme={magicalDarkTheme}>
       <Box sx={{ 
-        minHeight: '100vh', 
+        height: '100vh',
+        width: '100vw', 
         background: 'linear-gradient(180deg, #0A0E27 0%, #1a1f3a 100%)',
-        color: 'white'
+        color: 'white',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
-        <Container maxWidth="lg">
-          <Box sx={{ py: 4, minHeight: '100vh' }}>
-        {/* Progress bar */}
-        <LinearProgress
-          variant="determinate"
-          value={progress.progress}
-          sx={{
-            mb: 4,
-            height: 8,
-            borderRadius: 4,
-            backgroundColor: 'rgba(0, 102, 255, 0.1)',
-            '& .MuiLinearProgress-bar': {
-              borderRadius: 4,
-              background: 'linear-gradient(90deg, #0066FF 0%, #00D4FF 100%)',
-            },
-          }}
-        />
+        {/* Only show progress bar for non-complete stages */}
+        {progress.stage !== 'complete' && progress.stage !== 'analyzing' && (
+          <Box sx={{ p: 3 }}>
+            <LinearProgress
+              variant="determinate"
+              value={progress.progress}
+              sx={{
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: 'rgba(0, 102, 255, 0.1)',
+                '& .MuiLinearProgress-bar': {
+                  borderRadius: 4,
+                  background: 'linear-gradient(90deg, #0066FF 0%, #00D4FF 100%)',
+                },
+              }}
+            />
+          </Box>
+        )}
 
         {/* Stage content */}
-        <Fade in key={progress.stage} timeout={500}>
-          <Box>{renderStage()}</Box>
-        </Fade>
+        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <Fade in key={progress.stage} timeout={500}>
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>{renderStage()}</Box>
+          </Fade>
+        </Box>
 
-        {/* Error alert */}
-        <Collapse in={showError}>
+        {/* Error alert - floating */}
+        <Collapse in={showError} sx={{ position: 'absolute', bottom: 16, left: 16, right: 16, zIndex: 20 }}>
           <Alert
             severity="error"
             action={
@@ -944,14 +991,15 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                 <CloseIcon fontSize="small" />
               </IconButton>
             }
-            sx={{ mt: 4 }}
+            sx={{ 
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              borderRadius: 2
+            }}
           >
             {errorMessage}
           </Alert>
         </Collapse>
-        </Box>
-      </Container>
-    </Box>
+      </Box>
     </ThemeProvider>
   );
 };
