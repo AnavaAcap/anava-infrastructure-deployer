@@ -100,7 +100,22 @@
 - `APPLE_ID_PASSWORD`: App-specific password
 - `APPLE_TEAM_ID`: Your Apple Developer Team ID (e.g., "3JVZNWGRYT")
 
-## Current State (v0.9.58)
+## Current State (v0.9.71)
+
+### Magical Installer Experience (Fixed in v0.9.71)
+- **Automatic Camera Discovery**: Pre-discovered cameras connect automatically
+- **ACAP Deployment**: Detects if BatonAnalytic is already installed (XML parsing fixed)
+- **Scene Analysis**: Captures and displays first image with AI description
+- **Error Handling**: Proper error serialization and visibility
+- **Image Display**: Fixed CSP to allow base64 data URIs
+- **API Integration**: Updated getSceneDescription to include GeminiApiKey parameter
+
+### Known Issues Resolved
+- ✅ Empty error objects in ACAP deployment (fixed error serialization)
+- ✅ XML parsing for installed ACAPs (camera returns XML not text)
+- ✅ Duplicate connection attempts (added isConnecting flag)
+- ✅ Image display blocked by CSP (added img-src data: directive)
+- ✅ Scene description timeout (increased from 5s to 15s)
 
 ### What's Automated
 - GCP project setup and API enablement
