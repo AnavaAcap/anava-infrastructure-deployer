@@ -57,6 +57,9 @@ const DEFAULT_CREDENTIALS = [
 
 export class OptimizedCameraDiscoveryService {
   private axiosInstance: AxiosInstance;
+  private preDiscoveredCameras: Camera[] = [];
+  private isPreDiscovering = false;
+  private preDiscoveryComplete = false;
 
   constructor() {
     // Create axios instance that accepts self-signed certificates
@@ -67,9 +70,22 @@ export class OptimizedCameraDiscoveryService {
     });
     
     this.setupIPC();
+    
+    // Start pre-emptive discovery immediately
+    this.startPreDiscovery();
   }
 
   private setupIPC() {
+    // Get pre-discovered cameras if available
+    ipcMain.handle('get-pre-discovered-cameras', async () => {
+      console.log('[Pre-Discovery] Returning pre-discovered cameras:', this.preDiscoveredCameras.length);
+      return {
+        cameras: this.preDiscoveredCameras,
+        isComplete: this.preDiscoveryComplete,
+        isDiscovering: this.isPreDiscovering
+      };
+    });
+    
     // Standard scan method for backward compatibility
     ipcMain.handle('scan-network-cameras', async (event, options?: { networkRange?: string }) => {
       // Use enhanced scanning by default
@@ -713,5 +729,68 @@ export class OptimizedCameraDiscoveryService {
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled;
+  }
+
+  /**
+   * Start pre-emptive camera discovery on app startup
+   * This runs in the background and caches results for instant access
+   */
+  private async startPreDiscovery() {
+    console.log('[Pre-Discovery] Starting pre-emptive camera discovery...');
+    this.isPreDiscovering = true;
+
+    try {
+      // Get primary network interface
+      const networks = this.getAvailableNetworks();
+      if (networks.length === 0) {
+        console.log('[Pre-Discovery] No networks available for pre-discovery');
+        return;
+      }
+
+      // Use only the primary network for pre-discovery
+      const primaryNetwork = networks[0];
+      console.log(`[Pre-Discovery] Scanning primary network: ${primaryNetwork.network} (${primaryNetwork.interface})`);
+
+      // Create a fake sender for the discovery process
+      const fakeSender = {
+        send: (channel: string, ...args: any[]) => {
+          if (channel === 'camera-scan-progress' || channel === 'camera-scan-update') {
+            console.log(`[Pre-Discovery] ${channel}:`, args[0]);
+          }
+        }
+      } as WebContents;
+
+      // Run discovery with limited scope for speed
+      const options: DiscoveryOptions = {
+        networkRange: primaryNetwork.network,
+        concurrent: 30, // Higher concurrency for background scan
+        timeout: 2000, // Shorter timeout for speed
+        ports: [443, 80], // Only check most common ports
+        useServiceDiscovery: true,
+        credentials: [
+          { username: 'root', password: 'pass' },
+          { username: 'admin', password: 'admin' }
+        ]
+      };
+
+      const discovered = await this.enhancedScanNetwork(fakeSender, options);
+      
+      // Filter to only include accessible cameras
+      this.preDiscoveredCameras = discovered.filter(camera => 
+        camera.status === 'accessible' && camera.manufacturer.toLowerCase() === 'axis'
+      );
+
+      console.log(`[Pre-Discovery] Found ${this.preDiscoveredCameras.length} accessible Axis cameras`);
+      this.preDiscoveredCameras.forEach(camera => {
+        console.log(`[Pre-Discovery] - ${camera.model} at ${camera.ip}`);
+      });
+
+    } catch (error) {
+      console.error('[Pre-Discovery] Error during pre-discovery:', error);
+    } finally {
+      this.isPreDiscovering = false;
+      this.preDiscoveryComplete = true;
+      console.log('[Pre-Discovery] Pre-emptive discovery complete');
+    }
   }
 }
