@@ -60,7 +60,6 @@ export class OptimizedCameraDiscoveryService {
   private preDiscoveredCameras: Camera[] = [];
   private isPreDiscovering = false;
   private preDiscoveryComplete = false;
-  private preDiscoveryAbortController?: AbortController;
 
   constructor() {
     // Create axios instance that accepts self-signed certificates
@@ -753,57 +752,60 @@ export class OptimizedCameraDiscoveryService {
       const primaryNetwork = networks[0];
       console.log(`[Pre-Discovery] Scanning primary network: ${primaryNetwork.network} (${primaryNetwork.interface})`);
 
-      // Create a fake sender for the discovery process
-      // Create abort controller for pre-discovery
-      this.preDiscoveryAbortController = new AbortController();
+      // Quick scan for first available camera
+      const ips = this.getIPsInRange(primaryNetwork.network);
+      const shuffledIPs = this.shuffle(ips);
+      const ports = [80, 443]; // Most common ports
+      const credentials = [
+        { username: 'root', password: 'pass' },
+        { username: 'anava', password: 'baton' }
+      ];
+
+      // Create a simple queue for controlled concurrency
+      let activeScans = 0;
+      const maxConcurrent = 10;
       let foundCamera = false;
-      
-      const fakeSender = {
-        send: (channel: string, ...args: any[]) => {
-          if (channel === 'camera-scan-progress' || channel === 'camera-scan-update') {
-            console.log(`[Pre-Discovery] ${channel}:`, args[0]);
-          }
+
+      for (const ip of shuffledIPs) {
+        if (foundCamera) break;
+
+        // Wait if too many concurrent scans
+        while (activeScans >= maxConcurrent && !foundCamera) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        if (foundCamera) break;
+
+        activeScans++;
+        
+        // Scan in background without waiting
+        this.scanIP(ip, ports, credentials, undefined).then(camera => {
+          activeScans--;
           
-          // Check if we found a camera and should stop
-          if (channel === 'camera-discovered' && args[0] && !foundCamera) {
-            const camera = args[0];
+          if (camera && !foundCamera) {
             const isAxis = camera.manufacturer?.toLowerCase().includes('axis');
-            const isAccessible = camera.status === 'accessible' || 
-                               camera.status === 'requires_auth' ||
-                               camera.authenticated === true;
+            const isAccessible = camera.status === 'accessible' || camera.authenticated === true;
             
             if (isAxis && isAccessible) {
-              console.log(`[Pre-Discovery] Found accessible Axis camera at ${camera.ip}, stopping scan`);
+              console.log(`[Pre-Discovery] Found accessible Axis camera at ${camera.ip}`);
               this.preDiscoveredCameras = [camera];
               foundCamera = true;
-              // Don't abort immediately, let current batch finish
-              setTimeout(() => this.preDiscoveryAbortController?.abort(), 100);
             }
           }
-        }
-      } as WebContents;
+        }).catch(() => {
+          activeScans--;
+        });
 
-      // Run discovery with limited scope for speed
-      const options: DiscoveryOptions = {
-        networkRange: primaryNetwork.network,
-        concurrent: 30, // Higher concurrency for background scan
-        timeout: 2000, // Shorter timeout for speed
-        ports: [443, 80], // Only check most common ports
-        useServiceDiscovery: true,
-        credentials: [
-          { username: 'root', password: 'pass' },
-          { username: 'admin', password: 'admin' }
-        ]
-      };
-
-      try {
-        await this.enhancedScanNetwork(fakeSender, options);
-      } catch (error: any) {
-        if (error.name === 'AbortError') {
-          console.log('[Pre-Discovery] Scan aborted after finding camera');
-        } else {
-          console.error('[Pre-Discovery] Scan error:', error.message);
+        // Small delay between starting scans
+        if (!foundCamera) {
+          await new Promise(resolve => setTimeout(resolve, 20));
         }
+      }
+
+      // Wait for remaining scans to complete or timeout
+      const timeout = Date.now() + 5000;
+      while (activeScans > 0 && !foundCamera && Date.now() < timeout) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       console.log(`[Pre-Discovery] Found ${this.preDiscoveredCameras.length} accessible Axis cameras`);

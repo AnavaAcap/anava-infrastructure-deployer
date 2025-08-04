@@ -230,18 +230,47 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
   const checkPreDiscoveredCameras = async () => {
     try {
       const result = await window.electronAPI.camera.getPreDiscoveredCameras();
-      if (result.cameras.length > 0) {
+      if (result.cameras.length > 0 && result.isComplete) {
         console.log(`Found ${result.cameras.length} pre-discovered cameras!`);
-        // Auto-fill the first camera's IP if found
         const firstCamera = result.cameras[0];
-        setManualIp(firstCamera.ip);
         
-        // Show a subtle notification
+        // Get the API key
+        const apiKey = (window as any).__magicalApiKey;
+        if (!apiKey) {
+          console.error('No API key available for auto-connect');
+          return;
+        }
+        
+        // Automatically start the magical experience!
+        setManualMode(false); // Hide manual form
         setProgress({
           stage: 'discovering',
-          message: `Found camera at ${firstCamera.ip} - ready to connect!`,
-          progress: 20
+          message: `Found camera at ${firstCamera.ip} - connecting automatically!`,
+          progress: 30
         });
+        
+        // Small delay for UI feedback
+        setTimeout(async () => {
+          const connectResult = await window.electronAPI.magical.connectToCamera({
+            apiKey,
+            ip: firstCamera.ip,
+            username: firstCamera.credentials?.username || 'root',
+            password: firstCamera.credentials?.password || 'pass'
+          });
+          
+          if (connectResult.success && connectResult.camera) {
+            setCamera(connectResult.camera);
+            setFirstInsight(connectResult.firstInsight || '');
+            startCameraFeed(connectResult.camera);
+            onComplete(connectResult.camera);
+          } else {
+            // Fall back to manual mode if auto-connect fails
+            setManualMode(true);
+            setManualIp(firstCamera.ip);
+            setErrorMessage(connectResult.error || 'Auto-connect failed');
+            setShowError(true);
+          }
+        }, 500);
       }
     } catch (error) {
       console.log('No pre-discovered cameras available');
