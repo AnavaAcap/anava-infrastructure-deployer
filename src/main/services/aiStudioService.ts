@@ -30,14 +30,17 @@ export class AIStudioService {
       );
 
       if (existingKey && existingKey.name) {
-        console.log('[AI Studio] Found existing AI Studio API key');
+        console.log('[AI Studio] Found existing AI Studio API key:', existingKey.displayName);
         
-        // Get the key string
-        const keyResponse = await apikeys.projects.locations.keys.get({
+        // Get the key string using getKeyString method
+        const keyStringResponse = await apikeys.projects.locations.keys.getKeyString({
           name: existingKey.name,
         });
         
-        return keyResponse.data.keyString || null;
+        if (keyStringResponse.data.keyString) {
+          console.log('[AI Studio] Using existing API key');
+          return keyStringResponse.data.keyString;
+        }
       }
 
       // Create a new AI Studio API key
@@ -70,18 +73,33 @@ export class AIStudioService {
         } while (!operation.data.done);
 
         if (operation.data.response) {
+          console.log('[AI Studio] Operation completed, response:', operation.data.response);
           const keyName = operation.data.response.name;
-          const keyResponse = await apikeys.projects.locations.keys.get({
+          
+          // Get the key string  
+          const keyStringResponse = await apikeys.projects.locations.keys.getKeyString({
             name: keyName,
           });
           
-          return keyResponse.data.keyString || null;
+          console.log('[AI Studio] Key string response:', keyStringResponse.data);
+          
+          if (keyStringResponse.data.keyString) {
+            console.log('[AI Studio] Successfully created API key!');
+            return keyStringResponse.data.keyString;
+          }
         }
       }
 
       return null;
-    } catch (error) {
+    } catch (error: any) {
       console.error('[AI Studio] Error creating API key:', error);
+      console.error('[AI Studio] Error details:', {
+        message: error.message,
+        code: error.code,
+        status: error.status,
+        details: error.details,
+        response: error.response?.data
+      });
       return null;
     }
   }

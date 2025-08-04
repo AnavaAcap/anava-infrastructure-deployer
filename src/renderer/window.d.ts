@@ -56,7 +56,17 @@ declare global {
       testAuthStep: (params: any) => Promise<any>;
       // Camera-related APIs
       scanNetworkCameras: (options?: { networkRange?: string }) => Promise<any[]>;
+      enhancedScanNetwork: (options?: { 
+        networkRange?: string;
+        concurrent?: number;
+        timeout?: number;
+        ports?: number[];
+        useServiceDiscovery?: boolean;
+        credentials?: Array<{ username: string; password: string }>;
+      }) => Promise<any[]>;
+      discoverServiceCameras: () => Promise<any[]>;
       onCameraScanProgress: (callback: (data: { ip: string; status: string }) => void) => () => void;
+      onCameraDiscovered: (callback: (camera: any) => void) => () => void;
       quickScanCamera: (ip: string, username: string, password: string) => Promise<any[]>;
       testCameraCredentials: (cameraId: string, ip: string, username: string, password: string) => Promise<any>;
       deployACAP: (camera: any, acapPath: string) => Promise<any>;
@@ -77,6 +87,38 @@ declare global {
         getCached: () => Promise<any>;
         getAllCached: () => Promise<any[]>;
         clearCached: () => Promise<boolean>;
+      };
+      // Magical experience APIs
+      magical: {
+        generateApiKey: () => Promise<{
+          success: boolean;
+          apiKey?: string;
+          projectId?: string;
+          needsManual?: boolean;
+          message?: string;
+          error?: string;
+        }>;
+        startExperience: (apiKey: string) => Promise<{
+          success: boolean;
+          camera?: any;
+          firstInsight?: string;
+          error?: string;
+          apiKey?: string;
+        }>;
+        analyzeCustom: (params: { query: string; camera: any }) => Promise<{
+          success: boolean;
+          response?: string;
+          error?: string;
+        }>;
+        cancel: () => Promise<{ success: boolean }>;
+        subscribe: () => void;
+        onProgress: (callback: (progress: {
+          stage: 'discovering' | 'configuring' | 'awakening' | 'analyzing' | 'complete' | 'error';
+          message: string;
+          progress: number;
+          detail?: string;
+        }) => void) => void;
+        onCancelled: (callback: () => void) => void;
       };
     };
   }
