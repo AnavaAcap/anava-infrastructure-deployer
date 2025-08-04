@@ -36,7 +36,8 @@ export class ACAPDeploymentService {
 
   async deployACAP(camera: Camera, acapPath: string): Promise<DeploymentResult> {
     try {
-      console.log(`[ACAPDeployment] Deploying to ${camera.ip}`);
+      console.log(`[ACAPDeployment] ========== STARTING DEPLOYMENT ==========`);
+      console.log(`[ACAPDeployment] Target camera: ${camera.ip}`);
       console.log(`[ACAPDeployment] ACAP file: ${acapPath}`);
 
       if (!fs.existsSync(acapPath)) {
@@ -44,18 +45,22 @@ export class ACAPDeploymentService {
       }
 
       const fileSize = fs.statSync(acapPath).size;
-      console.log(`[ACAPDeployment] File size: ${fileSize} bytes`);
+      const fileName = path.basename(acapPath);
+      console.log(`[ACAPDeployment] File name: ${fileName}`);
+      console.log(`[ACAPDeployment] File size: ${fileSize} bytes (${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
 
       // First, check if we can connect to the camera
       const credentials = camera.credentials || { username: 'root', password: 'pass' };
+      console.log(`[ACAPDeployment] Testing connection with user: ${credentials.username}`);
       const testResult = await this.testConnection(camera.ip, credentials.username, credentials.password);
       
       if (!testResult) {
         throw new Error('Cannot connect to camera - check credentials');
       }
+      console.log(`[ACAPDeployment] Connection test successful`);
 
       // Upload the ACAP
-      console.log(`[ACAPDeployment] Starting upload...`);
+      console.log(`[ACAPDeployment] Starting ACAP upload...`);
       const uploadResult = await this.uploadACAP(
         camera.ip,
         credentials.username,
@@ -64,6 +69,7 @@ export class ACAPDeploymentService {
       );
 
       if (uploadResult.success) {
+        console.log(`[ACAPDeployment] ========== DEPLOYMENT SUCCESSFUL ==========`);
         return {
           success: true,
           cameraId: camera.id,
@@ -75,6 +81,7 @@ export class ACAPDeploymentService {
       }
 
     } catch (error: any) {
+      console.error(`[ACAPDeployment] ========== DEPLOYMENT FAILED ==========`);
       console.error(`[ACAPDeployment] Error deploying to ${camera.ip}:`, error);
       return {
         success: false,
@@ -121,10 +128,11 @@ export class ACAPDeploymentService {
     }
   }
 
-  async listInstalledACAPs(camera: Camera): Promise<string[]> {
+  async listInstalledACAPs(camera: Camera): Promise<any[]> {
     try {
       const credentials = camera.credentials || { username: 'root', password: 'pass' };
       
+      console.log(`[listInstalledACAPs] Querying installed ACAPs on ${camera.ip}`);
       const response = await this.digestAuth(
         camera.ip,
         credentials.username,
@@ -134,24 +142,60 @@ export class ACAPDeploymentService {
       );
 
       if (response && response.data) {
-        const apps: string[] = [];
-        const lines = response.data.split('\n');
+        const apps: any[] = [];
+        const data = String(response.data);
+        console.log(`[listInstalledACAPs] Raw response:\n${data}`);
+        
+        // Parse the response which typically looks like:
+        // app1.Name="BatonAnalytic"
+        // app1.NiceName="Baton Analytic"
+        // app1.Vendor="Anava"
+        // app1.Version="1.0.0"
+        // app1.ApplicationID="123456"
+        // app1.Status="Running"
+        
+        const appMap = new Map<string, any>();
+        const lines = data.split('\n');
         
         for (const line of lines) {
-          if (line.includes('Name=')) {
-            const match = line.match(/Name="([^"]+)"/);
-            if (match) {
-              apps.push(match[1]);
+          const match = line.match(/^(\w+)\.(\w+)="?([^"\n]+)"?/);
+          if (match) {
+            const [, appId, property, value] = match;
+            if (!appMap.has(appId)) {
+              appMap.set(appId, {});
             }
+            const app = appMap.get(appId);
+            app[property.toLowerCase()] = value;
           }
         }
+        
+        // Convert map to array
+        for (const [appId, app] of appMap) {
+          if (app.name) {
+            apps.push({
+              id: appId,
+              name: app.name,
+              nicename: app.nicename,
+              vendor: app.vendor,
+              version: app.version,
+              status: app.status,
+              applicationid: app.applicationid,
+              packagename: app.name // for compatibility
+            });
+          }
+        }
+        
+        console.log(`[listInstalledACAPs] Found ${apps.length} installed ACAPs`);
+        apps.forEach(app => {
+          console.log(`[listInstalledACAPs] - ${app.name} v${app.version} (${app.status})`);
+        });
         
         return apps;
       }
       
       return [];
     } catch (error) {
-      console.error('Error listing ACAPs:', error);
+      console.error('[listInstalledACAPs] Error:', error);
       return [];
     }
   }
@@ -174,12 +218,14 @@ export class ACAPDeploymentService {
 
   private async uploadACAP(ip: string, username: string, password: string, acapPath: string): Promise<any> {
     try {
-      console.log('[uploadACAP] Preparing form data...');
+      console.log('[uploadACAP] ===== VAPIX ACAP Upload Process =====');
+      console.log('[uploadACAP] Preparing multipart form data...');
       
       const form = new FormData();
       const fileStream = fs.createReadStream(acapPath);
       const fileName = path.basename(acapPath);
       
+      // VAPIX expects the file field to be named 'packfil'
       form.append('packfil', fileStream, {
         filename: fileName,
         contentType: 'application/octet-stream'
@@ -187,6 +233,9 @@ export class ACAPDeploymentService {
 
       const headers = form.getHeaders();
       console.log('[uploadACAP] Form headers:', headers);
+      console.log('[uploadACAP] VAPIX endpoint: /axis-cgi/applications/upload.cgi');
+      console.log('[uploadACAP] File field name: packfil');
+      console.log('[uploadACAP] File name: ' + fileName);
 
       const response = await this.digestAuth(
         ip,
@@ -199,20 +248,46 @@ export class ACAPDeploymentService {
           headers: headers,
           maxContentLength: Infinity,
           maxBodyLength: Infinity,
-          timeout: 60000 // 60 second timeout for large files
+          timeout: 120000 // 120 second timeout for large files
         }
       );
 
+      console.log('[uploadACAP] Response status:', response?.status);
+      console.log('[uploadACAP] Response headers:', response?.headers);
+      
       if (response && response.status === 200) {
-        console.log('[uploadACAP] Upload successful');
+        const responseData = String(response.data);
+        console.log('[uploadACAP] Response body:', responseData);
+        
+        // Check for VAPIX error messages in response
+        if (responseData.includes('Error') || responseData.includes('Failed')) {
+          console.log('[uploadACAP] VAPIX returned error in response body');
+          return { success: false, error: `VAPIX error: ${responseData}` };
+        }
+        
+        // Some cameras return a simple "OK" or the package name on success
+        console.log('[uploadACAP] Upload completed successfully');
+        
+        // After upload, the ACAP should be automatically installed
+        // Wait a moment for installation to complete
+        console.log('[uploadACAP] Waiting for ACAP installation to complete...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
         return { success: true };
       } else {
-        console.log('[uploadACAP] Upload failed:', response?.status);
-        return { success: false, error: `Upload failed with status ${response?.status}` };
+        const errorBody = response?.data ? String(response.data) : 'No response body';
+        console.log('[uploadACAP] Upload failed with status:', response?.status);
+        console.log('[uploadACAP] Error response:', errorBody);
+        return { success: false, error: `Upload failed with status ${response?.status}: ${errorBody}` };
       }
 
     } catch (error: any) {
-      console.error('[uploadACAP] Error:', error);
+      console.error('[uploadACAP] Exception during upload:', error);
+      console.error('[uploadACAP] Error details:', error.message);
+      if (error.response) {
+        console.error('[uploadACAP] Error response status:', error.response.status);
+        console.error('[uploadACAP] Error response data:', error.response.data);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -244,11 +319,14 @@ export class ACAPDeploymentService {
         config1.data = data;
       }
 
-      console.log('[digestAuth] Making first request for challenge...');
+      console.log(`[digestAuth] ${method} ${url}`);
+      console.log('[digestAuth] Making first request for digest challenge...');
       const response1 = await axios(config1);
 
       if (response1.status === 401) {
         const wwwAuth = response1.headers['www-authenticate'];
+        console.log('[digestAuth] Got 401 challenge:', wwwAuth);
+        
         if (wwwAuth && wwwAuth.includes('Digest')) {
           // Parse digest parameters
           const digestData: any = {};
@@ -257,6 +335,9 @@ export class ACAPDeploymentService {
           while ((match = regex.exec(wwwAuth)) !== null) {
             digestData[match[1]] = match[2] || match[3];
           }
+
+          console.log('[digestAuth] Digest realm:', digestData.realm);
+          console.log('[digestAuth] Digest qop:', digestData.qop);
 
           // Build digest header
           const nc = '00000001';
@@ -271,7 +352,14 @@ export class ACAPDeploymentService {
             .update(`${ha1}:${digestData.nonce}:${nc}:${cnonce}:${digestData.qop}:${ha2}`)
             .digest('hex');
           
-          const authHeader = `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop=${digestData.qop}, nc=${nc}, cnonce="${cnonce}", response="${response}"`;
+          // Include algorithm if specified
+          let authHeader = `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop=${digestData.qop}, nc=${nc}, cnonce="${cnonce}", response="${response}"`;
+          
+          if (digestData.algorithm) {
+            authHeader += `, algorithm=${digestData.algorithm}`;
+          }
+          
+          console.log('[digestAuth] Sending authenticated request...');
           
           // Second request with auth
           const config2 = {
@@ -283,16 +371,21 @@ export class ACAPDeploymentService {
           };
 
           const response2 = await axios(config2);
+          console.log('[digestAuth] Authenticated response status:', response2.status);
           return response2;
         }
       } else if (response1.status === 200) {
         // No auth required
+        console.log('[digestAuth] No authentication required, got 200 OK');
         return response1;
       }
       
       throw new Error(`Unexpected response: ${response1.status}`);
     } catch (error: any) {
       console.error('[digestAuth] Error:', error.message);
+      if (error.code) {
+        console.error('[digestAuth] Error code:', error.code);
+      }
       throw error;
     }
   }

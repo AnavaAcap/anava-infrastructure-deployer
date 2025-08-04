@@ -515,21 +515,25 @@ export class FastStartService extends EventEmitter {
                 return null;
               }
               
-              logger.info(`SUCCESS: Found Axis camera at ${ip} with ${credentials.username}/${credentials.password}`);
-              
               // Parse camera info
-              const model = this.parseVAPIXResponse(responseData, 'Brand.ProdNbr');
+              const model = this.parseVAPIXResponse(responseData, 'Brand.ProdNbr') || '';
               const brand = this.parseVAPIXResponse(responseData, 'Brand.Brand');
-              const productType = this.parseVAPIXResponse(responseData, 'Brand.ProdType');
+              const productType = this.parseVAPIXResponse(responseData, 'Brand.ProdType') || '';
+              const productShortName = this.parseVAPIXResponse(responseData, 'Brand.ProdShortName') || '';
+              const webURL = this.parseVAPIXResponse(responseData, 'Brand.WebURL') || '';
               
-              // Filter out non-camera devices
-              if (productType && (
-                productType.toLowerCase().includes('speaker') || 
-                productType.toLowerCase().includes('audio') ||
-                productType.toLowerCase().includes('sound'))) {
-                logger.debug(`Skipping non-camera Axis device at ${ip} (${productType})`);
+              logger.info(`DEVICE FOUND at ${ip}: Model=${model}, Type=${productType}, ShortName=${productShortName}`);
+              
+              // Enhanced filtering for non-camera devices
+              // Check multiple indicators to determine if it's a camera
+              const isCamera = this.isAxisCamera(model, productType, productShortName, webURL);
+              
+              if (!isCamera) {
+                logger.info(`SKIPPING: Non-camera Axis device at ${ip} - Model: ${model}, Type: ${productType}, ShortName: ${productShortName}`);
                 return null;
               }
+              
+              logger.info(`SUCCESS: Found Axis camera at ${ip} with ${credentials.username}/${credentials.password} - Model: ${model}`);
               
               return {
                 ip,
@@ -579,6 +583,59 @@ export class FastStartService extends EventEmitter {
     const regex = new RegExp(`${param}=(.+)`);
     const match = data.match(regex);
     return match ? match[1].trim() : null;
+  }
+
+  /**
+   * Determine if the Axis device is a camera based on various parameters
+   */
+  private isAxisCamera(model: string, productType: string, productShortName: string, webURL: string): boolean {
+    // Convert all to lowercase for comparison
+    const modelLower = model.toLowerCase();
+    const typeLower = productType.toLowerCase();
+    const shortNameLower = productShortName.toLowerCase();
+    const webURLLower = webURL.toLowerCase();
+    
+    // Explicit exclusion patterns for non-camera devices
+    const nonCameraPatterns = [
+      'speaker', 'audio', 'sound', 'horn', 'intercom', 'siren',
+      'strobe', 'relay', 'i/o', 'access', 'door', 'controller',
+      'encoder', 'decoder', 'switch', 'media converter'
+    ];
+    
+    // Check if any field contains non-camera patterns
+    for (const pattern of nonCameraPatterns) {
+      if (modelLower.includes(pattern) || typeLower.includes(pattern) || 
+          shortNameLower.includes(pattern) || webURLLower.includes(pattern)) {
+        return false;
+      }
+    }
+    
+    // Explicit inclusion patterns for cameras
+    const cameraPatterns = ['camera', 'cam', 'dome', 'bullet', 'ptz', 'thermal'];
+    
+    // Check if model explicitly indicates it's a camera
+    for (const pattern of cameraPatterns) {
+      if (modelLower.includes(pattern) || typeLower.includes(pattern) || 
+          shortNameLower.includes(pattern)) {
+        return true;
+      }
+    }
+    
+    // Check common Axis camera model patterns
+    // Most Axis cameras have model numbers like M3065, P1435, Q6055 etc
+    const cameraModelPattern = /^[MPQF]\d{4}/i;
+    if (cameraModelPattern.test(model)) {
+      // Additional check - C series are usually speakers
+      if (model.toUpperCase().startsWith('C')) {
+        return false;
+      }
+      return true;
+    }
+    
+    // If we can't determine, log details and default to true (camera)
+    // This ensures we don't accidentally skip real cameras
+    logger.warn(`Unable to definitively categorize Axis device - Model: ${model}, Type: ${productType}, ShortName: ${productShortName}`);
+    return true;
   }
 
   /**
@@ -791,7 +848,27 @@ export class FastStartService extends EventEmitter {
       // Check if ACAP is already installed
       const { ACAPDeploymentService } = require('./camera/acapDeploymentService');
       const acapDeployService = new ACAPDeploymentService();
-      const installedACAPs = await acapDeployService.listInstalledACAPs(camera);
+      
+      // Convert CameraInfo to Camera format
+      const cameraForCheck = {
+        id: `camera-${camera.ip.replace(/\./g, '-')}`,
+        ip: camera.ip,
+        port: camera.port,
+        protocol: camera.protocol,
+        type: 'network',
+        model: camera.model,
+        manufacturer: camera.manufacturer,
+        mac: camera.mac || null,
+        capabilities: [],
+        discoveredAt: new Date().toISOString(),
+        status: 'accessible' as const,
+        credentials: {
+          username: camera.username!,
+          password: camera.password!
+        }
+      };
+      
+      const installedACAPs = await acapDeployService.listInstalledACAPs(cameraForCheck);
       
       const isInstalled = installedACAPs.some((acap: any) => 
         acap.name?.toLowerCase().includes('batonanalytic') ||
@@ -808,7 +885,7 @@ export class FastStartService extends EventEmitter {
       // Get the latest ACAP release
       const { ACAPDownloaderService } = require('./camera/acapDownloaderService');
       const acapService = new ACAPDownloaderService();
-      const releases = await acapService.getReleases();
+      const releases = await acapService.getAvailableReleases();
       
       if (!releases || releases.length === 0) {
         throw new Error('No ACAP releases found');
@@ -823,18 +900,44 @@ export class FastStartService extends EventEmitter {
       );
       
       if (!batonRelease) {
+        logger.error('Available releases:', releases.map((r: any) => r.name).join(', '));
         throw new Error('No compatible BatonAnalytic ACAP found in releases');
       }
       
       logger.info(`Found ACAP release: ${batonRelease.name}`);
+      logger.info(`Download URL: ${batonRelease.downloadUrl}`);
+      logger.info(`Architecture: ${batonRelease.architecture}`);
+      logger.info(`Size: ${batonRelease.size} bytes`);
       
       // Download the ACAP
-      const acapPath = await acapService.downloadRelease(batonRelease);
-      logger.info(`Downloaded ACAP to: ${acapPath}`);
+      const downloadResult = await acapService.downloadACAP(batonRelease);
+      if (!downloadResult.success) {
+        throw new Error(`Failed to download ACAP: ${downloadResult.error}`);
+      }
+      const acapPath = downloadResult.path!;
+      logger.info(`Downloaded ACAP successfully to: ${acapPath}`);
       
       // Deploy to camera
       logger.info('Installing ACAP on camera...');
-      const deployResult = await acapDeployService.deployACAP(camera, acapPath);
+      // Convert CameraInfo to Camera format expected by ACAPDeploymentService
+      const cameraForDeploy = {
+        id: `camera-${camera.ip.replace(/\./g, '-')}`,
+        ip: camera.ip,
+        port: camera.port,
+        protocol: camera.protocol,
+        type: 'network',
+        model: camera.model,
+        manufacturer: camera.manufacturer,
+        mac: camera.mac || null,
+        capabilities: [],
+        discoveredAt: new Date().toISOString(),
+        status: 'accessible' as const,
+        credentials: {
+          username: camera.username!,
+          password: camera.password!
+        }
+      };
+      const deployResult = await acapDeployService.deployACAP(cameraForDeploy, acapPath);
       
       if (!deployResult.success) {
         throw new Error(`ACAP deployment failed: ${deployResult.error}`);
@@ -1039,11 +1142,24 @@ export class FastStartService extends EventEmitter {
           if (response.status === 200 && response.data) {
             const responseData = String(response.data);
             if (responseData.includes('Brand=AXIS') || responseData.includes('Brand.Brand=AXIS')) {
-              logger.info(`QUICK HIT: Found Axis camera at ${ip} with ${creds.username}/${creds.password}`);
+              // Parse device info to check if it's a camera
+              const model = this.parseVAPIXResponse(responseData, 'Brand.ProdNbr') || '';
+              const productType = this.parseVAPIXResponse(responseData, 'Brand.ProdType') || '';
+              const productShortName = this.parseVAPIXResponse(responseData, 'Brand.ProdShortName') || '';
+              const webURL = this.parseVAPIXResponse(responseData, 'Brand.WebURL') || '';
+              
+              const isCamera = this.isAxisCamera(model, productType, productShortName, webURL);
+              
+              if (!isCamera) {
+                logger.debug(`QUICK SCAN: Skipping non-camera at ${ip} - ${model}`);
+                return null;
+              }
+              
+              logger.info(`QUICK HIT: Found Axis camera at ${ip} with ${creds.username}/${creds.password} - Model: ${model}`);
               
               return {
                 ip,
-                model: this.parseVAPIXResponse(responseData, 'Brand.ProdNbr') || 'Unknown Axis Camera',
+                model: model || 'Unknown Axis Camera',
                 manufacturer: 'Axis',
                 mac: '',
                 hostname: '',
