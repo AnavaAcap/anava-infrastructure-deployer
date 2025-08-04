@@ -56,9 +56,6 @@ export class FastStartService extends EventEmitter {
       }
 
       this.updateProgress('configuring', `Found camera at ${camera.ip}`, 40);
-
-      // Configure camera with magical settings
-      await this.configureCameraForMagic(camera);
       
       this.updateProgress('awakening', 'Installing AI vision capabilities...', 50);
 
@@ -68,6 +65,17 @@ export class FastStartService extends EventEmitter {
       this.updateProgress('awakening', 'AI is learning to see...', 70);
 
       this.updateProgress('analyzing', 'Capturing first glimpse...', 80);
+
+      logger.info('Camera object before scene analysis:', {
+        ip: camera.ip,
+        model: camera.model,
+        hasSpeaker: !!camera.speaker,
+        speakerDetails: camera.speaker ? {
+          ip: camera.speaker.ip,
+          username: camera.speaker.username,
+          hasPassword: !!camera.speaker.password
+        } : null
+      });
 
       // Get first frame and analyze
       const result = await this.captureAndAnalyzeFirstFrame(camera);
@@ -844,61 +852,6 @@ export class FastStartService extends EventEmitter {
     }
   }
 
-  /**
-   * Configure camera with user's AI Studio settings
-   */
-  private async configureCameraForMagic(camera: CameraInfo): Promise<void> {
-    if (!this.aiService) {
-      throw new Error('AI service not initialized');
-    }
-
-    // Use minimal config for magical experience with user's API key
-    const config = {
-      firebase: {
-        apiKey: "demo-api-key",
-        authDomain: "anava-demo.firebaseapp.com",
-        projectId: "anava-magical-demo",
-        storageBucket: "anava-magical-demo.appspot.com",
-        messagingSenderId: "123456789",
-        appId: "1:123456789:web:demo",
-        databaseId: "(default)"
-      },
-      gemini: {
-        apiKey: this.aiService.getApiKey(), // Use the user's API key
-        vertexApiGatewayUrl: "",
-        vertexApiGatewayKey: "",
-        vertexGcpProjectId: "anava-magical",
-        vertexGcpRegion: "us-central1",
-        vertexGcsBucketName: "anava-magical-analytics"
-      },
-      anavaKey: `magical-${crypto.randomBytes(8).toString('hex')}`,
-      customerId: "magical-demo"
-    };
-
-    const path = `/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`;
-    
-    try {
-      // Use digest auth for configuration
-      const response = await this.digestAuthPost(
-        camera.ip,
-        camera.username!,
-        camera.password!,
-        path,
-        config,
-        camera.port,
-        camera.protocol
-      );
-
-      if (!response || response.status !== 200) {
-        throw new Error('Failed to configure camera - invalid response');
-      }
-
-      logger.info('Camera configured with magical settings');
-    } catch (error) {
-      logger.error('Failed to configure camera:', error);
-      throw new Error('Failed to configure camera');
-    }
-  }
 
   /**
    * Deploy ACAP quickly
@@ -1080,7 +1033,16 @@ export class FastStartService extends EventEmitter {
         requestData.speakerIp = camera.speaker.ip;
         requestData.speakerUser = camera.speaker.username;
         requestData.speakerPass = camera.speaker.password;
+        logger.info('Including speaker in scene description request:', {
+          speakerIp: camera.speaker.ip,
+          speakerUser: camera.speaker.username,
+          hasSpeakerPass: !!camera.speaker.password
+        });
+      } else {
+        logger.info('No speaker found for camera, sending request without speaker info');
       }
+      
+      logger.info('Sending getSceneDescription request with payload:', JSON.stringify(requestData, null, 2));
       
       const response = await this.digestAuthPost(
         camera.ip,
@@ -1147,9 +1109,6 @@ export class FastStartService extends EventEmitter {
       }
 
       this.updateProgress('configuring', `Found camera at ${camera.ip}`, 40);
-
-      // Configure camera with magical settings
-      await this.configureCameraForMagic(camera);
       
       this.updateProgress('awakening', 'Installing AI vision capabilities...', 50);
 
@@ -1159,6 +1118,17 @@ export class FastStartService extends EventEmitter {
       this.updateProgress('awakening', 'AI is learning to see...', 70);
 
       this.updateProgress('analyzing', 'Capturing first glimpse...', 80);
+
+      logger.info('Camera object before scene analysis:', {
+        ip: camera.ip,
+        model: camera.model,
+        hasSpeaker: !!camera.speaker,
+        speakerDetails: camera.speaker ? {
+          ip: camera.speaker.ip,
+          username: camera.speaker.username,
+          hasPassword: !!camera.speaker.password
+        } : null
+      });
 
       // Get first frame and analyze
       const result = await this.captureAndAnalyzeFirstFrame(camera);
