@@ -741,7 +741,7 @@ export class OptimizedCameraDiscoveryService {
 
     try {
       // Get primary network interface
-      const networks = this.getAvailableNetworks();
+      const networks = this.getNetworksToScan();
       if (networks.length === 0) {
         console.log('[Pre-Discovery] No networks available for pre-discovery');
         return;
