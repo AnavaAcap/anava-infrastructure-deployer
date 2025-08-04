@@ -28,13 +28,13 @@ const UnifiedWelcomePage: React.FC<UnifiedWelcomePageProps> = ({
 }) => {
   return (
     <Fade in timeout={800}>
-      <Container maxWidth="md">
+      <Container maxWidth="md" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
         <Box sx={{ 
-          py: 3,
+          py: 2,
           textAlign: 'center',
           display: 'flex',
           flexDirection: 'column',
-          minHeight: 'calc(100vh - 200px)',
+          height: '100%',
           justifyContent: 'center'
         }}>
           {flowOrigin === 'magical' && (
@@ -50,7 +50,7 @@ const UnifiedWelcomePage: React.FC<UnifiedWelcomePageProps> = ({
           )}
           
           <Typography 
-            variant="h3" 
+            variant="h4" 
             gutterBottom
             sx={{ 
               fontWeight: 700,
@@ -60,7 +60,7 @@ const UnifiedWelcomePage: React.FC<UnifiedWelcomePageProps> = ({
               backgroundClip: 'text',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
-              mb: 2
+              mb: 1
             }}
           >
             {flowOrigin === 'magical' 
@@ -70,9 +70,9 @@ const UnifiedWelcomePage: React.FC<UnifiedWelcomePageProps> = ({
           </Typography>
           
           <Typography 
-            variant="h6" 
+            variant="body1" 
             sx={{ 
-              mb: 6,
+              mb: 4,
               color: 'text.secondary',
               maxWidth: 600,
               mx: 'auto'
@@ -89,7 +89,7 @@ const UnifiedWelcomePage: React.FC<UnifiedWelcomePageProps> = ({
               <Paper
                 elevation={3}
                 sx={{
-                  p: 4,
+                  p: 3,
                   height: '100%',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
@@ -128,7 +128,7 @@ const UnifiedWelcomePage: React.FC<UnifiedWelcomePageProps> = ({
               <Paper
                 elevation={3}
                 sx={{
-                  p: 4,
+                  p: 3,
                   height: '100%',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
@@ -160,7 +160,7 @@ const UnifiedWelcomePage: React.FC<UnifiedWelcomePageProps> = ({
           </Grid>
 
           {flowOrigin === 'magical' && magicalCamera && (
-            <Box sx={{ mt: 4, p: 3, background: 'rgba(0, 212, 255, 0.1)', borderRadius: 2 }}>
+            <Box sx={{ mt: 3, p: 2, background: 'rgba(0, 212, 255, 0.1)', borderRadius: 2 }}>
               <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <CameraAltIcon sx={{ fontSize: 20 }} />
                 Camera discovered and ready: {magicalCamera.name || 'Unknown'} at {magicalCamera.ip || 'your network'}

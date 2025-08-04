@@ -502,9 +502,9 @@ function App() {
               renderContent()
             ) : (
               <>
-                <Container maxWidth="lg" sx={{ py: 2, minHeight: 'calc(100vh - 100px)' }}>
+                <Box sx={{ height: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column' }}>
                   {renderContent()}
-                </Container>
+                </Box>
                 <AppFooter />
               </>
             )}
