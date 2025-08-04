@@ -16,7 +16,14 @@ export interface DeploymentResult {
 }
 
 export class ACAPDeploymentService {
+  private static instance: ACAPDeploymentService | null = null;
+  
   constructor() {
+    // Prevent multiple instances
+    if (ACAPDeploymentService.instance) {
+      return ACAPDeploymentService.instance;
+    }
+    ACAPDeploymentService.instance = this;
     this.setupIPC();
   }
 
@@ -146,42 +153,58 @@ export class ACAPDeploymentService {
         const data = String(response.data);
         console.log(`[listInstalledACAPs] Raw response:\n${data}`);
         
-        // Parse the response which typically looks like:
-        // app1.Name="BatonAnalytic"
-        // app1.NiceName="Baton Analytic"
-        // app1.Vendor="Anava"
-        // app1.Version="1.0.0"
-        // app1.ApplicationID="123456"
-        // app1.Status="Running"
-        
-        const appMap = new Map<string, any>();
-        const lines = data.split('\n');
-        
-        for (const line of lines) {
-          const match = line.match(/^(\w+)\.(\w+)="?([^"\n]+)"?/);
-          if (match) {
-            const [, appId, property, value] = match;
-            if (!appMap.has(appId)) {
-              appMap.set(appId, {});
+        // Check if response is XML format
+        if (data.includes('<reply') && data.includes('<application')) {
+          // Parse XML response
+          const applicationMatches = data.matchAll(/<application\s+([^>]+)>/g);
+          let appIndex = 0;
+          
+          for (const match of applicationMatches) {
+            const attributes = match[1];
+            const app: any = { id: `app${++appIndex}` };
+            
+            // Extract attributes
+            const attrMatches = attributes.matchAll(/(\w+)="([^"]*)"/g);
+            for (const [, key, value] of attrMatches) {
+              app[key.toLowerCase()] = value;
             }
-            const app = appMap.get(appId);
-            app[property.toLowerCase()] = value;
+            
+            if (app.name) {
+              app.packagename = app.name; // for compatibility
+              apps.push(app);
+            }
           }
-        }
-        
-        // Convert map to array
-        for (const [appId, app] of appMap) {
-          if (app.name) {
-            apps.push({
-              id: appId,
-              name: app.name,
-              nicename: app.nicename,
-              vendor: app.vendor,
-              version: app.version,
-              status: app.status,
-              applicationid: app.applicationid,
-              packagename: app.name // for compatibility
-            });
+        } else {
+          // Original text format parsing (for older cameras)
+          const appMap = new Map<string, any>();
+          const lines = data.split('\n');
+          
+          for (const line of lines) {
+            const match = line.match(/^(\w+)\.(\w+)="?([^"\n]+)"?/);
+            if (match) {
+              const [, appId, property, value] = match;
+              if (!appMap.has(appId)) {
+                appMap.set(appId, {});
+              }
+              const app = appMap.get(appId);
+              app[property.toLowerCase()] = value;
+            }
+          }
+          
+          // Convert map to array
+          for (const [appId, app] of appMap) {
+            if (app.name) {
+              apps.push({
+                id: appId,
+                name: app.name,
+                nicename: app.nicename,
+                vendor: app.vendor,
+                version: app.version,
+                status: app.status,
+                applicationid: app.applicationid,
+                packagename: app.name // for compatibility
+              });
+            }
           }
         }
         
@@ -195,8 +218,13 @@ export class ACAPDeploymentService {
       
       return [];
     } catch (error) {
-      console.error('[listInstalledACAPs] Error:', error);
-      return [];
+      console.error('[listInstalledACAPs] Error:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        cameraIp: camera.ip
+      });
+      throw new Error(`Failed to list installed ACAPs on camera ${camera.ip}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -353,7 +381,7 @@ export class ACAPDeploymentService {
             .digest('hex');
           
           // Include algorithm if specified
-          let authHeader = `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop=${digestData.qop}, nc=${nc}, cnonce="${cnonce}", response="${response}"`;
+          let authHeader = `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop="${digestData.qop}", nc=${nc}, cnonce="${cnonce}", response="${response}"`;
           
           if (digestData.algorithm) {
             authHeader += `, algorithm=${digestData.algorithm}`;

@@ -103,6 +103,7 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
   });
   const [camera, setCamera] = useState<CameraInfo | null>(null);
   const [firstInsight, setFirstInsight] = useState<string>('');
+  const [firstImage, setFirstImage] = useState<string>('');
   const [userQuery, setUserQuery] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -120,8 +121,13 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
     // Don't auto-start, wait for user to either enter IP or scan
     subscribeToEvents();
     
+    let isConnecting = false;
+    let intervalRef: NodeJS.Timeout | null = null;
+    
     // Check for pre-discovered cameras immediately and periodically
     const checkAndAutoConnect = async () => {
+      if (isConnecting) return false; // Prevent multiple connections
+      
       const result = await window.electronAPI.camera.getPreDiscoveredCameras();
       if (result.cameras.length > 0) {
         // FOUND A CAMERA - START IMMEDIATELY!
@@ -129,7 +135,9 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
         const firstCamera = result.cameras[0];
         const apiKey = (window as any).__magicalApiKey;
         
-        if (apiKey) {
+        if (apiKey && !isConnecting) {
+          isConnecting = true; // Mark as connecting
+          
           // Hide manual form IMMEDIATELY
           setManualMode(false);
           setProgress({
@@ -147,10 +155,24 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
           });
           
           if (connectResult.success && connectResult.camera) {
+            console.log('Connect result:', {
+              hasCamera: !!connectResult.camera,
+              hasInsight: !!connectResult.firstInsight,
+              hasImage: !!connectResult.firstImage,
+              imageLength: connectResult.firstImage?.length || 0,
+              imagePreview: connectResult.firstImage?.substring(0, 100) + '...'
+            });
+            
             setCamera(connectResult.camera);
             setFirstInsight(connectResult.firstInsight || '');
+            setFirstImage(connectResult.firstImage || '');
             startCameraFeed(connectResult.camera);
-            onComplete(connectResult.camera);
+            // Don't call onComplete yet - wait for the progress to reach 'complete'
+            // The progress event will trigger the UI update
+          } else if (connectResult.error) {
+            setErrorMessage(connectResult.error);
+            setShowError(true);
+            isConnecting = false; // Reset on error
           }
         }
         return true;
@@ -162,18 +184,26 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
     checkAndAutoConnect();
     
     // Keep checking every 500ms until we find a camera or timeout
-    const interval = setInterval(async () => {
+    intervalRef = setInterval(async () => {
       const found = await checkAndAutoConnect();
-      if (found) {
-        clearInterval(interval);
+      if (found && intervalRef) {
+        clearInterval(intervalRef);
+        intervalRef = null;
       }
     }, 500);
     
     // Stop checking after 15 seconds
-    setTimeout(() => clearInterval(interval), 15000);
+    setTimeout(() => {
+      if (intervalRef) {
+        clearInterval(intervalRef);
+        intervalRef = null;
+      }
+    }, 15000);
 
     return () => {
-      clearInterval(interval);
+      if (intervalRef) {
+        clearInterval(intervalRef);
+      }
       window.electronAPI.magical.cancel();
     };
   }, []);
@@ -239,8 +269,17 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
       });
       
       if (result.success && result.camera) {
+        console.log('Manual connect result:', {
+          hasCamera: !!result.camera,
+          hasInsight: !!result.firstInsight,
+          hasImage: !!result.firstImage,
+          imageLength: result.firstImage?.length || 0,
+          imagePreview: result.firstImage?.substring(0, 100) + '...'
+        });
+        
         setCamera(result.camera);
         setFirstInsight(result.firstInsight || '');
+        setFirstImage(result.firstImage || '');
         startCameraFeed(result.camera);
         onComplete(result.camera);
       } else {
@@ -531,18 +570,34 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                   position: 'relative',
                   paddingTop: '56.25%', // 16:9 aspect ratio
                   background: 'linear-gradient(45deg, #1a1f3a 0%, #0A0E27 100%)',
+                  overflow: 'hidden',
                 }}
               >
-                <CameraAltIcon
-                  sx={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    fontSize: 80,
-                    color: 'rgba(255, 255, 255, 0.1)',
-                  }}
-                />
+                {firstImage ? (
+                  <img
+                    src={firstImage}
+                    alt="Camera view"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                ) : (
+                  <CameraAltIcon
+                    sx={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      fontSize: 80,
+                      color: 'rgba(255, 255, 255, 0.1)',
+                    }}
+                  />
+                )}
                 
                 {camera && (
                   <Typography
