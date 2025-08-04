@@ -1177,8 +1177,8 @@ export class FastStartService extends EventEmitter {
       // Include speaker credentials if available
       if (camera.speaker) {
         requestData.speakerIp = camera.speaker.ip;
-        requestData.speakerUsername = camera.speaker.username;
-        requestData.speakerPassword = camera.speaker.password;
+        requestData.speakerUser = camera.speaker.username;
+        requestData.speakerPass = camera.speaker.password;
       }
       
       const response = await this.digestAuthPost(
