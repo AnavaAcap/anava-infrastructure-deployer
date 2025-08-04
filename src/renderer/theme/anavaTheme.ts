@@ -217,6 +217,7 @@ export const magicalUnifiedTheme = createTheme({
       default: '#0A0E27',
       paper: 'rgba(255, 255, 255, 0.05)',
     },
+    divider: 'rgba(255, 255, 255, 0.12)',
     text: {
       primary: 'rgba(255, 255, 255, 0.95)',
       secondary: 'rgba(255, 255, 255, 0.7)',
