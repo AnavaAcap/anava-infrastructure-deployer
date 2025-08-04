@@ -739,48 +739,66 @@ export class OptimizedCameraDiscoveryService {
   private async startPreDiscovery() {
     console.log('[Pre-Discovery] Starting pre-emptive camera discovery...');
     this.isPreDiscovering = true;
+    let foundCamera = false;
 
     try {
-      // Get primary network interface
+      // First try service discovery (mDNS/SSDP) - this is often fastest
+      console.log('[Pre-Discovery] Trying service discovery first...');
+      const serviceTimeout = new Promise(resolve => setTimeout(() => resolve([]), 3000));
+      const serviceCameras = await Promise.race([
+        this.discoverViaServices(),
+        serviceTimeout
+      ]) as Camera[];
+
+      for (const camera of serviceCameras) {
+        if (camera.manufacturer?.toLowerCase().includes('axis')) {
+          console.log(`[Pre-Discovery] Found Axis camera via service discovery at ${camera.ip}`);
+          this.preDiscoveredCameras = [camera];
+          foundCamera = true;
+          return;
+        }
+      }
+
+      // If no camera found via services, do targeted scanning
       const networks = this.getNetworksToScan();
       if (networks.length === 0) {
         console.log('[Pre-Discovery] No networks available for pre-discovery');
         return;
       }
 
-      // Use only the primary network for pre-discovery
       const primaryNetwork = networks[0];
-      console.log(`[Pre-Discovery] Scanning primary network: ${primaryNetwork.network} (${primaryNetwork.interface})`);
+      console.log(`[Pre-Discovery] Scanning primary network: ${primaryNetwork.network}`);
 
-      // Quick scan for first available camera
+      // Check common camera IPs first (often cameras have predictable IPs)
       const ips = this.getIPsInRange(primaryNetwork.network);
-      const shuffledIPs = this.shuffle(ips);
-      const ports = [80, 443]; // Most common ports
+      const commonCameraIPs = ips.filter(ip => {
+        const lastOctet = parseInt(ip.split('.').pop() || '0');
+        // Common camera IP patterns: .100-.200, .64, .88, .156
+        return (lastOctet >= 100 && lastOctet <= 200) || 
+               lastOctet === 64 || lastOctet === 88 || lastOctet === 156;
+      });
+      
+      // Prioritize common IPs, then shuffle the rest
+      const otherIPs = this.shuffle(ips.filter(ip => !commonCameraIPs.includes(ip)));
+      const orderedIPs = [...commonCameraIPs, ...otherIPs];
+
+      const ports = [80, 443];
       const credentials = [
         { username: 'root', password: 'pass' },
         { username: 'anava', password: 'baton' }
       ];
 
-      // Create a simple queue for controlled concurrency
-      let activeScans = 0;
-      const maxConcurrent = 10;
-      let foundCamera = false;
+      // Use higher concurrency for faster discovery
+      const queue = new PQueue({ concurrency: 30 });
+      const scanPromises: Promise<void>[] = [];
 
-      for (const ip of shuffledIPs) {
+      for (const ip of orderedIPs) {
         if (foundCamera) break;
 
-        // Wait if too many concurrent scans
-        while (activeScans >= maxConcurrent && !foundCamera) {
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
-
-        if (foundCamera) break;
-
-        activeScans++;
-        
-        // Scan in background without waiting
-        this.scanIP(ip, ports, credentials, undefined).then(camera => {
-          activeScans--;
+        const promise = queue.add(async () => {
+          if (foundCamera) return;
+          
+          const camera = await this.scanIP(ip, ports, credentials, undefined);
           
           if (camera && !foundCamera) {
             const isAxis = camera.manufacturer?.toLowerCase().includes('axis');
@@ -790,23 +808,31 @@ export class OptimizedCameraDiscoveryService {
               console.log(`[Pre-Discovery] Found accessible Axis camera at ${camera.ip}`);
               this.preDiscoveredCameras = [camera];
               foundCamera = true;
+              queue.clear(); // Stop all pending scans
             }
           }
-        }).catch(() => {
-          activeScans--;
         });
 
-        // Small delay between starting scans
-        if (!foundCamera) {
-          await new Promise(resolve => setTimeout(resolve, 20));
-        }
+        scanPromises.push(promise);
       }
 
-      // Wait for remaining scans to complete or timeout
-      const timeout = Date.now() + 5000;
-      while (activeScans > 0 && !foundCamera && Date.now() < timeout) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      // Wait for first camera or timeout
+      await Promise.race([
+        Promise.all(scanPromises),
+        new Promise(resolve => {
+          const checkInterval = setInterval(() => {
+            if (foundCamera) {
+              clearInterval(checkInterval);
+              resolve(true);
+            }
+          }, 100);
+          
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve(false);
+          }, 10000); // 10 second timeout
+        })
+      ]);
 
       console.log(`[Pre-Discovery] Found ${this.preDiscoveredCameras.length} accessible Axis cameras`);
       this.preDiscoveredCameras.forEach(camera => {
