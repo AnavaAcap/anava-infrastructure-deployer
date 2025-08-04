@@ -537,9 +537,6 @@ export class FastStartService extends EventEmitter {
               
               logger.info(`SUCCESS: Found Axis camera at ${ip} with ${credentials.username}/${credentials.password} - Model: ${model}`);
               
-              // Try to find a speaker on the same network
-              const speaker = await this.scanForSpeakerOnSameNetwork(ip, [credentials]);
-              
               return {
                 ip,
                 model: model || 'Unknown Axis Camera',
@@ -550,8 +547,7 @@ export class FastStartService extends EventEmitter {
                 protocol: protocol as 'http' | 'https',
                 authenticated: true,
                 username: credentials.username,
-                password: credentials.password,
-                speaker
+                password: credentials.password
               };
             } else if (response.status === 401) {
               logger.debug(`AUTH FAILED at ${ip} with ${credentials.username} (401)`);
@@ -644,101 +640,6 @@ export class FastStartService extends EventEmitter {
     return true;
   }
 
-  /**
-   * Scan for a speaker on the same /24 network as the camera
-   */
-  private async scanForSpeakerOnSameNetwork(
-    cameraIP: string,
-    credentials: Array<{ username: string; password: string }>
-  ): Promise<{ ip: string; username: string; password: string; authenticated: boolean } | undefined> {
-    try {
-      // Extract the /24 network from camera IP
-      const ipParts = cameraIP.split('.');
-      if (ipParts.length !== 4) return undefined;
-      
-      const networkBase = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`;
-      logger.info(`Scanning for speakers on ${networkBase}.0/24 network...`);
-      
-      // Common ports for Axis speakers
-      const speakerPorts = [80, 443];
-      
-      // Scan a limited range of IPs around the camera
-      const cameraLastOctet = parseInt(ipParts[3]);
-      const scanRange = 10; // Scan +/- 10 IPs around the camera
-      const startIP = Math.max(1, cameraLastOctet - scanRange);
-      const endIP = Math.min(254, cameraLastOctet + scanRange);
-      
-      for (let i = startIP; i <= endIP; i++) {
-        const ip = `${networkBase}.${i}`;
-        
-        // Skip the camera IP
-        if (ip === cameraIP) continue;
-        
-        // Check each port
-        for (const port of speakerPorts) {
-          const protocol = port === 443 ? 'https' : 'http';
-          const baseURL = `${protocol}://${ip}:${port}`;
-          
-          try {
-            // Quick check if port is open
-            const checkResponse = await axios.get(baseURL, {
-              timeout: 200, // Very short timeout for speed
-              validateStatus: () => true,
-              maxRedirects: 0,
-              httpsAgent: protocol === 'https' ? new (require('https').Agent)({
-                rejectUnauthorized: false
-              }) : undefined
-            });
-            
-            if (checkResponse.status > 0) {
-              // Try each credential
-              for (const cred of credentials) {
-                try {
-                  const response = await this.digestAuth(
-                    `${baseURL}/axis-cgi/param.cgi?action=list&group=Brand`,
-                    cred.username,
-                    cred.password
-                  );
-                  
-                  if (response.status === 200 && response.data) {
-                    const responseData = String(response.data);
-                    
-                    if (responseData.includes('Brand=AXIS')) {
-                      const typeMatch = responseData.match(/Brand\.ProdType=([^\r\n]+)/);
-                      const productType = typeMatch ? typeMatch[1] : '';
-                      
-                      // Check if it's a speaker device
-                      if (productType.toLowerCase().includes('speaker') || 
-                          productType.toLowerCase().includes('audio') ||
-                          productType.toLowerCase().includes('sound')) {
-                        logger.info(`✓ Found Axis speaker at ${ip}:${port} (${productType})`);
-                        return {
-                          ip,
-                          username: cred.username,
-                          password: cred.password,
-                          authenticated: true
-                        };
-                      }
-                    }
-                  }
-                } catch (err) {
-                  // Try next credential
-                }
-              }
-            }
-          } catch (err) {
-            // Port not open, continue
-          }
-        }
-      }
-      
-      logger.info(`No speakers found on ${networkBase}.0/24`);
-      return undefined;
-    } catch (error) {
-      logger.error('Error scanning for speakers:', error);
-      return undefined;
-    }
-  }
 
   /**
    * Simple digest auth implementation for POST requests
