@@ -789,7 +789,8 @@ export class FastStartService extends EventEmitter {
       logger.info('Checking if BatonAnalytic ACAP is installed...');
       
       // Check if ACAP is already installed
-      const acapDeployService = require('./acapDeploymentService').acapDeploymentService;
+      const { ACAPDeploymentService } = require('./camera/acapDeploymentService');
+      const acapDeployService = new ACAPDeploymentService();
       const installedACAPs = await acapDeployService.listInstalledACAPs(camera);
       
       const isInstalled = installedACAPs.some((acap: any) => 
@@ -805,8 +806,9 @@ export class FastStartService extends EventEmitter {
       logger.info('BatonAnalytic ACAP not found, downloading and installing...');
       
       // Get the latest ACAP release
-      const acapService = require('./acapDownloadService').acapDownloadService;
-      const releases = await acapService.getLatestReleases();
+      const { ACAPDownloaderService } = require('./camera/acapDownloaderService');
+      const acapService = new ACAPDownloaderService();
+      const releases = await acapService.getReleases();
       
       if (!releases || releases.length === 0) {
         throw new Error('No ACAP releases found');
