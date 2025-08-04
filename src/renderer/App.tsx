@@ -13,6 +13,7 @@ import { MagicalWelcomePage } from './pages/MagicalWelcomePage';
 import { MagicalDiscoveryPage } from './pages/MagicalDiscoveryPage';
 import { MagicalAPIKeyPage } from './pages/MagicalAPIKeyPage';
 import NavigationSidebar, { NavigationView } from './components/NavigationSidebar';
+import MagicalNavigationStepper, { MagicalStep } from './components/MagicalNavigationStepper';
 import TopBar from './components/TopBar';
 import { anavaTheme } from './theme/anavaTheme';
 import AppFooter from './components/AppFooter';
@@ -38,6 +39,28 @@ function App() {
     
     // Check authentication status
     checkAuth();
+
+    // Listen for navigation from magical mode to infrastructure mode
+    const handleNavigateToInfrastructure = (event: any) => {
+      const { fromMagicalMode, apiKey, cameraIp } = event.detail;
+      if (fromMagicalMode) {
+        setMagicalMode(false);
+        setCurrentView('welcome');
+        // Store the API key and camera info for later use
+        if (apiKey) {
+          sessionStorage.setItem('magicalApiKey', apiKey);
+        }
+        if (cameraIp) {
+          sessionStorage.setItem('magicalCameraIp', cameraIp);
+        }
+      }
+    };
+
+    window.addEventListener('navigate-to-infrastructure', handleNavigateToInfrastructure);
+    
+    return () => {
+      window.removeEventListener('navigate-to-infrastructure', handleNavigateToInfrastructure);
+    };
   }, []);
 
   const checkAuth = async () => {
@@ -282,40 +305,74 @@ function App() {
     }
   };
 
+  // Map navigation views to magical steps
+  const getMagicalStep = (): MagicalStep => {
+    switch (currentView) {
+      case 'magical-welcome':
+        return 'welcome';
+      case 'magical-api-key':
+        return 'api-key';
+      case 'magical-discovery':
+        return 'discovery';
+      default:
+        return 'welcome';
+    }
+  };
+
+  // Handle magical step navigation
+  const handleMagicalStepClick = (step: MagicalStep) => {
+    const viewMap: Record<MagicalStep, NavigationView> = {
+      'welcome': 'magical-welcome',
+      'api-key': 'magical-api-key',
+      'discovery': 'magical-discovery',
+      'complete': 'magical-discovery',
+    };
+    setCurrentView(viewMap[step]);
+  };
+
   return (
     <ThemeProvider theme={anavaTheme}>
       <CssBaseline />
-      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
         {!magicalMode && <TopBar onLogout={handleLogout} />}
         
-        {!magicalMode && (
-          <NavigationSidebar
-            currentView={currentView}
-            onViewChange={handleViewChange}
-            deploymentComplete={deploymentComplete}
-            camerasConfigured={camerasConfigured}
+        {magicalMode && (
+          <MagicalNavigationStepper
+            currentStep={getMagicalStep()}
+            onStepClick={handleMagicalStepClick}
           />
         )}
         
-        <Box
-          component="main"
-          sx={{
-            flexGrow: 1,
-            bgcolor: magicalMode ? '#0A0E27' : 'background.default',
-            marginTop: magicalMode ? 0 : '48px', // Account for TopBar height
-            position: 'relative',
-          }}
-        >
-          {magicalMode ? (
-            renderContent()
-          ) : (
-            <>
-              <Container maxWidth="lg" sx={{ py: 4 }}>
-                {renderContent()}
-              </Container>
-              <AppFooter />
-            </>
+        <Box sx={{ display: 'flex', flex: 1 }}>
+          {!magicalMode && (
+            <NavigationSidebar
+              currentView={currentView}
+              onViewChange={handleViewChange}
+              deploymentComplete={deploymentComplete}
+              camerasConfigured={camerasConfigured}
+            />
           )}
+          
+          <Box
+            component="main"
+            sx={{
+              flexGrow: 1,
+              bgcolor: magicalMode ? '#0A0E27' : 'background.default',
+              marginTop: !magicalMode ? '48px' : 0, // Account for TopBar height
+              position: 'relative',
+            }}
+          >
+            {magicalMode ? (
+              renderContent()
+            ) : (
+              <>
+                <Container maxWidth="lg" sx={{ py: 4 }}>
+                  {renderContent()}
+                </Container>
+                <AppFooter />
+              </>
+            )}
+          </Box>
         </Box>
       </Box>
       <RetroEasterEgg trigger="konami" />
