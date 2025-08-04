@@ -14,11 +14,17 @@ export interface ACAPRelease {
 }
 
 export class ACAPDownloaderService {
-  private acapDir: string;
+  private static instance: ACAPDownloaderService | null = null;
+  private acapDir: string = path.join(os.tmpdir(), 'anava-acaps');
   private githubRepo = 'AnavaAcap/acap-releases';
 
   constructor() {
-    this.acapDir = path.join(os.tmpdir(), 'anava-acaps');
+    // Prevent multiple instances
+    if (ACAPDownloaderService.instance) {
+      return ACAPDownloaderService.instance;
+    }
+    ACAPDownloaderService.instance = this;
+    
     this.ensureAcapDirectory();
     this.setupIPC();
   }

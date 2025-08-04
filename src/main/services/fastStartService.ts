@@ -17,6 +17,7 @@ interface MagicalResult {
   success: boolean;
   camera?: CameraInfo;
   firstInsight?: string;
+  firstImage?: string;  // Base64 encoded image
   error?: string;
   apiKey?: string;
 }
@@ -69,14 +70,15 @@ export class FastStartService extends EventEmitter {
       this.updateProgress('analyzing', 'Capturing first glimpse...', 80);
 
       // Get first frame and analyze
-      const firstInsight = await this.captureAndAnalyzeFirstFrame(camera);
+      const result = await this.captureAndAnalyzeFirstFrame(camera);
 
       this.updateProgress('complete', 'Magic complete!', 100);
 
       return {
         success: true,
         camera,
-        firstInsight,
+        firstInsight: result.description,
+        firstImage: result.imageBase64 ? `data:image/jpeg;base64,${result.imageBase64}` : undefined,
         apiKey
       };
 
@@ -657,7 +659,7 @@ export class FastStartService extends EventEmitter {
       // First request to get challenge
       const response1 = await axios.post(url, data, {
         validateStatus: () => true,
-        timeout: 5000,
+        timeout: 15000, // 15 seconds for ACAP responses
         signal: this.abortController?.signal,
         headers: {
           'Content-Type': 'application/json'
@@ -703,7 +705,7 @@ export class FastStartService extends EventEmitter {
           'Authorization': authHeader,
           'Content-Type': 'application/json'
         },
-        timeout: 5000,
+        timeout: 15000, // 15 seconds for ACAP responses
         signal: this.abortController?.signal,
         httpsAgent: isHttps ? new (require('https').Agent)({
           rejectUnauthorized: false
@@ -843,11 +845,22 @@ export class FastStartService extends EventEmitter {
    */
   private async deployACAPQuickly(camera: CameraInfo): Promise<void> {
     try {
+      logger.info('Starting ACAP deployment process...');
+      logger.info('Camera details:', {
+        ip: camera.ip,
+        port: camera.port,
+        protocol: camera.protocol,
+        model: camera.model,
+        hasCredentials: !!(camera.username && camera.password)
+      });
+      
       logger.info('Checking if BatonAnalytic ACAP is installed...');
       
       // Check if ACAP is already installed
       const { ACAPDeploymentService } = require('./camera/acapDeploymentService');
+      logger.info('Creating ACAPDeploymentService instance...');
       const acapDeployService = new ACAPDeploymentService();
+      logger.info('ACAPDeploymentService created successfully');
       
       // Convert CameraInfo to Camera format
       const cameraForCheck = {
@@ -868,7 +881,18 @@ export class FastStartService extends EventEmitter {
         }
       };
       
-      const installedACAPs = await acapDeployService.listInstalledACAPs(cameraForCheck);
+      logger.info('Listing installed ACAPs on camera...');
+      let installedACAPs;
+      try {
+        installedACAPs = await acapDeployService.listInstalledACAPs(cameraForCheck);
+        logger.info(`Found ${installedACAPs.length} installed ACAPs`);
+      } catch (listError) {
+        logger.error('Failed to list installed ACAPs:', {
+          message: listError instanceof Error ? listError.message : String(listError),
+          errorType: listError instanceof Error ? listError.constructor.name : typeof listError
+        });
+        throw new Error(`Failed to check installed ACAPs: ${listError instanceof Error ? listError.message : 'Unknown error'}`);
+      }
       
       const isInstalled = installedACAPs.some((acap: any) => 
         acap.name?.toLowerCase().includes('batonanalytic') ||
@@ -884,8 +908,22 @@ export class FastStartService extends EventEmitter {
       
       // Get the latest ACAP release
       const { ACAPDownloaderService } = require('./camera/acapDownloaderService');
+      logger.info('Creating ACAPDownloaderService instance...');
       const acapService = new ACAPDownloaderService();
-      const releases = await acapService.getAvailableReleases();
+      logger.info('ACAPDownloaderService created successfully');
+      
+      logger.info('Fetching available ACAP releases from GitHub...');
+      let releases;
+      try {
+        releases = await acapService.getAvailableReleases();
+        logger.info(`Found ${releases?.length || 0} available releases`);
+      } catch (fetchError) {
+        logger.error('Failed to fetch ACAP releases:', {
+          message: fetchError instanceof Error ? fetchError.message : String(fetchError),
+          errorType: fetchError instanceof Error ? fetchError.constructor.name : typeof fetchError
+        });
+        throw new Error(`Failed to fetch ACAP releases: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`);
+      }
       
       if (!releases || releases.length === 0) {
         throw new Error('No ACAP releases found');
@@ -950,21 +988,31 @@ export class FastStartService extends EventEmitter {
       await new Promise(resolve => setTimeout(resolve, 5000));
       
     } catch (error) {
-      logger.error('Failed to deploy ACAP:', error);
-      throw new Error('BatonAnalytic ACAP deployment failed');
+      logger.error('Failed to deploy ACAP:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        details: error
+      });
+      throw error instanceof Error ? error : new Error('BatonAnalytic ACAP deployment failed');
     }
   }
 
   /**
    * Capture first frame and get AI analysis
    */
-  private async captureAndAnalyzeFirstFrame(camera: CameraInfo): Promise<string> {
+  private async captureAndAnalyzeFirstFrame(camera: CameraInfo): Promise<{description: string; imageBase64?: string}> {
     try {
       // Call the ACAP's scene description endpoint
       const sceneDescPath = '/local/BatonAnalytic/baton_analytic.cgi?command=getSceneDescription';
       
+      if (!this.aiService) {
+        throw new Error('AI service not initialized');
+      }
+
       const requestData = {
-        viewArea: 1  // Default camera channel
+        viewArea: 1,  // Default camera channel
+        GeminiApiKey: this.aiService.getApiKey()  // Include the API key
       };
       
       const response = await this.digestAuthPost(
@@ -982,16 +1030,34 @@ export class FastStartService extends EventEmitter {
       }
 
       const data = response.data;
+      
+      logger.info('Scene description response:', {
+        status: data.status,
+        hasDescription: !!data.description,
+        hasImage: !!data.imageBase64,
+        imageLength: data.imageBase64?.length || 0,
+        imagePreview: data.imageBase64 ? data.imageBase64.substring(0, 50) + '...' : 'none'
+      });
+      
       if (data.status === 'success' && data.description) {
-        // Return the description in a magical first-sight format
-        return `I see... ${data.description}`;
+        // Return both the description and image
+        return {
+          description: `I see... ${data.description}`,
+          imageBase64: data.imageBase64
+        };
       } else {
         throw new Error(data.message || 'Failed to generate description');
       }
       
     } catch (error: any) {
       logger.error('Failed to capture/analyze first frame:', error);
-      throw new Error('Failed to get scene description from camera');
+      
+      // Check if it's a timeout error
+      if (error.message?.includes('timeout')) {
+        throw new Error('Camera AI analysis is taking longer than expected. Please ensure the BatonAnalytic ACAP is running on your camera.');
+      }
+      
+      throw new Error('Failed to get AI scene description from camera. Please check that BatonAnalytic ACAP is running.');
     }
   }
 
@@ -1028,19 +1094,25 @@ export class FastStartService extends EventEmitter {
       this.updateProgress('analyzing', 'Capturing first glimpse...', 80);
 
       // Get first frame and analyze
-      const firstInsight = await this.captureAndAnalyzeFirstFrame(camera);
+      const result = await this.captureAndAnalyzeFirstFrame(camera);
 
       this.updateProgress('complete', 'Magic complete!', 100);
 
       return {
         success: true,
         camera,
-        firstInsight,
+        firstInsight: result.description,
+        firstImage: result.imageBase64 ? `data:image/jpeg;base64,${result.imageBase64}` : undefined,
         apiKey
       };
 
     } catch (error) {
-      logger.error('Manual connection failed:', error);
+      logger.error('Manual connection failed:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        details: error
+      });
       const errorMessage = error instanceof Error ? error.message : 'Connection failed';
       this.updateProgress('error', errorMessage, 0);
       
