@@ -101,6 +101,48 @@ const magicalDarkTheme = createTheme({
   },
 });
 
+// Function to format AI response text
+const formatAIResponse = (text: string) => {
+  // Split into paragraphs
+  const paragraphs = text.split('\n\n').filter(p => p.trim());
+  
+  return paragraphs.map((para, idx) => {
+    // Check for bullet points
+    if (para.includes('•') || para.includes('-')) {
+      const items = para.split(/[•-]/).filter(Boolean);
+      return (
+        <Box component="ul" key={idx} sx={{ pl: 2, my: 2, listStyleType: 'disc' }}>
+          {items.map((item, i) => (
+            <li key={i} style={{ marginBottom: 8, color: 'rgba(255, 255, 255, 0.9)' }}>
+              {item.trim()}
+            </li>
+          ))}
+        </Box>
+      );
+    }
+    
+    // Check for single line breaks
+    if (para.includes('\n')) {
+      return (
+        <Box key={idx} sx={{ mb: 2 }}>
+          {para.split('\n').map((line, i) => (
+            <Typography key={i} sx={{ color: 'rgba(255, 255, 255, 0.9)', mb: 0.5 }}>
+              {line.trim()}
+            </Typography>
+          ))}
+        </Box>
+      );
+    }
+    
+    // Regular paragraph
+    return (
+      <Typography key={idx} paragraph sx={{ mb: 2, color: 'rgba(255, 255, 255, 0.9)' }}>
+        {para}
+      </Typography>
+    );
+  });
+};
+
 export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
   onComplete,
   onError,
@@ -561,7 +603,7 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
       case 'analyzing':
       case 'complete':
         return (
-          <Box>
+          <Container maxWidth={false} sx={{ maxWidth: { lg: 1400, xl: 1600 }, px: { xs: 2, sm: 3, md: 4, lg: 5 } }}>
             {/* API Key Success Indicator */}
             <AppBar position="static" sx={{
               background: 'linear-gradient(90deg, #0A0E27 0%, #1a1f3a 100%)',
@@ -593,26 +635,28 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
               </Box>
             </AppBar>
 
-            {/* Camera feed container */}
-            <Paper elevation={8} sx={{
-              position: 'relative',
-              width: '100%',
-              maxWidth: 900,
-              mx: 'auto',
-              mb: 3,
-              overflow: 'hidden',
-              borderRadius: 3,
-              background: '#0A0E27',
-              border: '1px solid rgba(0, 102, 255, 0.2)',
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                borderColor: 'rgba(0, 102, 255, 0.4)',
-                boxShadow: '0 12px 40px rgba(0, 102, 255, 0.3)',
-              }
-            }}>
+            {/* Main content grid */}
+            <Grid container spacing={{ xs: 2, md: 3, lg: 4 }} sx={{ mt: 2 }}>
+              {/* Left column - Camera feed and analysis */}
+              <Grid item xs={12} lg={8}>
+                {/* Camera feed container */}
+                <Paper elevation={8} sx={{
+                  position: 'relative',
+                  width: '100%',
+                  mb: 3,
+                  overflow: 'hidden',
+                  borderRadius: 3,
+                  background: '#0A0E27',
+                  border: '1px solid rgba(0, 102, 255, 0.2)',
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    borderColor: 'rgba(0, 102, 255, 0.4)',
+                    boxShadow: '0 12px 40px rgba(0, 102, 255, 0.3)',
+                  }
+                }}>
               <Box sx={{ 
                 position: 'relative',
-                paddingTop: '56.25%', // 16:9 aspect ratio
+                paddingTop: { xs: '56.25%', md: '50%', lg: '45%' }, // Wider aspect ratio on larger screens
               }}>
                 {firstImage ? (
                   <img
@@ -695,9 +739,10 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                     }}
                   />
                   <CardContent sx={{
-                    maxHeight: 200,
-                    overflowY: 'auto',
-                    p: 2,
+                    minHeight: 150,
+                    maxHeight: { xs: 250, md: 350, lg: 'none' }, // No scroll on large screens
+                    overflowY: { xs: 'auto', lg: 'visible' },
+                    p: 3,
                     '&::-webkit-scrollbar': {
                       width: 8,
                     },
@@ -713,26 +758,23 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                       }
                     }
                   }}>
-                    <Typography 
-                      component="pre"
-                      sx={{
-                        fontFamily: 'inherit',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        color: 'rgba(255, 255, 255, 0.8)',
-                        lineHeight: 1.6,
-                        m: 0,
-                      }}
-                    >
-                      {firstInsight}
-                    </Typography>
+                    <Box sx={{ 
+                      fontFamily: 'Inter, system-ui, sans-serif',
+                      fontSize: { xs: '0.875rem', md: '1rem' },
+                      lineHeight: 1.8,
+                    }}>
+                      {formatAIResponse(firstInsight)}
+                    </Box>
                   </CardContent>
                 </Card>
               </Fade>
             )}
+              </Grid>
 
-            {/* Camera Analytics Button */}
-            {camera && (
+              {/* Right column - Actions and controls */}
+              <Grid item xs={12} lg={4}>
+                {/* Camera Analytics Button */}
+                {camera && (
               <Button
                 fullWidth
                 size="large"
@@ -831,19 +873,13 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                 borderRadius: 2,
               }}>
                 <CardContent>
-                  <Typography 
-                    component="pre"
-                    sx={{
-                      fontFamily: 'inherit',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      color: 'rgba(255, 255, 255, 0.8)',
-                      lineHeight: 1.6,
-                      m: 0,
-                    }}
-                  >
-                    {aiResponse}
-                  </Typography>
+                  <Box sx={{ 
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    fontSize: { xs: '0.875rem', md: '1rem' },
+                    lineHeight: 1.8,
+                  }}>
+                    {formatAIResponse(aiResponse)}
+                  </Box>
                 </CardContent>
               </Card>
             </Collapse>
@@ -927,7 +963,9 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                 </Button>
               </CardContent>
             </Card>
-          </Box>
+              </Grid>
+            </Grid>
+          </Container>
         );
 
       case 'error':
