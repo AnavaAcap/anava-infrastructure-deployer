@@ -11,7 +11,9 @@ import {
   Collapse,
   Alert,
   IconButton,
-  Zoom
+  Zoom,
+  ThemeProvider,
+  createTheme
 } from '@mui/material';
 import { keyframes } from '@mui/system';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
@@ -74,6 +76,20 @@ interface MagicalDiscoveryPageProps {
   onError: (error: string) => void;
   onCancel: () => void;
 }
+
+// Create a dark theme for this magical page
+const magicalDarkTheme = createTheme({
+  palette: {
+    mode: 'dark',
+    primary: {
+      main: '#00D4FF',
+    },
+    background: {
+      default: '#0A0E27',
+      paper: 'rgba(255, 255, 255, 0.05)',
+    },
+  },
+});
 
 export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
   onComplete,
@@ -268,10 +284,15 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
           <Paper sx={{ p: 4, background: 'rgba(255, 255, 255, 0.05)' }}>
             <TextField
               fullWidth
+              variant="outlined"
               label="Camera IP Address"
               placeholder="192.168.1.100"
               value={manualIp}
-              onChange={(e) => setManualIp(e.target.value)}
+              onChange={(e) => {
+                console.log('IP input changed:', e.target.value);
+                setManualIp(e.target.value);
+              }}
+              autoFocus
               sx={{ mb: 3 }}
               helperText="Enter the IP address of your Axis camera"
             />
@@ -587,13 +608,14 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
   };
 
   return (
-    <Box sx={{ 
-      minHeight: '100vh', 
-      background: 'linear-gradient(180deg, #0A0E27 0%, #1a1f3a 100%)',
-      color: 'white'
-    }}>
-      <Container maxWidth="lg">
-        <Box sx={{ py: 4, minHeight: '100vh' }}>
+    <ThemeProvider theme={magicalDarkTheme}>
+      <Box sx={{ 
+        minHeight: '100vh', 
+        background: 'linear-gradient(180deg, #0A0E27 0%, #1a1f3a 100%)',
+        color: 'white'
+      }}>
+        <Container maxWidth="lg">
+          <Box sx={{ py: 4, minHeight: '100vh' }}>
         {/* Progress bar */}
         <LinearProgress
           variant="determinate"
@@ -635,5 +657,6 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
         </Box>
       </Container>
     </Box>
+    </ThemeProvider>
   );
 };

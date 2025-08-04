@@ -30,7 +30,6 @@ interface MagicalProgress {
 
 export class FastStartService extends EventEmitter {
   private abortController?: AbortController;
-  private configTimeout = 5000; // 5 seconds for configuration
   private aiService?: MagicalAIService;
 
   constructor() {
@@ -581,6 +580,84 @@ export class FastStartService extends EventEmitter {
   }
 
   /**
+   * Simple digest auth implementation for POST requests
+   */
+  private async digestAuthPost(
+    ip: string, 
+    username: string, 
+    password: string, 
+    path: string, 
+    data: any,
+    port = 80,
+    protocol: 'http' | 'https' = 'http'
+  ): Promise<any> {
+    try {
+      const url = `${protocol}://${ip}:${port}${path}`;
+      const isHttps = protocol === 'https';
+      
+      // First request to get challenge
+      const response1 = await axios.post(url, data, {
+        validateStatus: () => true,
+        timeout: 5000,
+        signal: this.abortController?.signal,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        httpsAgent: isHttps ? new (require('https').Agent)({
+          rejectUnauthorized: false
+        }) : undefined
+      });
+      
+      if (response1.status !== 401) {
+        return response1;
+      }
+      
+      const wwwAuth = response1.headers['www-authenticate'];
+      if (!wwwAuth || !wwwAuth.includes('Digest')) {
+        throw new Error('No digest auth challenge');
+      }
+      
+      // Parse digest parameters
+      const authParams: any = {};
+      const regex = /(\w+)=(?:"([^"]*)"|([^,]*))/g;
+      let match;
+      while ((match = regex.exec(wwwAuth)) !== null) {
+        authParams[match[1]] = match[2] || match[3];
+      }
+      
+      const nc = '00000001';
+      const cnonce = crypto.randomBytes(8).toString('hex');
+      const uri = new URL(url).pathname + new URL(url).search;
+      
+      // Calculate response for POST
+      const md5 = (str: string) => crypto.createHash('md5').update(str).digest('hex');
+      const ha1 = md5(`${username}:${authParams.realm}:${password}`);
+      const ha2 = md5(`POST:${uri}`);
+      const response = md5(`${ha1}:${authParams.nonce}:${nc}:${cnonce}:${authParams.qop}:${ha2}`);
+      
+      // Build authorization header
+      const authHeader = `Digest username="${username}", realm="${authParams.realm}", nonce="${authParams.nonce}", uri="${uri}", algorithm="${authParams.algorithm || 'MD5'}", response="${response}", qop=${authParams.qop}, nc=${nc}, cnonce="${cnonce}"`;
+      
+      // Second request with auth
+      const response2 = await axios.post(url, data, {
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json'
+        },
+        timeout: 5000,
+        signal: this.abortController?.signal,
+        httpsAgent: isHttps ? new (require('https').Agent)({
+          rejectUnauthorized: false
+        }) : undefined
+      });
+      
+      return response2;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Simple digest auth implementation
    */
   private async digestAuth(url: string, username: string, password: string): Promise<any> {
@@ -675,19 +752,23 @@ export class FastStartService extends EventEmitter {
       customerId: "magical-demo"
     };
 
-    const url = `${camera.protocol}://${camera.ip}:${camera.port}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`;
+    const path = `/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`;
     
     try {
-      await axios.post(url, config, {
-        auth: {
-          username: camera.username!,
-          password: camera.password!
-        },
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: this.configTimeout
-      });
+      // Use digest auth for configuration
+      const response = await this.digestAuthPost(
+        camera.ip,
+        camera.username!,
+        camera.password!,
+        path,
+        config,
+        camera.port,
+        camera.protocol
+      );
+
+      if (!response || response.status !== 200) {
+        throw new Error('Failed to configure camera - invalid response');
+      }
 
       logger.info('Camera configured with magical settings');
     } catch (error) {
