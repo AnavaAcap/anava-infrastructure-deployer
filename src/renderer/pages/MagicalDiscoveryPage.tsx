@@ -92,11 +92,16 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [manualMode, setManualMode] = useState(true); // Start with manual mode
+  const [manualIp, setManualIp] = useState('');
+  const [manualUsername, setManualUsername] = useState('anava');
+  const [manualPassword, setManualPassword] = useState('baton');
+  const [isScanning, setIsScanning] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    startMagicalExperience();
+    // Don't auto-start, wait for user to either enter IP or scan
     subscribeToEvents();
 
     return () => {
@@ -107,7 +112,13 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
 
   const startMagicalExperience = async () => {
     try {
-      const result = await window.electronAPI.magical.startExperience();
+      // Get the API key from window storage
+      const apiKey = (window as any).__magicalApiKey;
+      if (!apiKey) {
+        throw new Error('No API key available');
+      }
+      
+      const result = await window.electronAPI.magical.startExperience(apiKey);
       
       if (result.success && result.camera) {
         setCamera(result.camera);
@@ -130,21 +141,66 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
     }
   };
 
+  const handleManualConnect = async () => {
+    if (!manualIp.trim()) {
+      setErrorMessage('Please enter a camera IP address');
+      setShowError(true);
+      return;
+    }
+
+    try {
+      setIsScanning(true);
+      setManualMode(false);
+      setProgress({
+        stage: 'discovering',
+        message: `Connecting to camera at ${manualIp}...`,
+        progress: 20
+      });
+
+      // Get the API key from window storage
+      const apiKey = (window as any).__magicalApiKey;
+      if (!apiKey) {
+        throw new Error('No API key available');
+      }
+      
+      const result = await window.electronAPI.magical.connectToCamera({
+        apiKey,
+        ip: manualIp,
+        username: manualUsername,
+        password: manualPassword
+      });
+      
+      if (result.success && result.camera) {
+        setCamera(result.camera);
+        setFirstInsight(result.firstInsight || '');
+        startCameraFeed(result.camera);
+        onComplete(result.camera);
+      } else {
+        setErrorMessage(result.error || 'Failed to connect to camera');
+        setShowError(true);
+        setManualMode(true);
+      }
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to connect to camera');
+      setShowError(true);
+      setManualMode(true);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleScanNetwork = async () => {
+    setManualMode(false);
+    setIsScanning(true);
+    startMagicalExperience();
+  };
+
   const subscribeToEvents = () => {
     window.electronAPI.magical.subscribe();
 
     window.electronAPI.magical.onProgress((update: MagicalProgress) => {
+      console.log('Magical progress:', update);
       setProgress(update);
-    });
-
-    window.electronAPI.magical.onRateLimit((data) => {
-      setErrorMessage(data.message);
-      setShowError(true);
-    });
-
-    window.electronAPI.magical.onLowQuota((data) => {
-      // Could show a warning banner
-      console.warn(`Low quota: ${data.remaining} requests remaining`);
     });
 
     window.electronAPI.magical.onCancelled(() => {
@@ -198,6 +254,84 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
   };
 
   const renderStage = () => {
+    // Show manual entry form if in manual mode
+    if (manualMode && !camera) {
+      return (
+        <Box sx={{ maxWidth: 600, mx: 'auto' }}>
+          <Typography variant="h4" sx={{ color: 'text.primary', mb: 1, textAlign: 'center' }}>
+            Connect to Your Camera
+          </Typography>
+          <Typography variant="body1" sx={{ color: 'text.secondary', mb: 4, textAlign: 'center' }}>
+            Enter your camera's IP address and credentials to begin the magical experience
+          </Typography>
+          
+          <Paper sx={{ p: 4, background: 'rgba(255, 255, 255, 0.05)' }}>
+            <TextField
+              fullWidth
+              label="Camera IP Address"
+              placeholder="192.168.1.100"
+              value={manualIp}
+              onChange={(e) => setManualIp(e.target.value)}
+              sx={{ mb: 3 }}
+              helperText="Enter the IP address of your Axis camera"
+            />
+            
+            <TextField
+              fullWidth
+              label="Username"
+              value={manualUsername}
+              onChange={(e) => setManualUsername(e.target.value)}
+              sx={{ mb: 3 }}
+              helperText="Default: anava"
+            />
+            
+            <TextField
+              fullWidth
+              type="password"
+              label="Password"
+              value={manualPassword}
+              onChange={(e) => setManualPassword(e.target.value)}
+              sx={{ mb: 4 }}
+              helperText="Default: baton"
+            />
+            
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={handleManualConnect}
+                disabled={!manualIp.trim() || isScanning}
+                sx={{ height: 48 }}
+              >
+                Connect to Camera
+              </Button>
+              
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={handleScanNetwork}
+                disabled={isScanning}
+                sx={{ height: 48 }}
+              >
+                Scan Network
+              </Button>
+            </Box>
+            
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
+              <Button
+                variant="text"
+                size="small"
+                onClick={onCancel}
+                sx={{ color: 'text.secondary' }}
+              >
+                Use Traditional Setup
+              </Button>
+            </Box>
+          </Paper>
+        </Box>
+      );
+    }
+
     switch (progress.stage) {
       case 'discovering':
         return (
@@ -453,8 +587,13 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
   };
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4, minHeight: '100vh' }}>
+    <Box sx={{ 
+      minHeight: '100vh', 
+      background: 'linear-gradient(180deg, #0A0E27 0%, #1a1f3a 100%)',
+      color: 'white'
+    }}>
+      <Container maxWidth="lg">
+        <Box sx={{ py: 4, minHeight: '100vh' }}>
         {/* Progress bar */}
         <LinearProgress
           variant="determinate"
@@ -493,7 +632,8 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
             {errorMessage}
           </Alert>
         </Collapse>
-      </Box>
-    </Container>
+        </Box>
+      </Container>
+    </Box>
   );
 };

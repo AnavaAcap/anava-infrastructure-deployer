@@ -29,6 +29,7 @@ export type NavigationView =
   | 'camera-deployment' 
   | 'status'
   | 'magical-welcome'
+  | 'magical-api-key'
   | 'magical-discovery';
 
 interface NavigationSidebarProps {

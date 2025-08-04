@@ -90,13 +90,20 @@ declare global {
       };
       // Magical experience APIs
       magical: {
-        checkStatus: () => Promise<{ success: boolean; status?: any; error?: string }>;
-        startExperience: () => Promise<{
+        generateApiKey: () => Promise<{
+          success: boolean;
+          apiKey?: string;
+          projectId?: string;
+          needsManual?: boolean;
+          message?: string;
+          error?: string;
+        }>;
+        startExperience: (apiKey: string) => Promise<{
           success: boolean;
           camera?: any;
           firstInsight?: string;
           error?: string;
-          deviceStatus?: any;
+          apiKey?: string;
         }>;
         analyzeCustom: (params: { query: string; camera: any }) => Promise<{
           success: boolean;
@@ -111,8 +118,6 @@ declare global {
           progress: number;
           detail?: string;
         }) => void) => void;
-        onRateLimit: (callback: (data: { message: string; upgradeUrl: string }) => void) => void;
-        onLowQuota: (callback: (data: { remaining: number; total: number }) => void) => void;
         onCancelled: (callback: () => void) => void;
       };
     };

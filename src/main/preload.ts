@@ -97,20 +97,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // Magical experience APIs
   magical: {
-    checkStatus: () => ipcRenderer.invoke('magical:check-status'),
-    startExperience: () => ipcRenderer.invoke('magical:start-experience'),
+    generateApiKey: () => ipcRenderer.invoke('magical:generate-api-key'),
+    startExperience: (apiKey: string) => ipcRenderer.invoke('magical:start-experience', apiKey),
+    connectToCamera: (params: { apiKey: string; ip: string; username: string; password: string }) => 
+      ipcRenderer.invoke('magical:connect-to-camera', params),
     analyzeCustom: (params: { query: string; camera: any }) => 
       ipcRenderer.invoke('magical:analyze-custom', params),
     cancel: () => ipcRenderer.invoke('magical:cancel'),
     subscribe: () => ipcRenderer.send('magical:subscribe'),
     onProgress: (callback: (progress: any) => void) => {
       ipcRenderer.on('magical:progress', (_, progress) => callback(progress));
-    },
-    onRateLimit: (callback: (data: any) => void) => {
-      ipcRenderer.on('magical:rate-limit', (_, data) => callback(data));
-    },
-    onLowQuota: (callback: (data: any) => void) => {
-      ipcRenderer.on('magical:low-quota', (_, data) => callback(data));
     },
     onCancelled: (callback: () => void) => {
       ipcRenderer.on('magical:cancelled', callback);
