@@ -785,6 +785,65 @@ export class FastStartService extends EventEmitter {
   }
 
   /**
+   * Update camera configuration for Vertex AI mode
+   */
+  async updateCameraForVertexAI(
+    camera: CameraInfo, 
+    vertexConfig: {
+      apiGatewayUrl: string;
+      apiGatewayKey: string;
+      projectId: string;
+      region: string;
+      bucketName: string;
+    }
+  ): Promise<void> {
+    const config = {
+      firebase: {
+        apiKey: '',
+        authDomain: '',
+        projectId: vertexConfig.projectId,
+        storageBucket: vertexConfig.bucketName,
+        messagingSenderId: '',
+        appId: '',
+        databaseId: '(default)'
+      },
+      gemini: {
+        apiKey: '', // Clear AI Studio key
+        vertexApiGatewayUrl: vertexConfig.apiGatewayUrl,
+        vertexApiGatewayKey: vertexConfig.apiGatewayKey,
+        vertexGcpProjectId: vertexConfig.projectId,
+        vertexGcpRegion: vertexConfig.region,
+        vertexGcsBucketName: vertexConfig.bucketName
+      },
+      anavaKey: 'NO-KEY',
+      customerId: 'magical-installer'
+    };
+
+    const path = `/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`;
+    
+    try {
+      const response = await this.digestAuthPost(
+        camera.ip,
+        camera.username!,
+        camera.password!,
+        path,
+        config,
+        camera.port,
+        camera.protocol
+      );
+
+      if (response.status !== 200) {
+        throw new Error(`Failed to update camera config: ${response.status}`);
+      }
+
+      console.log('Successfully updated camera for Vertex AI mode');
+    } catch (error) {
+      console.error('Failed to update camera configuration:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Configure camera with user's AI Studio settings
    */
   private async configureCameraForMagic(camera: CameraInfo): Promise<void> {
