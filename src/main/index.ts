@@ -1,9 +1,9 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, Notification } from 'electron';
 import path from 'path';
 import { DeploymentEngine } from './services/deploymentEngine';
 import { StateManager } from './services/stateManager';
 import { GCPOAuthService } from './services/gcpOAuthService';
-import { CameraDiscoveryService } from './services/camera/cameraDiscoveryService';
+import { OptimizedCameraDiscoveryService } from './services/camera/optimizedCameraDiscoveryService';
 import { ACAPDeploymentService } from './services/camera/acapDeploymentService';
 import { ACAPDownloaderService } from './services/camera/acapDownloaderService';
 import { CameraConfigurationService } from './services/camera/cameraConfigurationService';
@@ -11,6 +11,9 @@ import { ProjectCreatorService } from './services/projectCreatorService';
 import { AuthTestService } from './services/authTestService';
 import { getLogger } from './utils/logger';
 import { configCacheService } from './services/configCache';
+import { fastStartService } from './services/fastStartService';
+import { AIStudioService } from './services/aiStudioService';
+import { google } from 'googleapis';
 
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
 const logger = getLogger();
@@ -33,9 +36,19 @@ function createWindow() {
       nodeIntegration: false,
     },
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    icon: path.join(__dirname, '../../assets/icon.png'),
+    icon: process.platform === 'win32' 
+      ? path.join(__dirname, '../../assets/icon.ico')
+      : path.join(__dirname, '../../assets/icon.png'),
     backgroundColor: '#FAFAFA',
     show: false, // Don't show until ready
+    // Windows-specific title bar customization
+    ...(process.platform === 'win32' && {
+      titleBarOverlay: {
+        color: '#FAFAFA',
+        symbolColor: '#333333',
+        height: 32
+      }
+    })
   });
 
   // Show window when ready to prevent visual flash
@@ -63,8 +76,35 @@ function createWindow() {
   });
 }
 
+// Windows Defender check function
+function checkWindowsDefender() {
+  try {
+    const installPath = app.getPath('exe');
+    // Check if running from Program Files or another system directory
+    if (installPath.includes('Program Files') || installPath.includes('Program Files (x86)')) {
+      // Show notification about potential Windows Defender interference
+      setTimeout(() => {
+        new Notification({
+          title: 'Windows Security Notice',
+          body: 'If deployment is slow, consider adding Anava Vision to Windows Defender exclusions for better performance.',
+          icon: path.join(__dirname, '../../assets/icon.ico')
+        }).show();
+      }, 5000); // Show after 5 seconds to not overwhelm on startup
+    }
+  } catch (error) {
+    // Silent fail - not critical
+    logger.debug('Windows Defender check failed:', error);
+  }
+}
+
 app.whenReady().then(() => {
   logger.info('App ready, initializing services...');
+  
+  // Windows-specific DPI scaling
+  if (process.platform === 'win32') {
+    app.commandLine.appendSwitch('high-dpi-support', '1');
+    app.commandLine.appendSwitch('force-device-scale-factor', '1');
+  }
   
   // Initialize services
   stateManager = new StateManager();
@@ -72,12 +112,46 @@ app.whenReady().then(() => {
   deploymentEngine = new DeploymentEngine(stateManager, gcpOAuthService);
   
   // Initialize camera services
-  new CameraDiscoveryService();
+  // Only use one discovery service to avoid duplicate IPC handlers
+  new OptimizedCameraDiscoveryService();
   new ACAPDeploymentService();
   new ACAPDownloaderService();
   new CameraConfigurationService();
   new ProjectCreatorService(gcpOAuthService);
   new AuthTestService();
+  
+  // Setup Windows Jump List
+  if (process.platform === 'win32') {
+    app.setJumpList([
+      {
+        type: 'custom',
+        name: 'Recent Actions',
+        items: [
+          {
+            type: 'task',
+            title: 'New Deployment',
+            description: 'Start a new infrastructure deployment',
+            program: process.execPath,
+            args: '--new-deployment',
+            iconPath: process.execPath,
+            iconIndex: 0
+          },
+          {
+            type: 'task',
+            title: 'Discover Cameras',
+            description: 'Scan network for cameras',
+            program: process.execPath,
+            args: '--discover-cameras',
+            iconPath: process.execPath,
+            iconIndex: 0
+          }
+        ]
+      },
+      {
+        type: 'recent'
+      }
+    ]);
+  }
 
   // Create application menu with standard shortcuts
   const template: any[] = [
@@ -129,6 +203,11 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(menu);
 
   createWindow();
+  
+  // Check for Windows Defender potential issues
+  if (process.platform === 'win32') {
+    checkWindowsDefender();
+  }
   
   // Disable right-click context menu in production
   if (!isDevelopment) {
@@ -249,14 +328,37 @@ ipcMain.handle('deployment:pause', async () => {
 ipcMain.on('deployment:subscribe', (event) => {
   deploymentEngine.on('progress', (progress) => {
     event.sender.send('deployment:progress', progress);
+    
+    // Update Windows taskbar progress
+    if (process.platform === 'win32' && mainWindow) {
+      const overallProgress = progress.overallProgress / 100;
+      mainWindow.setProgressBar(overallProgress);
+    }
   });
 
   deploymentEngine.on('error', (error) => {
     event.sender.send('deployment:error', error);
+    
+    // Flash taskbar on error (Windows)
+    if (process.platform === 'win32' && mainWindow) {
+      mainWindow.flashFrame(true);
+      mainWindow.setProgressBar(-1); // Remove progress bar
+    }
   });
 
   deploymentEngine.on('complete', async (result) => {
     event.sender.send('deployment:complete', result);
+    
+    // Clear Windows taskbar progress on completion
+    if (process.platform === 'win32' && mainWindow) {
+      mainWindow.setProgressBar(-1); // Remove progress bar
+      // Show completion notification
+      new Notification({
+        title: 'Deployment Complete',
+        body: 'Your Anava Vision deployment has completed successfully!',
+        icon: path.join(__dirname, '../../assets/icon.ico')
+      }).show();
+    }
     
     // Save the deployment config to cache
     if (result.success) {
@@ -351,4 +453,166 @@ ipcMain.handle('deployment:validate', async (_, params: {
       error: error.message || 'Validation failed'
     };
   }
+});
+
+// Magical Experience IPC Handlers
+ipcMain.handle('magical:generate-api-key', async () => {
+  try {
+    if (!gcpOAuthService.oauth2Client) {
+      throw new Error('Not authenticated');
+    }
+
+    const user = await gcpOAuthService.getCurrentUser();
+    if (!user) {
+      throw new Error('No user authenticated');
+    }
+
+    // Check for existing project or use AI Studio without project
+    const projects = await gcpOAuthService.listProjects();
+    let projectId = null;
+    
+    if (projects && projects.length > 0) {
+      // Use the first available project
+      projectId = projects[0].projectId;
+    }
+
+    const aiStudioService = new AIStudioService(gcpOAuthService.oauth2Client);
+    
+    if (projectId) {
+      try {
+        // Enable required APIs
+        await aiStudioService.enableGenerativeLanguageAPI(projectId);
+        
+        // Also enable API Keys API if needed
+        try {
+          const serviceusage = google.serviceusage({ version: 'v1', auth: gcpOAuthService.oauth2Client });
+          await serviceusage.services.enable({
+            name: `projects/${projectId}/services/apikeys.googleapis.com`,
+          });
+          logger.info('[Magical] API Keys API enabled');
+        } catch (err: any) {
+          if (!err.message?.includes('already enabled')) {
+            logger.warn('[Magical] Could not enable API Keys API:', err.message);
+          }
+        }
+        
+        const apiKey = await aiStudioService.getOrCreateAPIKey(projectId);
+        
+        if (apiKey) {
+          logger.info('[Magical] Successfully generated/retrieved API key');
+          return { success: true, apiKey, projectId };
+        } else {
+          logger.warn('[Magical] API key creation returned null, attempting retry...');
+          // Try one more time with a delay
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          const retryKey = await aiStudioService.getOrCreateAPIKey(projectId);
+          if (retryKey) {
+            return { success: true, apiKey: retryKey, projectId };
+          }
+        }
+      } catch (keyError: any) {
+        logger.error('[Magical] Error during API key generation:', keyError);
+        // Don't immediately fall back to manual - return the error
+        return { 
+          success: false, 
+          error: `Failed to generate API key: ${keyError.message}`,
+          needsManual: false // Let the UI decide when to show manual option
+        };
+      }
+    }
+    
+    // Only open manual creation as absolute last resort
+    logger.info('[Magical] No project available or multiple failures, falling back to manual creation');
+    await aiStudioService.openAIStudioConsole();
+    return { 
+      success: false, 
+      needsManual: true,
+      message: 'Please create an API key in AI Studio and paste it below'
+    };
+    
+  } catch (error: any) {
+    logger.error('Failed to generate API key:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('magical:start-experience', async (_, apiKey: string) => {
+  try {
+    logger.info('Starting magical experience with user API key...');
+    
+    // Subscribe to progress events
+    const progressHandler = (progress: any) => {
+      mainWindow?.webContents.send('magical:progress', progress);
+    };
+    
+    fastStartService.on('progress', progressHandler);
+    
+    const result = await fastStartService.startMagicalExperience(apiKey);
+    
+    // Clean up listener
+    fastStartService.off('progress', progressHandler);
+    
+    return result;
+  } catch (error: any) {
+    logger.error('Magical experience failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('magical:analyze-custom', async (_, params: {
+  query: string;
+  camera: any;
+}) => {
+  try {
+    const response = await fastStartService.processUserQuery(params.query, params.camera);
+    return { success: true, response };
+  } catch (error: any) {
+    logger.error('Custom analysis failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('magical:connect-to-camera', async (_, params: {
+  apiKey: string;
+  ip: string;
+  username: string;
+  password: string;
+}) => {
+  try {
+    logger.info(`Connecting to camera at ${params.ip} with ${params.username}...`);
+    
+    // Subscribe to progress events
+    const progressHandler = (progress: any) => {
+      mainWindow?.webContents.send('magical:progress', progress);
+    };
+    
+    fastStartService.on('progress', progressHandler);
+    
+    const result = await fastStartService.connectToSpecificCamera(
+      params.apiKey,
+      params.ip,
+      params.username,
+      params.password
+    );
+    
+    // Clean up listener
+    fastStartService.off('progress', progressHandler);
+    
+    return result;
+  } catch (error: any) {
+    logger.error('Manual camera connection failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.on('magical:subscribe', (event) => {
+  // Cancelled
+  fastStartService.on('cancelled', () => {
+    event.sender.send('magical:cancelled');
+  });
+});
+
+ipcMain.handle('magical:cancel', async () => {
+  fastStartService.cancel();
+  return { success: true };
 });

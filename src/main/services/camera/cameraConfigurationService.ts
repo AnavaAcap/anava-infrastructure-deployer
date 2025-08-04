@@ -37,13 +37,13 @@ export class CameraConfigurationService {
       // Prepare the configuration payload in the expected format
       const payload = {
         firebase: {
-          apiKey: deploymentConfig.firebaseApiKey,
-          authDomain: `${deploymentConfig.projectId}.firebaseapp.com`,
-          projectId: deploymentConfig.projectId,
+          apiKey: deploymentConfig.firebaseConfig?.apiKey || deploymentConfig.firebaseApiKey || '',
+          authDomain: deploymentConfig.firebaseConfig?.authDomain || `${deploymentConfig.projectId}.firebaseapp.com`,
+          projectId: deploymentConfig.firebaseConfig?.projectId || deploymentConfig.projectId,
           storageBucket: deploymentConfig.firebaseConfig?.storageBucket || `${deploymentConfig.projectId}.appspot.com`,
           messagingSenderId: deploymentConfig.firebaseConfig?.messagingSenderId || '',
           appId: deploymentConfig.firebaseConfig?.appId || '',
-          databaseId: '(default)'
+          databaseId: deploymentConfig.firebaseConfig?.databaseId || '(default)'
         },
         gemini: deploymentConfig.aiMode === 'ai-studio' ? {
           apiKey: deploymentConfig.aiStudioApiKey || '',
@@ -210,14 +210,14 @@ export class CameraConfigurationService {
     configPayload: any
   ): Promise<any> {
     try {
-      // Use the setAppConfig endpoint which is what the ACAP expects
-      const url = `http://${ip}/local/BatonAnalytic/baton_analytic.cgi?command=setAppConfig`;
+      // Use the setInstallerConfig endpoint for proper merging
+      const url = `http://${ip}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`;
       
-      console.log('[CameraConfig] Pushing SystemConfig to camera:', ip);
+      console.log('[CameraConfig] Pushing installer config to camera:', ip);
       console.log('[CameraConfig] Config payload:', JSON.stringify(configPayload, null, 2));
       
       // Extract Anava key from the payload if it exists
-      const anavaKey = configPayload?.value?.AnavaKey;
+      const anavaKey = configPayload?.anavaKey;
       
       // First request to get digest challenge
       const response1 = await axios.post(url, configPayload, {
@@ -236,7 +236,7 @@ export class CameraConfigurationService {
             username,
             password,
             'POST',
-            '/local/BatonAnalytic/baton_analytic.cgi?command=setAppConfig',
+            '/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig',
             wwwAuth
           );
 

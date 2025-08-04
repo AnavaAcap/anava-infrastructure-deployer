@@ -49,12 +49,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listBillingAccounts: () => ipcRenderer.invoke('list-billing-accounts'),
   testAuthStep: (params: any) => ipcRenderer.invoke('test-auth-step', params),
   // Camera-related APIs
+  camera: {
+    getPreDiscoveredCameras: () => ipcRenderer.invoke('get-pre-discovered-cameras'),
+  },
   scanNetworkCameras: (options?: { networkRange?: string }) => 
     ipcRenderer.invoke('scan-network-cameras', options),
+  enhancedScanNetwork: (options?: { 
+    networkRange?: string;
+    concurrent?: number;
+    timeout?: number;
+    ports?: number[];
+    useServiceDiscovery?: boolean;
+    credentials?: Array<{ username: string; password: string }>;
+  }) => ipcRenderer.invoke('enhanced-scan-network', options),
+  discoverServiceCameras: () => ipcRenderer.invoke('discover-service-cameras'),
   onCameraScanProgress: (callback: (data: { ip: string; status: string }) => void) => {
     ipcRenderer.on('camera-scan-progress', (_, data) => callback(data));
     // Return cleanup function
     return () => ipcRenderer.removeAllListeners('camera-scan-progress');
+  },
+  onCameraDiscovered: (callback: (camera: any) => void) => {
+    ipcRenderer.on('camera-discovered', (_, camera) => callback(camera));
+    // Return cleanup function
+    return () => ipcRenderer.removeAllListeners('camera-discovered');
   },
   quickScanCamera: (ip: string, username: string, password: string) => 
     ipcRenderer.invoke('quick-scan-camera', ip, username, password),
@@ -80,5 +97,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getCached: () => ipcRenderer.invoke('config:getCached'),
     getAllCached: () => ipcRenderer.invoke('config:getAllCached'),
     clearCached: () => ipcRenderer.invoke('config:clearCached'),
+  },
+  // Magical experience APIs
+  magical: {
+    generateApiKey: () => ipcRenderer.invoke('magical:generate-api-key'),
+    startExperience: (apiKey: string) => ipcRenderer.invoke('magical:start-experience', apiKey),
+    connectToCamera: (params: { apiKey: string; ip: string; username: string; password: string }) => 
+      ipcRenderer.invoke('magical:connect-to-camera', params),
+    analyzeCustom: (params: { query: string; camera: any }) => 
+      ipcRenderer.invoke('magical:analyze-custom', params),
+    cancel: () => ipcRenderer.invoke('magical:cancel'),
+    subscribe: () => ipcRenderer.send('magical:subscribe'),
+    onProgress: (callback: (progress: any) => void) => {
+      ipcRenderer.on('magical:progress', (_, progress) => callback(progress));
+    },
+    onCancelled: (callback: () => void) => {
+      ipcRenderer.on('magical:cancelled', callback);
+    },
   },
 });
