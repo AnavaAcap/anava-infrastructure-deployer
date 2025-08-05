@@ -6,6 +6,18 @@ declare global {
         login: () => Promise<boolean>;
         logout: () => Promise<{ success: boolean }>;
         getProjects: () => Promise<any[]>;
+        // Unified authentication
+        unifiedGoogle: () => Promise<{
+          success: boolean;
+          user?: {
+            email: string;
+            name: string;
+            picture: string;
+            idToken: string;
+          };
+          error?: string;
+        }>;
+        unifiedSignOut: () => Promise<{ success: boolean; error?: string }>;
       };
       state: {
         get: () => Promise<any>;
@@ -155,6 +167,25 @@ declare global {
           key?: string;
           email?: string;
           alreadyAssigned?: boolean;
+          error?: string;
+        }>;
+        assignWithGoogle: (params: {
+          idToken: string;
+          firebaseConfig: any;
+        }) => Promise<{
+          success: boolean;
+          key?: string;
+          email?: string;
+          alreadyAssigned?: boolean;
+          error?: string;
+        }>;
+        setManualKey: (params: { 
+          key: string; 
+          email?: string;
+        }) => Promise<{
+          success: boolean;
+          key?: string;
+          email?: string;
           error?: string;
         }>;
         checkAvailability: (firebaseConfig: any) => Promise<{

@@ -57,7 +57,10 @@ export class ACAPDeploymentService {
       console.log(`[ACAPDeployment] File size: ${fileSize} bytes (${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
 
       // First, check if we can connect to the camera
-      const credentials = camera.credentials || { username: 'root', password: 'pass' };
+      const credentials = camera.credentials;
+      if (!credentials || !credentials.username || !credentials.password) {
+        throw new Error('Camera credentials are required for deployment');
+      }
       console.log(`[ACAPDeployment] Testing connection with user: ${credentials.username}`);
       const testResult = await this.testConnection(camera.ip, credentials.username, credentials.password);
       
@@ -102,7 +105,10 @@ export class ACAPDeploymentService {
 
   async uninstallACAP(camera: Camera, appName: string): Promise<DeploymentResult> {
     try {
-      const credentials = camera.credentials || { username: 'root', password: 'pass' };
+      const credentials = camera.credentials;
+      if (!credentials || !credentials.username || !credentials.password) {
+        throw new Error('Camera credentials are required for deployment');
+      }
       
       const response = await this.digestAuth(
         camera.ip,
@@ -137,7 +143,10 @@ export class ACAPDeploymentService {
 
   async listInstalledACAPs(camera: Camera): Promise<any[]> {
     try {
-      const credentials = camera.credentials || { username: 'root', password: 'pass' };
+      const credentials = camera.credentials;
+      if (!credentials || !credentials.username || !credentials.password) {
+        throw new Error('Camera credentials are required for deployment');
+      }
       
       console.log(`[listInstalledACAPs] Querying installed ACAPs on ${camera.ip}`);
       const response = await this.digestAuth(

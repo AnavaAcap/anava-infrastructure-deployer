@@ -8,6 +8,7 @@ import {
   CardContent,
   Grid,
   Alert,
+  AlertTitle,
   CircularProgress,
   IconButton,
   InputAdornment,
@@ -72,12 +73,20 @@ const CameraSetupPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [manualIP, setManualIP] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<CameraInfo | null>(null);
   const [deploymentProgress, setDeploymentProgress] = useState(0);
   const [deploymentStatus, setDeploymentStatus] = useState('');
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showLicensePrompt, setShowLicensePrompt] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [sceneDescription, setSceneDescription] = useState('');
+  const [sceneImage, setSceneImage] = useState('');
+  const [licenseMode, setLicenseMode] = useState<'trial' | 'manual'>('trial');
+  const [manualLicenseKey, setManualLicenseKey] = useState('');
 
   // Load license key on mount
   useEffect(() => {
@@ -104,6 +113,10 @@ const CameraSetupPage: React.FC = () => {
   const handleManualConnect = async () => {
     if (!manualIP || !credentials.username || !credentials.password) return;
 
+    console.log(`Manual connect initiated for ${manualIP} with user ${credentials.username}`);
+    setError(null); // Clear any previous errors
+    setConnecting(true);
+
     try {
       const camera: CameraInfo = {
         id: `camera-${manualIP}`,
@@ -117,6 +130,7 @@ const CameraSetupPage: React.FC = () => {
       setCameras([camera]);
       
       // Test connection
+      console.log('Calling quickScanCamera...');
       const result = await window.electronAPI.quickScanCamera(
         manualIP,
         credentials.username,
@@ -124,31 +138,76 @@ const CameraSetupPage: React.FC = () => {
       );
 
       if (result && result.length > 0) {
-        const updatedCamera = {
-          ...camera,
-          ...result[0],
-          accessible: true,
-        };
-        setCameras([updatedCamera]);
-        setSelectedCamera(updatedCamera);
-        setActiveStep(2);
+        const discoveredCamera = result[0];
+        console.log('Quick scan result:', discoveredCamera);
+        
+        // Check if authentication was successful
+        if (discoveredCamera.status === 'accessible' || discoveredCamera.authenticated === true) {
+          console.log('Authentication successful, checking for ACAP...');
+          
+          // Check if camera already has ACAP installed
+          const installedACAPs = await window.electronAPI.listInstalledACAPs({
+            ip: manualIP,
+            credentials: {
+              username: credentials.username,
+              password: credentials.password,
+            },
+          });
+          
+          const hasACAP = installedACAPs?.includes('BatonAnalytic') || false;
+          
+          const updatedCamera = {
+            ...camera,
+            ...discoveredCamera,
+            accessible: true,
+            hasACAP,
+            isLicensed: hasACAP, // If ACAP is installed, assume it's licensed
+            credentials: {
+              username: credentials.username,
+              password: credentials.password,
+            },
+          };
+          setCameras([updatedCamera]);
+          setSelectedCamera(updatedCamera);
+          setActiveStep(2);
+        } else {
+          // Authentication failed
+          const errorMsg = discoveredCamera.error || 'Authentication failed. Check username and password.';
+          console.error('Authentication failed:', errorMsg);
+          setError(errorMsg);
+          setCameras([{
+            ...camera,
+            model: 'Authentication Failed',
+            accessible: false,
+            error: errorMsg,
+          }]);
+        }
       } else {
+        // No camera found at this IP
+        const errorMsg = 'No camera found at this IP address. Please check the IP and try again.';
+        console.error('No camera found:', errorMsg);
+        setError(errorMsg);
         setCameras([{
           ...camera,
+          model: 'Not Found',
           accessible: false,
-          error: 'Failed to connect. Check IP and credentials.',
+          error: errorMsg,
         }]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Manual connection failed:', error);
+      const errorMsg = error.message || 'Connection failed. Please check the IP address and try again.';
+      setError(errorMsg);
       setCameras([{
         id: `camera-${manualIP}`,
         ip: manualIP,
-        model: 'Unknown',
+        model: 'Connection Error',
         name: `Camera at ${manualIP}`,
         accessible: false,
-        error: 'Connection failed',
+        error: errorMsg,
       }]);
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -195,8 +254,27 @@ const CameraSetupPage: React.FC = () => {
   };
 
   const handleDeploy = async () => {
-    if (!selectedCamera || !licenseKey) return;
+    if (!selectedCamera) {
+      setError('No camera selected');
+      return;
+    }
 
+    // Check if camera is already licensed
+    if (selectedCamera.isLicensed) {
+      console.log('Camera already has ACAP installed and licensed');
+      setDeploymentStatus('Camera already configured, updating settings...');
+      setDeploymentProgress(50);
+    } else if (!licenseKey) {
+      // For unlicensed cameras, we need a license key
+      setError('No license key available. This camera needs a license to enable AI analytics.');
+      console.error('Deployment blocked: No license key available');
+      
+      // Show license prompt
+      setShowLicensePrompt(true);
+      return;
+    }
+
+    setError(null);
     setDeploying(true);
     setDeploymentProgress(0);
     setDeploymentStatus('Downloading ACAP...');
@@ -223,27 +301,34 @@ const CameraSetupPage: React.FC = () => {
       setDeploymentStatus('Installing ACAP on camera...');
       updateCameraStatus(selectedCamera.id, 'deploying');
 
-      await window.electronAPI.deployACAP(
-        {
-          ip: selectedCamera.ip,
+      // Create camera object with credentials for deployment
+      const cameraForDeployment = {
+        ...selectedCamera,
+        credentials: {
           username: credentials.username,
-          password: credentials.password,
-        },
-        acapPath
-      );
+          password: credentials.password
+        }
+      };
+      
+      await window.electronAPI.deployACAP(cameraForDeployment, acapPath);
 
-      // Step 3: Apply license
-      setDeploymentProgress(50);
-      setDeploymentStatus('Applying license key...');
-      updateCameraStatus(selectedCamera.id, 'licensing');
+      // Step 3: Apply license (only if not already licensed)
+      if (!selectedCamera.isLicensed && licenseKey) {
+        setDeploymentProgress(50);
+        setDeploymentStatus('Applying license key...');
+        updateCameraStatus(selectedCamera.id, 'licensing');
 
-      await window.electronAPI.activateLicenseKey(
-        selectedCamera.ip,
-        credentials.username,
-        credentials.password,
-        licenseKey,
-        'BatonAnalytic'
-      );
+        await window.electronAPI.activateLicenseKey(
+          selectedCamera.ip,
+          credentials.username,
+          credentials.password,
+          licenseKey,
+          'BatonAnalytic'
+        );
+      } else if (selectedCamera.isLicensed) {
+        setDeploymentProgress(50);
+        setDeploymentStatus('Camera already licensed, updating configuration...');
+      }
 
       // Step 4: Configure camera
       setDeploymentProgress(70);
@@ -394,9 +479,26 @@ const CameraSetupPage: React.FC = () => {
       case 1:
         return (
           <Box>
-            <Typography variant="body2" color="text.secondary" mb={3}>
-              Choose how to connect to your camera
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Choose how to connect to your camera
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Using credentials: {credentials.username}
+                </Typography>
+              </Box>
+              <Button
+                variant="text"
+                onClick={() => {
+                  setError(null);
+                  setActiveStep(0);
+                }}
+                size="small"
+              >
+                Change Credentials
+              </Button>
+            </Box>
 
             <RadioGroup value={mode} onChange={(e) => setMode(e.target.value as any)}>
               <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
@@ -426,10 +528,10 @@ const CameraSetupPage: React.FC = () => {
                     <Button
                       variant="contained"
                       onClick={handleManualConnect}
-                      disabled={!manualIP}
-                      startIcon={<VideocamIcon />}
+                      disabled={!manualIP || connecting}
+                      startIcon={connecting ? <CircularProgress size={20} /> : <VideocamIcon />}
                     >
-                      Connect to Camera
+                      {connecting ? 'Connecting...' : 'Connect to Camera'}
                     </Button>
                   </Box>
                 </Collapse>
@@ -467,34 +569,50 @@ const CameraSetupPage: React.FC = () => {
             {cameras.length > 0 && (
               <Box sx={{ mt: 3 }}>
                 <Typography variant="subtitle2" gutterBottom>
-                  Found Cameras:
+                  {mode === 'manual' ? 'Connection Result:' : 'Found Cameras:'}
                 </Typography>
                 <List>
                   {cameras.map((camera) => (
-                    <ListItem
+                    <Paper
                       key={camera.id}
-                      button
-                      selected={selectedCamera?.id === camera.id}
+                      variant="outlined"
+                      sx={{
+                        p: 2,
+                        mb: 1,
+                        cursor: camera.accessible ? 'pointer' : 'default',
+                        '&:hover': camera.accessible ? { bgcolor: 'action.hover' } : {},
+                        border: selectedCamera?.id === camera.id ? 2 : 1,
+                        borderColor: selectedCamera?.id === camera.id ? 'primary.main' : 'divider'
+                      }}
                       onClick={() => camera.accessible && setSelectedCamera(camera)}
-                      disabled={!camera.accessible}
                     >
-                      <ListItemIcon>
-                        {camera.accessible ? (
-                          <CheckCircleIcon color="success" />
-                        ) : (
-                          <ErrorIcon color="error" />
-                        )}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={camera.name}
-                        secondary={`${camera.ip} - ${camera.model}`}
-                      />
-                      {camera.error && (
-                        <Typography variant="caption" color="error">
-                          {camera.error}
-                        </Typography>
-                      )}
-                    </ListItem>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Box>
+                          {camera.accessible ? (
+                            <CheckCircleIcon color="success" sx={{ fontSize: 40 }} />
+                          ) : connecting ? (
+                            <CircularProgress size={40} />
+                          ) : (
+                            <ErrorIcon color="error" sx={{ fontSize: 40 }} />
+                          )}
+                        </Box>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="subtitle1" fontWeight="medium">
+                            {camera.name}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {camera.ip} • {camera.model}
+                          </Typography>
+                          {camera.error && (
+                            <Alert severity="error" sx={{ mt: 1, py: 0 }}>
+                              <Typography variant="caption">
+                                {camera.error}
+                              </Typography>
+                            </Alert>
+                          )}
+                        </Box>
+                      </Box>
+                    </Paper>
                   ))}
                 </List>
                 
@@ -529,11 +647,11 @@ const CameraSetupPage: React.FC = () => {
                         {selectedCamera.ip} • {selectedCamera.model}
                       </Typography>
                     </Grid>
-                    {licenseKey && (
+                    {(licenseKey || selectedCamera.isLicensed) && (
                       <Grid item>
                         <Chip
                           icon={<SecurityIcon />}
-                          label="Licensed"
+                          label={selectedCamera.isLicensed ? "Already Licensed" : "Trial License Ready"}
                           color="success"
                           size="small"
                         />
@@ -544,24 +662,164 @@ const CameraSetupPage: React.FC = () => {
               </Card>
             )}
 
-            {!deploying && !selectedCamera?.sceneAnalysis && (
+            {showLicensePrompt && (
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                <AlertTitle>License Key Required</AlertTitle>
+                <Typography variant="body2" gutterBottom>
+                  This camera needs a license key to enable AI analytics.
+                </Typography>
+                
+                <RadioGroup
+                  value={licenseMode}
+                  onChange={(e) => setLicenseMode(e.target.value as 'trial' | 'manual')}
+                  sx={{ mt: 2 }}
+                >
+                  <FormControlLabel
+                    value="trial"
+                    control={<Radio />}
+                    label={
+                      <Box>
+                        <Typography variant="body2">Get Trial License Automatically</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Instantly receive a free trial license
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                  <FormControlLabel
+                    value="manual"
+                    control={<Radio />}
+                    label={
+                      <Box>
+                        <Typography variant="body2">Enter License Key Manually</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Use your existing Anava license key
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </RadioGroup>
+
+                {licenseMode === 'manual' && (
+                  <TextField
+                    fullWidth
+                    label="License Key"
+                    value={manualLicenseKey}
+                    onChange={(e) => setManualLicenseKey(e.target.value)}
+                    placeholder="Enter your license key"
+                    variant="outlined"
+                    size="small"
+                    sx={{ mt: 2 }}
+                  />
+                )}
+
+                <Button
+                  variant="contained"
+                  size="small"
+                  sx={{ mt: 2 }}
+                  disabled={licenseMode === 'manual' && !manualLicenseKey.trim()}
+                  onClick={async () => {
+                    setShowLicensePrompt(false);
+                    
+                    if (licenseMode === 'manual') {
+                      // Handle manual license key
+                      setError('Validating license key...');
+                      
+                      try {
+                        const result = await window.electronAPI.license.setManualKey({
+                          key: manualLicenseKey,
+                          email: await window.electronAPI.getConfigValue('userEmail') || undefined
+                        });
+                        
+                        if (result.success) {
+                          setLicenseKey(manualLicenseKey);
+                          setError(null);
+                          setManualLicenseKey(''); // Clear the input field
+                          // Retry deployment
+                          handleDeploy();
+                        } else {
+                          setError(result.error || 'Failed to set license key');
+                          setShowLicensePrompt(true);
+                        }
+                      } catch (error: any) {
+                        setError(`Error setting license: ${error.message}`);
+                        setShowLicensePrompt(true);
+                      }
+                    } else {
+                      // Handle trial license (existing code)
+                      setError('Getting trial license...');
+                      
+                      try {
+                        // Get Firebase config
+                        const firebaseConfig = {
+                          apiKey: "AIzaSyCJbWAa-zQir1v8kmlye8Kv3kmhPb9r18s", // Correct API key for anava-ai
+                          authDomain: "anava-ai.firebaseapp.com",
+                          projectId: "anava-ai",
+                          storageBucket: "anava-ai.appspot.com",
+                          messagingSenderId: "392865621461",
+                          appId: "1:392865621461:web:15db206ae4e9c72f7dc95c" // Anava Device Manager app
+                        };
+                        
+                        // Try to get a trial license
+                        const email = `trial-${Date.now()}@anava.ai`;
+                        const result = await window.electronAPI.license.assignKey({
+                          firebaseConfig,
+                          email,
+                          password: 'TrialUser123!'
+                        });
+                        
+                        if (result.success && result.key) {
+                          setLicenseKey(result.key);
+                          setError(null);
+                          // Store for future use
+                          await window.electronAPI.setConfigValue('userEmail', email);
+                          // Retry deployment
+                          handleDeploy();
+                        } else {
+                          setError(result.error || 'Failed to obtain trial license');
+                        }
+                      } catch (error: any) {
+                        setError(`Error getting license: ${error.message}`);
+                      }
+                    }
+                  }}
+                >
+                  {licenseMode === 'manual' ? 'Use This License' : 'Get Trial License'}
+                </Button>
+              </Alert>
+            )}
+
+            {!deploying && !selectedCamera?.sceneAnalysis && !showLicensePrompt && (
               <Box textAlign="center" sx={{ py: 3 }}>
                 <CloudDownloadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
                 <Typography variant="h6" gutterBottom>
                   Ready to Deploy AI Vision
                 </Typography>
                 <Typography variant="body2" color="text.secondary" paragraph>
-                  This will install Anava AI analytics, apply your license, and configure the camera.
+                  {selectedCamera?.isLicensed 
+                    ? 'Camera already has AI analytics installed. Click to update configuration.'
+                    : 'This will install Anava AI analytics, apply your license, and configure the camera.'}
                 </Typography>
-                <Button
-                  variant="contained"
-                  size="large"
-                  onClick={handleDeploy}
-                  startIcon={<PlayArrowIcon />}
-                  sx={{ mt: 2 }}
-                >
-                  Deploy & Configure
-                </Button>
+                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    onClick={() => {
+                      setError(null);
+                      setActiveStep(1);
+                    }}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    onClick={handleDeploy}
+                    startIcon={<PlayArrowIcon />}
+                  >
+                    Deploy & Configure
+                  </Button>
+                </Box>
               </Box>
             )}
 
@@ -675,6 +933,12 @@ const CameraSetupPage: React.FC = () => {
       <Typography variant="body1" color="text.secondary" paragraph>
         Get your first camera running with AI analytics in minutes
       </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
 
       {licenseKey && (
         <Alert severity="info" sx={{ mb: 3 }}>

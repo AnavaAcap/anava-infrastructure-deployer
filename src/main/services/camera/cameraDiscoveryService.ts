@@ -35,7 +35,10 @@ export class CameraDiscoveryService {
       return this.scanNetworkForCameras(event.sender, options);
     });
     
-    ipcMain.handle('quick-scan-camera', async (_event, ip: string, username = 'root', password = 'pass') => {
+    ipcMain.handle('quick-scan-camera', async (_event, ip: string, username: string, password: string) => {
+      if (!username || !password) {
+        throw new Error('Username and password are required');
+      }
       return this.quickScanSpecificCamera(ip, username, password);
     });
     
@@ -71,7 +74,7 @@ export class CameraDiscoveryService {
     });
   }
 
-  async quickScanSpecificCamera(ip: string, username = 'root', password = 'pass'): Promise<Camera[]> {
+  async quickScanSpecificCamera(ip: string, username: string, password: string): Promise<Camera[]> {
     try {
       console.log(`=== Quick scanning camera at ${ip} with credentials ${username}:${password} ===`);
       
@@ -292,7 +295,9 @@ export class CameraDiscoveryService {
         if (axisCheck.status === 401 || axisCheck.status === 200) {
           // This is likely an Axis device, validate it
           console.log(`  ✓ Found Axis device at ${ip} (HTTP ${axisCheck.status})`);
-          return await this.checkAxisCamera(ip, 'root', 'pass');
+          // Cannot check without credentials
+          console.log(`  Found potential Axis device at ${ip} but cannot verify without credentials`);
+          return null;
         } else {
           console.log(`  ❌ Not an Axis device at ${ip} (HTTP ${axisCheck.status})`);
         }
@@ -315,7 +320,9 @@ export class CameraDiscoveryService {
           
           if (basicCheck.status === 401 && basicCheck.headers['www-authenticate']?.includes('Digest')) {
             console.log(`  ✓ Found device with digest auth at ${ip}, checking if Axis...`);
-            return await this.checkAxisCamera(ip, 'root', 'pass');
+            // Cannot check without credentials
+          console.log(`  Found potential Axis device at ${ip} but cannot verify without credentials`);
+          return null;
           }
         } catch (basicError) {
           // Ignore basic check errors
