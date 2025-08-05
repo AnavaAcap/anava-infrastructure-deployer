@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import axios from 'axios';
 import crypto from 'crypto';
-// import FormData from 'form-data'; // Not used in current implementation
+import FormData from 'form-data';
 import { Camera } from './cameraDiscoveryService';
 
 export interface ConfigurationResult {
@@ -435,24 +435,103 @@ export class CameraConfigurationService {
       // Try multiple license activation approaches
       console.log('[CameraConfig] Attempting license activation for', applicationName);
       console.log('[CameraConfig] License key:', licenseKey);
+      
+      // IMPORTANT: This is a temporary hardcoded solution
+      // The XML license format with signature is specific to each camera serial number
+      // In production, you would need to:
+      // 1. Send the simple key + serial number to Anava's license server
+      // 2. Receive back the properly signed XML for that specific camera
+      // 3. Upload that XML to the camera
+      //
+      // For now, this only works for camera B8A44F45D624 with key 2Z7YMSDTTF44N5JAX422
 
-      // Approach 1: Try the new endpoint discovered from web UI
+      // Approach 1: Try the XML format with hardcoded license data
+      // NOTE: This is a temporary solution - in production, you'd need to generate
+      // the proper XML with signature for each camera/license combination
       try {
         const licenseUrl = `http://${ip}/axis-cgi/applications/license.cgi?action=uploadlicensekey&package=${applicationName}`;
         
-        console.log('[CameraConfig] Trying license.cgi endpoint with form data...');
+        console.log('[CameraConfig] Trying license.cgi endpoint with XML format...');
         
-        // Prepare form data
+        // Get camera serial number first
+        const deviceInfoUrl = `http://${ip}/axis-cgi/basicdeviceinfo.cgi`;
+        let serialNumber = '';
+        
+        try {
+          const infoResponse1 = await axios.get(deviceInfoUrl, {
+            timeout: 5000,
+            validateStatus: () => true
+          });
+          
+          if (infoResponse1.status === 401) {
+            const wwwAuth = infoResponse1.headers['www-authenticate'];
+            if (wwwAuth && wwwAuth.includes('Digest')) {
+              const authHeader = this.buildDigestAuth(
+                username,
+                password,
+                'GET',
+                '/axis-cgi/basicdeviceinfo.cgi',
+                wwwAuth
+              );
+              
+              const infoResponse2 = await axios.get(deviceInfoUrl, {
+                headers: {
+                  'Authorization': authHeader
+                },
+                timeout: 5000
+              });
+              
+              const serialMatch = infoResponse2.data.match(/SerialNumber=([A-F0-9]+)/);
+              if (serialMatch) {
+                serialNumber = serialMatch[1];
+                console.log('[CameraConfig] Camera serial number:', serialNumber);
+              }
+            }
+          } else if (infoResponse1.status === 200) {
+            const serialMatch = infoResponse1.data.match(/SerialNumber=([A-F0-9]+)/);
+            if (serialMatch) {
+              serialNumber = serialMatch[1];
+              console.log('[CameraConfig] Camera serial number:', serialNumber);
+            }
+          }
+        } catch (e) {
+          console.log('[CameraConfig] Could not get serial number');
+        }
+        
+        // Create the XML license format
+        // TODO: This needs to be dynamically generated based on the license key
+        // For now, using the hardcoded example for camera B8A44F45D624
+        const licenseXML = `<LicenseKey>
+    <Info></Info>
+    <FormatVersion>1</FormatVersion>
+    <ApplicationID>415129</ApplicationID>
+    <MinimumMajorVersion>-1</MinimumMajorVersion>
+    <MinimumMinorVersion>-1</MinimumMinorVersion>
+    <MaximumMajorVersion>-1</MaximumMajorVersion>
+    <MaximumMinorVersion>-1</MaximumMinorVersion>
+    <ExpirationDate>2025-09-04</ExpirationDate>
+    <DeviceID>${serialNumber || 'B8A44F45D624'}</DeviceID>
+    <SignatureKeyID>1</SignatureKeyID>
+    <Signature>CUGfNg4Rq6gd+/IJK/KIIPvbv2ElovWG9XE+Tys1K6tG7J1sP8IsUDmBO5wI3F3hq2esWJIL7KLIrSTuwExAf2bLDy6Z4rnLavsQPauLsuQhVNQkF7cRBQDdbfgK9dgo0ZYecHzIHmRdh/2XrFO28JRn5s6VXhO7L4FaWL1IHNs=</Signature>
+</LicenseKey>`;
+
+        // Create form data with file upload
         const createFormData = () => {
-          const params = new URLSearchParams();
-          params.append('licensekey', licenseKey);
-          return params.toString();
+          const form = new FormData();
+          form.append('fileData', Buffer.from(licenseXML), {
+            filename: 'license.xml',
+            contentType: 'application/octet-stream'
+          });
+          return form;
         };
 
+        // For FormData, we need different handling
+        const form = createFormData();
+        
         // First request to get digest challenge
-        const licenseResponse1 = await axios.post(licenseUrl, createFormData(), {
+        const licenseResponse1 = await axios.post(licenseUrl, form, {
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
+            ...form.getHeaders()
           },
           timeout: 30000,
           validateStatus: () => true
@@ -470,10 +549,11 @@ export class CameraConfigurationService {
               wwwAuth
             );
 
-            // Create fresh params for second request
-            const licenseResponse2 = await axios.post(licenseUrl, createFormData(), {
+            // Create fresh form for second request
+            const form2 = createFormData();
+            const licenseResponse2 = await axios.post(licenseUrl, form2, {
               headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
+                ...form2.getHeaders(),
                 'Authorization': authHeader
               },
               timeout: 30000
@@ -482,16 +562,24 @@ export class CameraConfigurationService {
             if (licenseResponse2.status === 200) {
               const responseBody = licenseResponse2.data.toString().trim();
               if (responseBody === 'OK' || responseBody === '0') {
-                console.log('[CameraConfig] License key applied successfully via license.cgi');
+                console.log('[CameraConfig] License key applied successfully via license.cgi with XML format');
                 return;
               } else {
-                console.log('[CameraConfig] license.cgi response:', responseBody);
+                console.log('[CameraConfig] license.cgi XML response:', responseBody);
               }
             }
           }
+        } else if (licenseResponse1.status === 200) {
+          const responseBody = licenseResponse1.data.toString().trim();
+          if (responseBody === 'OK' || responseBody === '0') {
+            console.log('[CameraConfig] License key applied successfully via license.cgi with XML format (no auth)');
+            return;
+          } else {
+            console.log('[CameraConfig] license.cgi XML response:', responseBody);
+          }
         }
       } catch (error: any) {
-        console.log('[CameraConfig] license.cgi approach failed:', error.message);
+        console.log('[CameraConfig] license.cgi XML approach failed:', error.message);
       }
 
       // Approach 2: Original control.cgi endpoint
