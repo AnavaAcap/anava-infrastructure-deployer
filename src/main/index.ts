@@ -536,9 +536,12 @@ ipcMain.handle('magical:generate-api-key', async () => {
   }
 });
 
-ipcMain.handle('magical:start-experience', async (_, apiKey: string) => {
+ipcMain.handle('magical:start-experience', async (_, apiKey: string, anavaKey?: string) => {
   try {
     logger.info('Starting magical experience with user API key...');
+    if (anavaKey) {
+      logger.info('Anava license key provided for automatic activation');
+    }
     
     // Subscribe to progress events
     const progressHandler = (progress: any) => {
@@ -547,7 +550,7 @@ ipcMain.handle('magical:start-experience', async (_, apiKey: string) => {
     
     fastStartService.on('progress', progressHandler);
     
-    const result = await fastStartService.startMagicalExperience(apiKey);
+    const result = await fastStartService.startMagicalExperience(apiKey, anavaKey);
     
     // Clean up listener
     fastStartService.off('progress', progressHandler);
@@ -577,9 +580,13 @@ ipcMain.handle('magical:connect-to-camera', async (_, params: {
   ip: string;
   username: string;
   password: string;
+  anavaKey?: string;
 }) => {
   try {
     logger.info(`Connecting to camera at ${params.ip} with ${params.username}...`);
+    if (params.anavaKey) {
+      logger.info('Anava license key provided for manual connection');
+    }
     
     // Subscribe to progress events
     const progressHandler = (progress: any) => {
@@ -592,7 +599,8 @@ ipcMain.handle('magical:connect-to-camera', async (_, params: {
       params.apiKey,
       params.ip,
       params.username,
-      params.password
+      params.password,
+      params.anavaKey
     );
     
     // Clean up listener
@@ -615,4 +623,125 @@ ipcMain.on('magical:subscribe', (event) => {
 ipcMain.handle('magical:cancel', async () => {
   fastStartService.cancel();
   return { success: true };
+});
+
+// License Key Management IPC Handlers
+ipcMain.handle('license:get-assigned-key', async () => {
+  try {
+    const { LicenseKeyService } = await import('./services/licenseKeyService');
+    const licenseService = new LicenseKeyService();
+    
+    // Check for cached key first
+    const cached = await licenseService.getCachedLicenseKey();
+    if (cached) {
+      logger.info('Returning cached license key');
+      return { success: true, key: cached.key, email: cached.email };
+    }
+    
+    // If no cached key, user needs to authenticate
+    return { success: false, error: 'No license key assigned. Please sign in.' };
+  } catch (error: any) {
+    logger.error('Failed to get license key:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('license:assign-key', async (_, params: { 
+  firebaseConfig: any;
+  email: string;
+  password: string;
+}) => {
+  try {
+    const { LicenseKeyService } = await import('./services/licenseKeyService');
+    const licenseService = new LicenseKeyService();
+    
+    // Initialize with Firebase config
+    await licenseService.initialize(params.firebaseConfig);
+    
+    // Sign in user
+    await licenseService.signIn(params.email, params.password);
+    
+    // Request license key assignment
+    const result = await licenseService.assignLicenseKey();
+    
+    // Cache the key
+    await licenseService.cacheLicenseKey(result.key, result.email);
+    
+    // Clean up
+    licenseService.dispose();
+    
+    return { 
+      success: true, 
+      key: result.key, 
+      email: result.email,
+      alreadyAssigned: result.alreadyAssigned 
+    };
+  } catch (error: any) {
+    logger.error('Failed to assign license key:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('license:check-availability', async (_, firebaseConfig: any) => {
+  try {
+    const { LicenseKeyService } = await import('./services/licenseKeyService');
+    const licenseService = new LicenseKeyService();
+    
+    await licenseService.initialize(firebaseConfig);
+    const stats = await licenseService.getLicenseStats();
+    
+    licenseService.dispose();
+    
+    return { 
+      success: true, 
+      available: stats.available, 
+      total: stats.total 
+    };
+  } catch (error: any) {
+    logger.error('Failed to check license availability:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Config value handlers for license key caching
+ipcMain.handle('config:set-value', async (_, key: string, value: any) => {
+  try {
+    const userDataPath = app.getPath('userData');
+    const configPath = path.join(userDataPath, 'config.json');
+    
+    let config: any = {};
+    try {
+      const fs = await import('fs');
+      const data = await fs.promises.readFile(configPath, 'utf8');
+      config = JSON.parse(data);
+    } catch (err) {
+      // Config doesn't exist yet
+    }
+    
+    config[key] = value;
+    
+    const fs = await import('fs');
+    await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2));
+    
+    return { success: true };
+  } catch (error: any) {
+    logger.error('Failed to set config value:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('config:get-value', async (_, key: string) => {
+  try {
+    const userDataPath = app.getPath('userData');
+    const configPath = path.join(userDataPath, 'config.json');
+    
+    const fs = await import('fs');
+    const data = await fs.promises.readFile(configPath, 'utf8');
+    const config = JSON.parse(data);
+    
+    return config[key];
+  } catch (error) {
+    // Config doesn't exist or key not found
+    return null;
+  }
 });

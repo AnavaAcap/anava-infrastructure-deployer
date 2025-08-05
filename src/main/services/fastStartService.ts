@@ -32,6 +32,7 @@ interface MagicalProgress {
 export class FastStartService extends EventEmitter {
   private abortController?: AbortController;
   private aiService?: MagicalAIService;
+  private anavaLicenseKey?: string;
 
   constructor() {
     super();
@@ -40,10 +41,11 @@ export class FastStartService extends EventEmitter {
   /**
    * Start the magical experience with user's API key
    */
-  async startMagicalExperience(apiKey: string): Promise<MagicalResult> {
+  async startMagicalExperience(apiKey: string, anavaKey?: string): Promise<MagicalResult> {
     logger.info('Starting magical experience...');
     this.abortController = new AbortController();
     this.aiService = new MagicalAIService(apiKey);
+    this.anavaLicenseKey = anavaKey;
 
     try {
       // Start parallel operations
@@ -996,6 +998,26 @@ export class FastStartService extends EventEmitter {
       
       logger.info('BatonAnalytic ACAP installed successfully');
       
+      // Apply license key if provided
+      if (this.anavaLicenseKey) {
+        logger.info('Applying Anava license key...');
+        try {
+          const { CameraConfigurationService } = require('./camera/cameraConfigurationService');
+          const configService = new CameraConfigurationService();
+          await configService.activateLicenseKey(
+            camera.ip,
+            camera.username!,
+            camera.password!,
+            this.anavaLicenseKey,
+            'BatonAnalytic'
+          );
+          logger.info('License key activated successfully');
+        } catch (licenseError: any) {
+          logger.warn('License activation failed:', licenseError.message);
+          // Non-fatal - continue with deployment
+        }
+      }
+      
       // Give the ACAP time to start up
       logger.info('Waiting for ACAP to initialize...');
       await new Promise(resolve => setTimeout(resolve, 5000));
@@ -1093,10 +1115,11 @@ export class FastStartService extends EventEmitter {
   /**
    * Connect to a specific camera with manual IP and credentials
    */
-  async connectToSpecificCamera(apiKey: string, ip: string, username: string, password: string): Promise<MagicalResult> {
+  async connectToSpecificCamera(apiKey: string, ip: string, username: string, password: string, anavaKey?: string): Promise<MagicalResult> {
     logger.info(`Manual connection to camera at ${ip}...`);
     this.abortController = new AbortController();
     this.aiService = new MagicalAIService(apiKey);
+    this.anavaLicenseKey = anavaKey;
 
     try {
       this.updateProgress('discovering', `Connecting to ${ip}...`, 20);

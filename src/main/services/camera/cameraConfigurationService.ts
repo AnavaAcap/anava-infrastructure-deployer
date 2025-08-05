@@ -28,6 +28,22 @@ export class CameraConfigurationService {
     ipcMain.handle('get-camera-settings', async (_event, ip: string, username: string, password: string) => {
       return this.getSystemConfig(ip, username, password);
     });
+    
+    ipcMain.handle('activate-license-key', async (_event, ip: string, username: string, password: string, licenseKey: string, applicationName: string) => {
+      return this.activateLicenseKey(ip, username, password, licenseKey, applicationName);
+    });
+    
+    ipcMain.handle('test-speaker', async (_event, speakerIp: string, username: string, password: string) => {
+      return this.testSpeaker(speakerIp, username, password);
+    });
+    
+    ipcMain.handle('configure-speaker', async (_event, cameraIp: string, speakerIp: string, username: string, password: string) => {
+      return this.configureSpeaker(cameraIp, speakerIp, username, password);
+    });
+    
+    ipcMain.handle('play-speaker-audio', async (_event, speakerIp: string, username: string, password: string, audioFile: string) => {
+      return this.playSpeakerAudio(speakerIp, username, password, audioFile);
+    });
   }
 
   async configureCamera(camera: Camera, deploymentConfig: any): Promise<ConfigurationResult> {
@@ -408,28 +424,23 @@ export class CameraConfigurationService {
         return;
       }
 
-      // Now activate the license key
-      const licenseUrl = `http://${ip}/axis-cgi/applications/license.cgi?action=uploadlicensekey&package=${applicationName}`;
+      // Now activate the license key using the correct VAPIX endpoint
+      const licenseUrl = `http://${ip}/axis-cgi/applications/control.cgi`;
       
-      console.log('[CameraConfig] Uploading license key for', applicationName);
+      console.log('[CameraConfig] Applying license key for', applicationName);
 
-      // Create form data with the license key
-      const form = new FormData();
-      
-      // The license key might be in XML format or just a plain key
-      // For now, we'll send it as plain text
-      const licenseBuffer = Buffer.from(licenseKey, 'utf-8');
-      form.append('licenseKey', licenseBuffer, {
-        filename: `${applicationName}LicenseKey.txt`,
-        contentType: 'application/octet-stream'
-      });
+      // Prepare form data as URL encoded
+      const params = new URLSearchParams();
+      params.append('action', 'license');
+      params.append('ApplicationName', applicationName);
+      params.append('LicenseKey', licenseKey);
 
       // First request to get digest challenge
-      const licenseResponse1 = await axios.post(licenseUrl, form, {
+      const licenseResponse1 = await axios.post(licenseUrl, params.toString(), {
         headers: {
-          ...form.getHeaders()
+          'Content-Type': 'application/x-www-form-urlencoded'
         },
-        timeout: 10000,
+        timeout: 30000, // Increased timeout
         validateStatus: () => true
       });
 
@@ -441,33 +452,46 @@ export class CameraConfigurationService {
             username,
             password,
             'POST',
-            `/axis-cgi/applications/license.cgi?action=uploadlicensekey&package=${applicationName}`,
+            '/axis-cgi/applications/control.cgi',
             wwwAuth
           );
 
-          // Recreate form data
-          const form2 = new FormData();
-          form2.append('licenseKey', licenseBuffer, {
-            filename: `${applicationName}LicenseKey.txt`,
-            contentType: 'application/octet-stream'
-          });
-
-          const licenseResponse2 = await axios.post(licenseUrl, form2, {
+          const licenseResponse2 = await axios.post(licenseUrl, params.toString(), {
             headers: {
-              ...form2.getHeaders(),
+              'Content-Type': 'application/x-www-form-urlencoded',
               'Authorization': authHeader
             },
-            timeout: 10000
+            timeout: 30000
           });
 
           if (licenseResponse2.status === 200) {
-            console.log('[CameraConfig] License key uploaded successfully');
+            const responseBody = licenseResponse2.data.toString().trim();
+            if (responseBody === 'OK') {
+              console.log('[CameraConfig] License key applied successfully');
+            } else if (responseBody.includes('Error')) {
+              console.log('[CameraConfig] License response:', responseBody);
+              // Check for specific errors
+              if (responseBody.includes('Invalid license key')) {
+                throw new Error('Invalid license key');
+              } else if (responseBody.includes('not valid for this product')) {
+                throw new Error('License key not valid for this product');
+              } else if (responseBody.includes('could not be activated')) {
+                throw new Error('License could not be activated (check internet connection)');
+              } else {
+                throw new Error(`License activation failed: ${responseBody}`);
+              }
+            }
           } else {
             throw new Error(`License activation failed with status ${licenseResponse2.status}`);
           }
         }
       } else if (licenseResponse1.status === 200) {
-        console.log('[CameraConfig] License key uploaded successfully');
+        const responseBody = licenseResponse1.data.toString().trim();
+        if (responseBody === 'OK') {
+          console.log('[CameraConfig] License key applied successfully (no auth required)');
+        } else {
+          throw new Error(`License activation failed: ${responseBody}`);
+        }
       } else {
         throw new Error(`License activation failed with status ${licenseResponse1.status}`);
       }
@@ -475,5 +499,221 @@ export class CameraConfigurationService {
       console.error('[CameraConfig] Error activating license key:', error);
       throw error;
     }
+  }
+
+  async testSpeaker(
+    speakerIp: string,
+    username: string,
+    password: string
+  ): Promise<any> {
+    try {
+      // Test basic connectivity to speaker
+      console.log('[CameraConfig] Testing speaker connectivity:', speakerIp);
+      
+      // Try to get device info
+      const infoUrl = `http://${speakerIp}/axis-cgi/basicdeviceinfo.cgi`;
+      
+      const response1 = await axios.get(infoUrl, {
+        timeout: 5000,
+        validateStatus: () => true
+      });
+
+      if (response1.status === 401) {
+        // Handle digest authentication
+        const wwwAuth = response1.headers['www-authenticate'];
+        if (wwwAuth && wwwAuth.includes('Digest')) {
+          const authHeader = this.buildDigestAuth(
+            username,
+            password,
+            'GET',
+            '/axis-cgi/basicdeviceinfo.cgi',
+            wwwAuth
+          );
+
+          const response2 = await axios.get(infoUrl, {
+            headers: {
+              'Authorization': authHeader
+            },
+            timeout: 5000
+          });
+
+          if (response2.status === 200) {
+            console.log('[CameraConfig] Speaker test successful');
+            
+            // Play a short test tone
+            await this.playSpeakerAudio(speakerIp, username, password, 'test-tone');
+            
+            return { 
+              success: true, 
+              deviceInfo: response2.data,
+              message: 'Speaker connected successfully'
+            };
+          }
+        }
+      } else if (response1.status === 200) {
+        console.log('[CameraConfig] Speaker test successful (no auth)');
+        
+        // Play a short test tone
+        await this.playSpeakerAudio(speakerIp, username, password, 'test-tone');
+        
+        return { 
+          success: true, 
+          deviceInfo: response1.data,
+          message: 'Speaker connected successfully'
+        };
+      }
+
+      throw new Error(`Speaker test failed with status ${response1.status}`);
+    } catch (error: any) {
+      console.error('[CameraConfig] Speaker test error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async configureSpeaker(
+    cameraIp: string,
+    speakerIp: string,
+    username: string,
+    password: string
+  ): Promise<any> {
+    try {
+      console.log(`[CameraConfig] Configuring speaker ${speakerIp} with camera ${cameraIp}`);
+      
+      // Store speaker configuration in camera's SystemConfig
+      const speakerConfig = {
+        speaker: {
+          ip: speakerIp,
+          username: username,
+          enabled: true,
+          audioSettings: {
+            volume: 70,
+            talkdownEnabled: true,
+            detectionTypes: ['weapon', 'person', 'gesture']
+          }
+        }
+      };
+      
+      // Push speaker config to camera
+      const result = await this.pushSystemConfig(cameraIp, username, password, speakerConfig);
+      
+      if (result.success) {
+        console.log('[CameraConfig] Speaker configured successfully');
+        return { success: true, message: 'Speaker configured with camera' };
+      } else {
+        throw new Error(result.error || 'Failed to configure speaker');
+      }
+    } catch (error: any) {
+      console.error('[CameraConfig] Speaker configuration error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async playSpeakerAudio(
+    speakerIp: string,
+    username: string,
+    password: string,
+    audioFile: string
+  ): Promise<any> {
+    try {
+      console.log(`[CameraConfig] Playing audio on speaker ${speakerIp}`);
+      
+      // Use VAPIX audio API to play audio
+      const audioUrl = `http://${speakerIp}/axis-cgi/audio/transmit.cgi`;
+      
+      // Prepare audio data based on file type
+      let audioData: Buffer;
+      let contentType: string;
+      
+      if (audioFile === 'test-tone') {
+        // Generate a simple test tone
+        audioData = this.generateTestTone();
+        contentType = 'audio/basic';
+      } else {
+        // Load pre-defined audio clips
+        audioData = await this.loadAudioClip(audioFile);
+        contentType = 'audio/mpeg';
+      }
+      
+      // First request to get digest challenge
+      const response1 = await axios.post(audioUrl, audioData, {
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': audioData.length.toString()
+        },
+        timeout: 10000,
+        validateStatus: () => true
+      });
+
+      if (response1.status === 401) {
+        // Handle digest authentication
+        const wwwAuth = response1.headers['www-authenticate'];
+        if (wwwAuth && wwwAuth.includes('Digest')) {
+          const authHeader = this.buildDigestAuth(
+            username,
+            password,
+            'POST',
+            '/axis-cgi/audio/transmit.cgi',
+            wwwAuth
+          );
+
+          const response2 = await axios.post(audioUrl, audioData, {
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': contentType,
+              'Content-Length': audioData.length.toString()
+            },
+            timeout: 10000
+          });
+
+          if (response2.status === 200 || response2.status === 204) {
+            console.log('[CameraConfig] Audio played successfully');
+            return { success: true, message: 'Audio played' };
+          }
+        }
+      } else if (response1.status === 200 || response1.status === 204) {
+        console.log('[CameraConfig] Audio played successfully (no auth)');
+        return { success: true, message: 'Audio played' };
+      }
+
+      throw new Error(`Audio playback failed with status ${response1.status}`);
+    } catch (error: any) {
+      console.error('[CameraConfig] Audio playback error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  private generateTestTone(): Buffer {
+    // Generate a simple 1kHz test tone (1 second, 8-bit, 8kHz mono)
+    const sampleRate = 8000;
+    const duration = 1; // seconds
+    const frequency = 1000; // Hz
+    const samples = sampleRate * duration;
+    const buffer = Buffer.alloc(samples);
+    
+    for (let i = 0; i < samples; i++) {
+      const t = i / sampleRate;
+      const value = Math.sin(2 * Math.PI * frequency * t);
+      // Convert to 8-bit unsigned
+      buffer[i] = Math.floor((value + 1) * 127.5);
+    }
+    
+    return buffer;
+  }
+
+  private async loadAudioClip(clipName: string): Promise<Buffer> {
+    // In a real implementation, this would load pre-defined audio clips
+    // For now, return a test pattern
+    console.log(`[CameraConfig] Loading audio clip: ${clipName}`);
+    
+    // Map clip names to actual audio data
+    const clips: { [key: string]: string } = {
+      'security-alert': 'Security alert. This area is being monitored.',
+      'weapon-detected': 'Weapon detected. Security has been notified.',
+      'custom-message': 'Please maintain social distance.'
+    };
+    
+    // For demo purposes, return test tone
+    // In production, this would load actual MP3 files
+    return this.generateTestTone();
   }
 }

@@ -85,6 +85,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('push-camera-settings', ip, username, password, configPayload),
   getCameraSettings: (ip: string, username: string, password: string) =>
     ipcRenderer.invoke('get-camera-settings', ip, username, password),
+  activateLicenseKey: (ip: string, username: string, password: string, licenseKey: string, applicationName: string) =>
+    ipcRenderer.invoke('activate-license-key', ip, username, password, licenseKey, applicationName),
   getNetworkInterfaces: () => ipcRenderer.invoke('get-network-interfaces'),
   // ACAP download APIs
   acap: {
@@ -101,8 +103,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Magical experience APIs
   magical: {
     generateApiKey: () => ipcRenderer.invoke('magical:generate-api-key'),
-    startExperience: (apiKey: string) => ipcRenderer.invoke('magical:start-experience', apiKey),
-    connectToCamera: (params: { apiKey: string; ip: string; username: string; password: string }) => 
+    startExperience: (apiKey: string, anavaKey?: string) => ipcRenderer.invoke('magical:start-experience', apiKey, anavaKey),
+    connectToCamera: (params: { apiKey: string; ip: string; username: string; password: string; anavaKey?: string }) => 
       ipcRenderer.invoke('magical:connect-to-camera', params),
     analyzeCustom: (params: { query: string; camera: any }) => 
       ipcRenderer.invoke('magical:analyze-custom', params),
@@ -115,4 +117,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('magical:cancelled', callback);
     },
   },
+  // License Key Management APIs
+  license: {
+    getAssignedKey: () => ipcRenderer.invoke('license:get-assigned-key'),
+    assignKey: (params: { firebaseConfig: any; email: string; password: string }) => 
+      ipcRenderer.invoke('license:assign-key', params),
+    checkAvailability: (firebaseConfig: any) => ipcRenderer.invoke('license:check-availability', firebaseConfig),
+  },
+  // Config value storage
+  setConfigValue: (key: string, value: any) => ipcRenderer.invoke('config:set-value', key, value),
+  getConfigValue: (key: string) => ipcRenderer.invoke('config:get-value', key),
 });

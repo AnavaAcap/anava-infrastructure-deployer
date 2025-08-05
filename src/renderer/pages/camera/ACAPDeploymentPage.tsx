@@ -275,6 +275,25 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
           if (result.success) {
             addLog(`✓ Upload successful`);
             addLog(`✓ ACAP installation completed`);
+            
+            // Apply license key if provided
+            if (deploymentConfig?.anavaKey) {
+              addLog(`Applying Anava license key...`);
+              try {
+                await window.electronAPI.activateLicenseKey(
+                  currentIP,
+                  credentials[camera.id].username,
+                  credentials[camera.id].password,
+                  deploymentConfig.anavaKey,
+                  'BatonAnalytic'
+                );
+                addLog(`✓ License key activated successfully`);
+              } catch (licenseError: any) {
+                addLog(`⚠ License activation failed: ${licenseError.message}`);
+                // Non-fatal - continue with deployment
+              }
+            }
+            
             addLog(`✓ ${camera.model} deployment successful!`);
             
             setDeploymentStatus(prev => {
