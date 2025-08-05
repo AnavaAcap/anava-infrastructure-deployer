@@ -1,0 +1,16 @@
+{
+  "name": "assign-axis-key",
+  "version": "1.0.0",
+  "description": "Cloud Function for assigning Axis license keys to users",
+  "main": "index.js",
+  "scripts": {
+    "deploy": "firebase deploy --only functions:assignAxisKey,functions:uploadLicenseKeys,functions:getLicenseStats"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.11.1",
+    "firebase-functions": "^4.5.0"
+  },
+  "engines": {
+    "node": "18"
+  }
+}

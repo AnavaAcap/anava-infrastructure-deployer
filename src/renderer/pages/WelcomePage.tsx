@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Button, Typography, Paper, Stack, Chip } from '@mui/material';
-import { Add, RestoreOutlined, Security, Cloud } from '@mui/icons-material';
+import { Box, Button, Typography, Paper, Stack, Chip, Alert, Card, CardContent, Grid, Divider } from '@mui/material';
+import { Add, RestoreOutlined, Security, Cloud, Videocam, Key as KeyIcon, Rocket as RocketIcon } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import anavaLogo from '../assets/anava-logo.png';
 
@@ -27,10 +27,13 @@ const LogoSection = styled(Box)(({ theme }) => ({
 interface WelcomePageProps {
   onNewDeployment: () => void;
   onCheckExisting: () => void;
+  onNavigate?: (view: string) => void;
 }
 
-const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExisting }) => {
+const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExisting, onNavigate }) => {
   const [version, setVersion] = useState('0.8.0');
+  const [licenseKey, setLicenseKey] = useState<string | null>(null);
+  const [licenseEmail, setLicenseEmail] = useState<string | null>(null);
 
   useEffect(() => {
     // Get app version from main process
@@ -39,7 +42,22 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
     }).catch(() => {
       // Fallback to default if not available
     });
+
+    // Get license key if assigned
+    loadLicenseKey();
   }, []);
+
+  const loadLicenseKey = async () => {
+    try {
+      const result = await window.electronAPI?.license?.getAssignedKey();
+      if (result?.success && result.key) {
+        setLicenseKey(result.key);
+        setLicenseEmail(result.email || null);
+      }
+    } catch (error) {
+      console.error('Failed to load license key:', error);
+    }
+  };
 
   return (
     <GradientPaper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
@@ -56,7 +74,7 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
       </Typography>
       
       <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
-        Enterprise-grade camera authentication infrastructure for Google Cloud Platform
+        AI-Powered Camera Analytics Made Simple
       </Typography>
       
       <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 4 }}>
@@ -64,17 +82,74 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
         <Chip icon={<Cloud />} label="Cloud-Native" size="small" />
         <Chip label={`v${version}`} size="small" color="primary" />
       </Stack>
+
+      {licenseKey && (
+        <Card sx={{ mb: 4, maxWidth: 600, mx: 'auto', backgroundColor: 'primary.50' }}>
+          <CardContent>
+            <Stack direction="row" spacing={2} alignItems="center" justifyContent="center">
+              <KeyIcon color="primary" />
+              <Box textAlign="left">
+                <Typography variant="subtitle2" color="text.secondary">
+                  Your Trial License Key
+                </Typography>
+                <Typography variant="h6" fontFamily="monospace">
+                  {licenseKey}
+                </Typography>
+                {licenseEmail && (
+                  <Typography variant="caption" color="text.secondary">
+                    Assigned to: {licenseEmail}
+                  </Typography>
+                )}
+              </Box>
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
       
-      <Stack direction="column" spacing={2} alignItems="center">
-        <Button
-          variant="contained"
-          size="large"
-          startIcon={<Add />}
-          onClick={onNewDeployment}
-          sx={{ px: 6, py: 2, fontSize: '1.1rem' }}
-        >
-          Start Deployment
-        </Button>
+      <Grid container spacing={3} sx={{ mb: 4, maxWidth: 800, mx: 'auto' }}>
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%', cursor: 'pointer', transition: 'all 0.3s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}
+                onClick={() => onNavigate?.('camera-setup')}>
+            <CardContent sx={{ textAlign: 'center', py: 4 }}>
+              <Videocam sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+              <Typography variant="h5" gutterBottom>
+                Setup First Camera
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Get your camera running with AI analytics in under 10 minutes
+              </Typography>
+              <Button variant="contained" sx={{ mt: 2 }} startIcon={<RocketIcon />}>
+                Quick Start
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%', cursor: 'pointer', transition: 'all 0.3s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}
+                onClick={onNewDeployment}>
+            <CardContent sx={{ textAlign: 'center', py: 4 }}>
+              <Cloud sx={{ fontSize: 48, color: 'grey.600', mb: 2 }} />
+              <Typography variant="h5" gutterBottom>
+                Advanced Deployment
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Full GCP infrastructure setup with Vertex AI integration
+              </Typography>
+              <Button variant="outlined" sx={{ mt: 2 }} startIcon={<Add />}>
+                Advanced Setup
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Divider sx={{ mb: 3 }} />
+      
+      <Box sx={{ mt: 3 }}>
+        <Typography variant="body2" color="text.secondary" paragraph>
+          New to Anava Vision? Start with <strong>Camera Setup</strong> to see AI analytics in action immediately.
+        </Typography>
         
         <Button
           variant="text"
@@ -85,14 +160,6 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
         >
           Resume Previous Deployment
         </Button>
-      </Stack>
-      
-      <Box sx={{ mt: 6 }}>
-        <Typography variant="body2" color="text.secondary">
-          This tool will create and configure all necessary GCP resources for Anava's
-          camera authentication system, including Cloud Functions, API Gateway,
-          Firestore, and IAM configurations.
-        </Typography>
       </Box>
     </GradientPaper>
   );

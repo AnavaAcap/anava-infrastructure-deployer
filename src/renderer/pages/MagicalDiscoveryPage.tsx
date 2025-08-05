@@ -176,11 +176,13 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
           });
           
           // Connect NOW
+          const anavaKey = (window as any).__anavaLicenseKey;
           const connectResult = await window.electronAPI.magical.connectToCamera({
             apiKey,
             ip: firstCamera.ip,
             username: firstCamera.credentials?.username || 'root',
-            password: firstCamera.credentials?.password || 'pass'
+            password: firstCamera.credentials?.password || 'pass',
+            anavaKey
           });
           
           if (connectResult.success && connectResult.camera) {
@@ -241,11 +243,12 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
     try {
       // Get the API key from window storage
       const apiKey = (window as any).__magicalApiKey;
+      const anavaKey = (window as any).__anavaLicenseKey;
       if (!apiKey) {
         throw new Error('No API key available');
       }
       
-      const result = await window.electronAPI.magical.startExperience(apiKey);
+      const result = await window.electronAPI.magical.startExperience(apiKey, anavaKey);
       
       if (result.success && result.camera) {
         setCamera(result.camera);
@@ -286,6 +289,7 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
 
       // Get the API key from window storage
       const apiKey = (window as any).__magicalApiKey;
+      const anavaKey = (window as any).__anavaLicenseKey;
       if (!apiKey) {
         throw new Error('No API key available');
       }
@@ -294,7 +298,8 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
         apiKey,
         ip: manualIp,
         username: manualUsername,
-        password: manualPassword
+        password: manualPassword,
+        anavaKey
       });
       
       if (result.success && result.camera) {

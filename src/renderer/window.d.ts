@@ -75,7 +75,14 @@ declare global {
       configureCamera: (camera: any, config: any) => Promise<any>;
       pushCameraSettings: (ip: string, username: string, password: string, configPayload: any) => Promise<any>;
       getCameraSettings: (ip: string, username: string, password: string) => Promise<any>;
+      activateLicenseKey: (ip: string, username: string, password: string, licenseKey: string, applicationName: string) => Promise<void>;
       getNetworkInterfaces: () => Promise<any[]>;
+      // Speaker-related APIs
+      camera: {
+        testSpeaker: (speakerIp: string, username: string, password: string) => Promise<any>;
+        configureSpeaker: (cameraIp: string, speakerIp: string, username: string, password: string) => Promise<any>;
+        playSpeakerAudio: (speakerIp: string, username: string, password: string, audioFile: string) => Promise<any>;
+      };
       // ACAP download APIs
       acap: {
         getReleases: () => Promise<any[]>;
@@ -98,7 +105,7 @@ declare global {
           message?: string;
           error?: string;
         }>;
-        startExperience: (apiKey: string) => Promise<{
+        startExperience: (apiKey: string, anavaKey?: string) => Promise<{
           success: boolean;
           camera?: any;
           firstInsight?: string;
@@ -119,7 +126,47 @@ declare global {
           detail?: string;
         }) => void) => void;
         onCancelled: (callback: () => void) => void;
+        connectToCamera: (params: { 
+          apiKey: string; 
+          ip: string; 
+          username: string; 
+          password: string; 
+          anavaKey?: string;
+        }) => Promise<{
+          success: boolean;
+          camera?: any;
+          error?: string;
+        }>;
       };
+      // License Key Management APIs
+      license: {
+        getAssignedKey: () => Promise<{
+          success: boolean;
+          key?: string;
+          email?: string;
+          error?: string;
+        }>;
+        assignKey: (params: {
+          firebaseConfig: any;
+          email: string;
+          password: string;
+        }) => Promise<{
+          success: boolean;
+          key?: string;
+          email?: string;
+          alreadyAssigned?: boolean;
+          error?: string;
+        }>;
+        checkAvailability: (firebaseConfig: any) => Promise<{
+          success: boolean;
+          available?: number;
+          total?: number;
+          error?: string;
+        }>;
+      };
+      // Config value storage
+      setConfigValue: (key: string, value: any) => Promise<{ success: boolean; error?: string }>;
+      getConfigValue: (key: string) => Promise<any>;
     };
   }
 }

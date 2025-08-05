@@ -48,6 +48,27 @@ service cloud.firestore {
     match /prompts/{document=**} {
       allow read: if isAuthenticated();
     }
+    
+    // License key management rules
+    match /axis_keys/{keyId} {
+      // Only backend services can read/write axis keys
+      allow read, write: if false;
+    }
+    
+    // User profile rules
+    match /users/{userId} {
+      // Users can only read their own profile
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      // Only backend services can write user profiles
+      allow write: if false;
+    }
+    
+    // Admin configuration rules
+    match /admin_config/{document} {
+      // Only backend services can read/write admin config
+      allow read, write: if false;
+    }
+    
     // Deny access to all other paths by default
     match /{path=**} {
       allow read, write: if false;

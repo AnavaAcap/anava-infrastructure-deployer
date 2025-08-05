@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Drawer,
   List,
@@ -19,18 +19,20 @@ import {
   CheckCircle as CheckCircleIcon,
   Settings as SettingsIcon,
   Download as DownloadIcon,
+  Speaker as SpeakerIcon,
+  PlayCircleOutline as PlayCircleIcon,
 } from '@mui/icons-material';
 
 export type NavigationView = 
   | 'welcome' 
+  | 'camera-setup'
+  | 'speaker-config'
+  | 'detection-test'
   | 'gcp-setup' 
   | 'camera-discovery' 
   | 'acap-manager'
   | 'camera-deployment' 
-  | 'status'
-  | 'magical-welcome'
-  | 'magical-api-key'
-  | 'magical-discovery';
+  | 'status';
 
 interface NavigationSidebarProps {
   currentView: NavigationView;
@@ -45,6 +47,19 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   deploymentComplete,
   camerasConfigured 
 }) => {
+  const [version, setVersion] = useState<string>('0.9.71');
+
+  useEffect(() => {
+    const getVersion = async () => {
+      try {
+        const v = await window.electronAPI?.app?.getVersion();
+        if (v) setVersion(v);
+      } catch (error) {
+        console.error('Failed to get version:', error);
+      }
+    };
+    getVersion();
+  }, []);
   const menuItems = [
     { 
       id: 'welcome' as NavigationView, 
@@ -53,30 +68,38 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       alwaysEnabled: true 
     },
     { 
+      id: 'camera-setup' as NavigationView, 
+      label: 'Camera Setup', 
+      icon: <VideocamIcon />,
+      alwaysEnabled: true,
+      badge: 'NEW' as const
+    },
+    { 
+      id: 'speaker-config' as NavigationView, 
+      label: 'Speaker Config', 
+      icon: <SpeakerIcon />,
+      alwaysEnabled: true 
+    },
+    { 
+      id: 'detection-test' as NavigationView, 
+      label: 'Test Detection', 
+      icon: <PlayCircleIcon />,
+      alwaysEnabled: true 
+    },
+    { type: 'divider' },
+    { 
       id: 'gcp-setup' as NavigationView, 
       label: 'GCP Infrastructure', 
       icon: <CloudIcon />,
       alwaysEnabled: true,
-      status: deploymentComplete ? 'complete' : undefined
-    },
-    { 
-      id: 'camera-discovery' as NavigationView, 
-      label: 'Camera Discovery', 
-      icon: <VideocamIcon />,
-      alwaysEnabled: true 
+      status: deploymentComplete ? 'complete' : undefined,
+      tag: 'Advanced' as const
     },
     { 
       id: 'acap-manager' as NavigationView, 
       label: 'ACAP Manager', 
       icon: <DownloadIcon />,
       alwaysEnabled: true 
-    },
-    { 
-      id: 'camera-deployment' as NavigationView, 
-      label: 'ACAP Deployment', 
-      icon: <CloudUploadIcon />,
-      alwaysEnabled: true,
-      status: camerasConfigured ? 'complete' : undefined
     },
     { 
       id: 'status' as NavigationView, 
@@ -113,55 +136,86 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       <Divider />
       
       <List sx={{ px: 1, py: 2 }}>
-        {menuItems.map((item) => (
-          <ListItem key={item.id} disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton
-              selected={currentView === item.id}
-              onClick={() => onViewChange(item.id)}
-              sx={{
-                borderRadius: 1,
-                '&.Mui-selected': {
-                  backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 212, 255, 0.08)' : 'primary.light',
-                  '&:hover': {
-                    backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 212, 255, 0.12)' : 'primary.light',
+        {menuItems.map((item, index) => {
+          if ('type' in item && item.type === 'divider') {
+            return <Divider key={`divider-${index}`} sx={{ my: 1 }} />;
+          }
+          
+          return (
+            <ListItem key={item.id} disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton
+                selected={currentView === item.id}
+                onClick={() => onViewChange(item.id)}
+                sx={{
+                  borderRadius: 1,
+                  '&.Mui-selected': {
+                    backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 212, 255, 0.08)' : 'primary.light',
+                    '&:hover': {
+                      backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 212, 255, 0.12)' : 'primary.light',
+                    },
                   },
-                },
-              }}
-            >
-              <ListItemIcon 
-                sx={{ 
-                  color: currentView === item.id ? 'primary.main' : 'text.secondary',
-                  minWidth: 40,
                 }}
               >
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText 
-                primary={item.label}
-                primaryTypographyProps={{
-                  fontSize: '0.875rem',
-                  fontWeight: currentView === item.id ? 600 : 400,
-                }}
-              />
-              {item.status === 'complete' && (
-                <CheckCircleIcon 
+                <ListItemIcon 
                   sx={{ 
-                    fontSize: 18, 
-                    color: 'success.main',
-                    ml: 'auto' 
-                  }} 
+                    color: currentView === item.id ? 'primary.main' : 'text.secondary',
+                    minWidth: 40,
+                  }}
+                >
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={item.label}
+                  primaryTypographyProps={{
+                    fontSize: '0.875rem',
+                    fontWeight: currentView === item.id ? 600 : 400,
+                  }}
                 />
-              )}
-            </ListItemButton>
-          </ListItem>
-        ))}
+                {item.badge && (
+                  <Chip
+                    label={item.badge}
+                    size="small"
+                    color="primary"
+                    sx={{
+                      height: 20,
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      ml: 1,
+                    }}
+                  />
+                )}
+                {item.tag && (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'text.secondary',
+                      fontSize: '0.7rem',
+                      ml: 1,
+                    }}
+                  >
+                    {item.tag}
+                  </Typography>
+                )}
+                {item.status === 'complete' && (
+                  <CheckCircleIcon 
+                    sx={{ 
+                      fontSize: 18, 
+                      color: 'success.main',
+                      ml: 'auto' 
+                    }} 
+                  />
+                )}
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
       </List>
       
       <Box sx={{ flexGrow: 1 }} />
       
       <Box sx={{ p: 2, borderTop: '1px solid #e0e0e0' }}>
         <Typography variant="caption" color="text.secondary">
-          Version 0.9.2
+          Version {version}
         </Typography>
       </Box>
     </Drawer>

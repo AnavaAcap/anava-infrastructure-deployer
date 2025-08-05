@@ -8,14 +8,18 @@ import {
   CircularProgress,
   Alert,
   Paper,
-  Fade
+  Fade,
+  Divider,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import KeyIcon from '@mui/icons-material/Key';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import LockIcon from '@mui/icons-material/Lock';
 
 interface MagicalAPIKeyPageProps {
-  onKeyGenerated: (apiKey: string) => void;
+  onKeyGenerated: (apiKey: string, anavaKey?: string) => void;
   onBack: () => void;
 }
 
@@ -28,6 +32,8 @@ export const MagicalAPIKeyPage: React.FC<MagicalAPIKeyPageProps> = ({
   const [needsManual, setNeedsManual] = useState(false);
   const [error, setError] = useState('');
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [anavaKey, setAnavaKey] = useState('');
+  const [skipAnavaKey, setSkipAnavaKey] = useState(false);
 
   useEffect(() => {
     // Start automatic key generation
@@ -44,10 +50,10 @@ export const MagicalAPIKeyPage: React.FC<MagicalAPIKeyPageProps> = ({
       if (result.success && result.apiKey) {
         // Successfully generated key
         setProjectId(result.projectId || null);
-        // Small delay for visual feedback
-        setTimeout(() => {
-          onKeyGenerated(result.apiKey!);
-        }, 1000);
+        // Don't proceed immediately - let user add Anava key
+        setNeedsManual(true);
+        setManualKey(result.apiKey!);
+        setIsGenerating(false);
       } else if (result.needsManual) {
         // Need manual key creation - only when explicitly requested
         setNeedsManual(true);
@@ -71,7 +77,7 @@ export const MagicalAPIKeyPage: React.FC<MagicalAPIKeyPageProps> = ({
 
   const handleManualKey = () => {
     if (manualKey.trim()) {
-      onKeyGenerated(manualKey.trim());
+      onKeyGenerated(manualKey.trim(), skipAnavaKey ? undefined : anavaKey.trim());
     }
   };
 
@@ -191,6 +197,57 @@ export const MagicalAPIKeyPage: React.FC<MagicalAPIKeyPageProps> = ({
                     sx: { fontFamily: 'monospace' }
                   }}
                 />
+
+                <Divider sx={{ my: 3 }} />
+
+                <Box sx={{ mb: 3 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <LockIcon sx={{ mr: 1, color: 'text.secondary' }} />
+                    <Typography variant="h6">
+                      Anava License Key
+                    </Typography>
+                  </Box>
+                  
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      An Anava license key is required to enable all BatonAnalytic features. 
+                      If you don't have one yet, you can skip this step and add it later.
+                    </Typography>
+                  </Alert>
+
+                  <TextField
+                    fullWidth
+                    label="Anava License Key"
+                    placeholder="Enter your license key (e.g., XXXX-XXXX-XXXX-XXXX)"
+                    value={anavaKey}
+                    onChange={(e) => {
+                      setAnavaKey(e.target.value);
+                      if (e.target.value) {
+                        setSkipAnavaKey(false);
+                      }
+                    }}
+                    disabled={skipAnavaKey}
+                    sx={{ mb: 2 }}
+                    InputProps={{
+                      sx: { fontFamily: 'monospace' }
+                    }}
+                  />
+
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={skipAnavaKey}
+                        onChange={(e) => {
+                          setSkipAnavaKey(e.target.checked);
+                          if (e.target.checked) {
+                            setAnavaKey('');
+                          }
+                        }}
+                      />
+                    }
+                    label="Skip license key for now"
+                  />
+                </Box>
 
                 <Box sx={{ display: 'flex', gap: 2 }}>
                   <Button
