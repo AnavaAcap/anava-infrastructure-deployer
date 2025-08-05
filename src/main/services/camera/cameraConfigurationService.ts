@@ -436,26 +436,14 @@ export class CameraConfigurationService {
       console.log('[CameraConfig] Attempting license activation for', applicationName);
       console.log('[CameraConfig] License key:', licenseKey);
       
-      // IMPORTANT: This is a temporary hardcoded solution
-      // The XML license format with signature is specific to each camera serial number
-      // In production, you would need to:
-      // 1. Send the simple key + serial number to Anava's license server
-      // 2. Receive back the properly signed XML for that specific camera
-      // 3. Upload that XML to the camera
-      //
-      // For now, this only works for camera B8A44F45D624 with key 2Z7YMSDTTF44N5JAX422
-
-      // Approach 1: Try the XML format with hardcoded license data
-      // NOTE: This is a temporary solution - in production, you'd need to generate
-      // the proper XML with signature for each camera/license combination
+      // Approach 1: Get license XML from Anava's license server
       try {
-        const licenseUrl = `http://${ip}/axis-cgi/applications/license.cgi?action=uploadlicensekey&package=${applicationName}`;
+        console.log('[CameraConfig] Getting license XML from Anava license server...');
         
-        console.log('[CameraConfig] Trying license.cgi endpoint with XML format...');
-        
-        // Get camera serial number first
+        // Get camera serial number and model first
         const deviceInfoUrl = `http://${ip}/axis-cgi/basicdeviceinfo.cgi`;
         let serialNumber = '';
+        let modelName = '';
         
         try {
           const infoResponse1 = await axios.get(deviceInfoUrl, {
@@ -486,6 +474,12 @@ export class CameraConfigurationService {
                 serialNumber = serialMatch[1];
                 console.log('[CameraConfig] Camera serial number:', serialNumber);
               }
+              
+              const modelMatch = infoResponse2.data.match(/ProductFullName=([^\n]+)/);
+              if (modelMatch) {
+                modelName = modelMatch[1].trim();
+                console.log('[CameraConfig] Camera model:', modelName);
+              }
             }
           } else if (infoResponse1.status === 200) {
             const serialMatch = infoResponse1.data.match(/SerialNumber=([A-F0-9]+)/);
@@ -493,27 +487,57 @@ export class CameraConfigurationService {
               serialNumber = serialMatch[1];
               console.log('[CameraConfig] Camera serial number:', serialNumber);
             }
+            
+            const modelMatch = infoResponse1.data.match(/ProductFullName=([^\n]+)/);
+            if (modelMatch) {
+              modelName = modelMatch[1].trim();
+              console.log('[CameraConfig] Camera model:', modelName);
+            }
           }
         } catch (e) {
-          console.log('[CameraConfig] Could not get serial number');
+          console.log('[CameraConfig] Could not get device info');
         }
         
-        // Create the XML license format
-        // TODO: This needs to be dynamically generated based on the license key
-        // For now, using the hardcoded example for camera B8A44F45D624
-        const licenseXML = `<LicenseKey>
-    <Info></Info>
-    <FormatVersion>1</FormatVersion>
-    <ApplicationID>415129</ApplicationID>
-    <MinimumMajorVersion>-1</MinimumMajorVersion>
-    <MinimumMinorVersion>-1</MinimumMinorVersion>
-    <MaximumMajorVersion>-1</MaximumMajorVersion>
-    <MaximumMinorVersion>-1</MaximumMinorVersion>
-    <ExpirationDate>2025-09-04</ExpirationDate>
-    <DeviceID>${serialNumber || 'B8A44F45D624'}</DeviceID>
-    <SignatureKeyID>1</SignatureKeyID>
-    <Signature>CUGfNg4Rq6gd+/IJK/KIIPvbv2ElovWG9XE+Tys1K6tG7J1sP8IsUDmBO5wI3F3hq2esWJIL7KLIrSTuwExAf2bLDy6Z4rnLavsQPauLsuQhVNQkF7cRBQDdbfgK9dgo0ZYecHzIHmRdh/2XrFO28JRn5s6VXhO7L4FaWL1IHNs=</Signature>
-</LicenseKey>`;
+        if (!serialNumber) {
+          throw new Error('Could not retrieve camera serial number');
+        }
+        
+        // Step 1: Call Anava's license server to get the XML
+        console.log('[CameraConfig] Calling Anava license server...');
+        const licenseServerUrl = 'https://licensing.anava.ai/ebizz-acap-web/api/oldGw/v2/licensekey';
+        
+        const licenseRequest = {
+          code: licenseKey,
+          device: {
+            serialNumber: serialNumber,
+            modelName: modelName || 'AXIS Camera'
+          }
+        };
+        
+        console.log('[CameraConfig] License server request:', JSON.stringify(licenseRequest, null, 2));
+        
+        const licenseServerResponse = await axios.post(licenseServerUrl, licenseRequest, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          timeout: 30000
+        });
+        
+        if (licenseServerResponse.status !== 200) {
+          throw new Error(`License server returned status ${licenseServerResponse.status}`);
+        }
+        
+        const licenseData = licenseServerResponse.data;
+        console.log('[CameraConfig] License server response received');
+        
+        if (!licenseData.xml) {
+          throw new Error('License server did not return XML data');
+        }
+        
+        // Step 2: Upload the XML to the camera
+        const licenseUrl = `http://${ip}/axis-cgi/applications/license.cgi?action=uploadlicensekey&package=${applicationName}`;
+        const licenseXML = licenseData.xml;
 
         // Create form data with file upload
         const createFormData = () => {
@@ -562,34 +586,35 @@ export class CameraConfigurationService {
             if (licenseResponse2.status === 200) {
               const responseBody = licenseResponse2.data.toString().trim();
               if (responseBody === 'OK' || responseBody === '0') {
-                console.log('[CameraConfig] License key applied successfully via license.cgi with XML format');
+                console.log('[CameraConfig] License key applied successfully!');
                 return;
               } else if (responseBody === 'Error: 10') {
                 // Error 10 might indicate the license is already applied or was applied successfully
-                console.log('[CameraConfig] license.cgi returned Error: 10 - checking if license is now valid...');
-                // Could add a check here to verify the license status
+                console.log('[CameraConfig] license.cgi returned Error: 10 - may indicate license was already applied');
                 return;
               } else {
-                console.log('[CameraConfig] license.cgi XML response:', responseBody);
+                console.log('[CameraConfig] license.cgi response:', responseBody);
+                throw new Error(`License activation failed with response: ${responseBody}`);
               }
             }
           }
         } else if (licenseResponse1.status === 200) {
           const responseBody = licenseResponse1.data.toString().trim();
           if (responseBody === 'OK' || responseBody === '0') {
-            console.log('[CameraConfig] License key applied successfully via license.cgi with XML format (no auth)');
+            console.log('[CameraConfig] License key applied successfully! (no auth)');
             return;
           } else if (responseBody === 'Error: 10') {
             // Error 10 might indicate the license is already applied or was applied successfully
-            console.log('[CameraConfig] license.cgi returned Error: 10 - checking if license is now valid...');
-            // Could add a check here to verify the license status
+            console.log('[CameraConfig] license.cgi returned Error: 10 - may indicate license was already applied');
             return;
           } else {
-            console.log('[CameraConfig] license.cgi XML response:', responseBody);
+            console.log('[CameraConfig] license.cgi response:', responseBody);
+            throw new Error(`License activation failed with response: ${responseBody}`);
           }
         }
       } catch (error: any) {
-        console.log('[CameraConfig] license.cgi XML approach failed:', error.message);
+        console.log('[CameraConfig] License activation via Anava server failed:', error.message);
+        // Fall through to try the original approach
       }
 
       // Approach 2: Original control.cgi endpoint
