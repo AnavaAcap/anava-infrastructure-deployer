@@ -104,8 +104,13 @@ export class CameraConfigurationService {
             );
             console.log('[CameraConfig] License key activated successfully');
           } catch (licenseError: any) {
-            console.error('[CameraConfig] Failed to activate license key:', licenseError);
+            console.error('[CameraConfig] Failed to activate license key:', licenseError.message || licenseError);
+            console.error('[CameraConfig] License activation error details:', {
+              code: licenseError.code,
+              stack: licenseError.stack
+            });
             // Non-fatal - configuration succeeded, just license activation failed
+            // Don't throw the error, just log it
           }
         }
 
@@ -276,7 +281,11 @@ export class CameraConfigurationService {
                 console.log('[CameraConfig] License key activated successfully');
                 return { success: true, data: response2.data, licenseActivated: true };
               } catch (licenseError: any) {
-                console.error('[CameraConfig] Failed to activate license key:', licenseError);
+                console.error('[CameraConfig] Failed to activate license key:', licenseError.message || licenseError);
+                console.error('[CameraConfig] License activation error details:', {
+                  code: licenseError.code,
+                  stack: licenseError.stack
+                });
                 // Non-fatal - configuration succeeded, just license activation failed
                 return { success: true, data: response2.data, licenseActivated: false, licenseError: licenseError.message };
               }
@@ -299,7 +308,11 @@ export class CameraConfigurationService {
             console.log('[CameraConfig] License key activated successfully');
             return { success: true, data: response1.data, licenseActivated: true };
           } catch (licenseError: any) {
-            console.error('[CameraConfig] Failed to activate license key:', licenseError);
+            console.error('[CameraConfig] Failed to activate license key:', licenseError.message || licenseError);
+            console.error('[CameraConfig] License activation error details:', {
+              code: licenseError.code,
+              stack: licenseError.stack
+            });
             // Non-fatal - configuration succeeded, just license activation failed
             return { success: true, data: response1.data, licenseActivated: false, licenseError: licenseError.message };
           }
@@ -516,13 +529,27 @@ export class CameraConfigurationService {
         
         console.log('[CameraConfig] License server request:', JSON.stringify(licenseRequest, null, 2));
         
-        const licenseServerResponse = await axios.post(licenseServerUrl, licenseRequest, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          timeout: 30000
-        });
+        let licenseServerResponse;
+        try {
+          licenseServerResponse = await axios.post(licenseServerUrl, licenseRequest, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            timeout: 30000,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
+          });
+        } catch (serverError: any) {
+          console.error('[CameraConfig] License server error:', serverError.message);
+          if (serverError.code === 'ECONNABORTED') {
+            throw new Error('Connection to Anava license server timed out');
+          } else if (serverError.response) {
+            throw new Error(`License server returned error ${serverError.response.status}: ${serverError.response.data}`);
+          } else {
+            throw new Error(`Failed to contact license server: ${serverError.message}`);
+          }
+        }
         
         if (licenseServerResponse.status !== 200) {
           throw new Error(`License server returned status ${licenseServerResponse.status}`);
@@ -542,23 +569,27 @@ export class CameraConfigurationService {
         // Create form data with file upload
         const createFormData = () => {
           const form = new FormData();
-          form.append('fileData', Buffer.from(licenseXML), {
+          const buffer = Buffer.from(licenseXML);
+          form.append('fileData', buffer, {
             filename: 'license.xml',
-            contentType: 'application/octet-stream'
+            contentType: 'application/octet-stream',
+            knownLength: buffer.length
           });
           return form;
         };
 
-        // For FormData, we need different handling
-        const form = createFormData();
+        console.log('[CameraConfig] Uploading license XML to camera...');
         
         // First request to get digest challenge
-        const licenseResponse1 = await axios.post(licenseUrl, form, {
+        const form1 = createFormData();
+        const licenseResponse1 = await axios.post(licenseUrl, form1, {
           headers: {
-            ...form.getHeaders()
+            ...form1.getHeaders()
           },
           timeout: 30000,
-          validateStatus: () => true
+          validateStatus: () => true,
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity
         });
 
         if (licenseResponse1.status === 401) {
@@ -580,7 +611,9 @@ export class CameraConfigurationService {
                 ...form2.getHeaders(),
                 'Authorization': authHeader
               },
-              timeout: 30000
+              timeout: 30000,
+              maxBodyLength: Infinity,
+              maxContentLength: Infinity
             });
 
             if (licenseResponse2.status === 200) {
