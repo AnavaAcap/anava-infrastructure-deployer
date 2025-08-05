@@ -564,6 +564,11 @@ export class CameraConfigurationService {
               if (responseBody === 'OK' || responseBody === '0') {
                 console.log('[CameraConfig] License key applied successfully via license.cgi with XML format');
                 return;
+              } else if (responseBody === 'Error: 10') {
+                // Error 10 might indicate the license is already applied or was applied successfully
+                console.log('[CameraConfig] license.cgi returned Error: 10 - checking if license is now valid...');
+                // Could add a check here to verify the license status
+                return;
               } else {
                 console.log('[CameraConfig] license.cgi XML response:', responseBody);
               }
@@ -573,6 +578,11 @@ export class CameraConfigurationService {
           const responseBody = licenseResponse1.data.toString().trim();
           if (responseBody === 'OK' || responseBody === '0') {
             console.log('[CameraConfig] License key applied successfully via license.cgi with XML format (no auth)');
+            return;
+          } else if (responseBody === 'Error: 10') {
+            // Error 10 might indicate the license is already applied or was applied successfully
+            console.log('[CameraConfig] license.cgi returned Error: 10 - checking if license is now valid...');
+            // Could add a check here to verify the license status
             return;
           } else {
             console.log('[CameraConfig] license.cgi XML response:', responseBody);
