@@ -453,16 +453,23 @@ export class CameraConfigurationService {
       try {
         console.log('[CameraConfig] Getting license XML from Anava license server...');
         
+        // Wait a moment for camera to stabilize after ACAP installation
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         // Get camera serial number and model first
         const deviceInfoUrl = `http://${ip}/axis-cgi/basicdeviceinfo.cgi`;
         let serialNumber = '';
         let modelName = '';
         
         try {
+          console.log('[CameraConfig] Fetching device info from:', deviceInfoUrl);
           const infoResponse1 = await axios.get(deviceInfoUrl, {
-            timeout: 5000,
-            validateStatus: () => true
+            timeout: 10000,
+            validateStatus: () => true,
+            maxRedirects: 0
           });
+          
+          console.log('[CameraConfig] Device info response status:', infoResponse1.status);
           
           if (infoResponse1.status === 401) {
             const wwwAuth = infoResponse1.headers['www-authenticate'];
@@ -479,13 +486,17 @@ export class CameraConfigurationService {
                 headers: {
                   'Authorization': authHeader
                 },
-                timeout: 5000
+                timeout: 10000,
+                maxRedirects: 0
               });
               
+              console.log('[CameraConfig] Device info data length:', infoResponse2.data.length);
               const serialMatch = infoResponse2.data.match(/SerialNumber=([A-F0-9]+)/);
               if (serialMatch) {
                 serialNumber = serialMatch[1];
                 console.log('[CameraConfig] Camera serial number:', serialNumber);
+              } else {
+                console.log('[CameraConfig] No serial number found in response');
               }
               
               const modelMatch = infoResponse2.data.match(/ProductFullName=([^\n]+)/);
@@ -507,11 +518,14 @@ export class CameraConfigurationService {
               console.log('[CameraConfig] Camera model:', modelName);
             }
           }
-        } catch (e) {
-          console.log('[CameraConfig] Could not get device info');
+        } catch (e: any) {
+          console.log('[CameraConfig] Could not get device info:', e.message);
+          console.log('[CameraConfig] Will fall back to original license activation method');
         }
         
         if (!serialNumber) {
+          console.log('[CameraConfig] Could not retrieve camera serial number - falling back to control.cgi method');
+          // Don't throw, just fall through to the original method
           throw new Error('Could not retrieve camera serial number');
         }
         
@@ -575,6 +589,10 @@ export class CameraConfigurationService {
             contentType: 'application/octet-stream',
             knownLength: buffer.length
           });
+          // Set the form length to prevent stream issues
+          form.getLengthSync = () => {
+            return buffer.length + 200; // Add some overhead for form boundaries
+          };
           return form;
         };
 
@@ -665,12 +683,16 @@ export class CameraConfigurationService {
       };
 
       // First request to get digest challenge
-      const licenseResponse1 = await axios.post(licenseUrl, createParams(), {
+      const params1 = createParams();
+      const licenseResponse1 = await axios.post(licenseUrl, params1, {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': params1.length.toString()
         },
         timeout: 30000, // Increased timeout
-        validateStatus: () => true
+        validateStatus: () => true,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity
       });
 
       if (licenseResponse1.status === 401) {
@@ -686,12 +708,16 @@ export class CameraConfigurationService {
           );
 
           // Create fresh params for second request
-          const licenseResponse2 = await axios.post(licenseUrl, createParams(), {
+          const params2 = createParams();
+          const licenseResponse2 = await axios.post(licenseUrl, params2, {
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Length': params2.length.toString(),
               'Authorization': authHeader
             },
-            timeout: 30000
+            timeout: 30000,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
           });
 
           if (licenseResponse2.status === 200) {
@@ -751,6 +777,53 @@ export class CameraConfigurationService {
       
       // Log final status
       console.log('[CameraConfig] License activation completed - check camera status to verify');
+      
+      // Start the application after successful license activation
+      try {
+        console.log('[CameraConfig] Starting application:', applicationName);
+        const startUrl = `http://${ip}/axis-cgi/applications/control.cgi`;
+        const startParams = new URLSearchParams();
+        startParams.append('action', 'start');
+        startParams.append('package', applicationName);
+        
+        const startResponse1 = await axios.post(startUrl, startParams.toString(), {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          timeout: 10000,
+          validateStatus: () => true
+        });
+        
+        if (startResponse1.status === 401) {
+          const wwwAuth = startResponse1.headers['www-authenticate'];
+          if (wwwAuth && wwwAuth.includes('Digest')) {
+            const authHeader = this.buildDigestAuth(
+              username,
+              password,
+              'POST',
+              '/axis-cgi/applications/control.cgi',
+              wwwAuth
+            );
+            
+            const startResponse2 = await axios.post(startUrl, startParams.toString(), {
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': authHeader
+              },
+              timeout: 10000
+            });
+            
+            if (startResponse2.status === 200) {
+              console.log('[CameraConfig] Application started successfully');
+            }
+          }
+        } else if (startResponse1.status === 200) {
+          console.log('[CameraConfig] Application started successfully (no auth)');
+        }
+      } catch (startError: any) {
+        console.log('[CameraConfig] Failed to start application:', startError.message);
+        // Non-fatal - license is activated, just couldn't start
+      }
       
     } catch (error: any) {
       console.error('[CameraConfig] Error activating license key:', error);
