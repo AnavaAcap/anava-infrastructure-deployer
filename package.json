@@ -1,6 +1,6 @@
 {
   "name": "anava-vision",
-  "version": "0.9.83",
+  "version": "0.9.92",
   "description": "Anava Vision - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
@@ -111,6 +111,7 @@
     }
   },
   "devDependencies": {
+    "@google-cloud/firestore": "^7.11.3",
     "@types/archiver": "^6.0.3",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.15",
@@ -120,6 +121,7 @@
     "@typescript-eslint/eslint-plugin": "^8.37.0",
     "@typescript-eslint/parser": "^8.37.0",
     "@vitejs/plugin-react": "^4.7.0",
+    "csv-parse": "^6.1.0",
     "electron": "^37.2.3",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
@@ -136,7 +138,6 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@google-cloud/api-gateway": "^4.2.0",
-    "@google-cloud/firestore": "^7.11.3",
     "@google-cloud/functions": "^4.2.0",
     "@google-cloud/iam": "^2.3.0",
     "@google-cloud/resource-manager": "^6.2.0",
@@ -149,8 +150,9 @@
     "axios": "^1.10.0",
     "bonjour-service": "^1.2.1",
     "electron-store": "^8.1.0",
+    "firebase": "^12.0.0",
     "form-data": "^4.0.0",
-    "google-auth-library": "^10.1.0",
+    "google-auth-library": "^10.2.1",
     "googleapis": "^153.0.0",
     "node-ssdp": "^4.0.1",
     "p-queue": "^7.4.1",

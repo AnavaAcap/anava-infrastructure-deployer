@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     login: () => ipcRenderer.invoke('auth:login'),
     logout: () => ipcRenderer.invoke('auth:logout'),
     getProjects: () => ipcRenderer.invoke('auth:get-projects'),
+    // Unified authentication
+    unifiedGoogle: () => ipcRenderer.invoke('auth:unified-google'),
+    unifiedSignOut: () => ipcRenderer.invoke('auth:unified-signout'),
   },
   state: {
     get: () => ipcRenderer.invoke('state:get'),
@@ -122,7 +125,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAssignedKey: () => ipcRenderer.invoke('license:get-assigned-key'),
     assignKey: (params: { firebaseConfig: any; email: string; password: string }) => 
       ipcRenderer.invoke('license:assign-key', params),
+    assignWithGoogle: (params: { idToken: string; firebaseConfig: any }) =>
+      ipcRenderer.invoke('license:assign-with-google', params),
     checkAvailability: (firebaseConfig: any) => ipcRenderer.invoke('license:check-availability', firebaseConfig),
+    setManualKey: (params: { key: string; email?: string }) => 
+      ipcRenderer.invoke('license:set-manual-key', params),
   },
   // Config value storage
   setConfigValue: (key: string, value: any) => ipcRenderer.invoke('config:set-value', key, value),

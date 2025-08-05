@@ -262,6 +262,17 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
             credentials: credentials[camera.id]
           };
           
+          // Validate credentials exist
+          if (!cameraWithCreds.credentials || !cameraWithCreds.credentials.username || !cameraWithCreds.credentials.password) {
+            addLog(`✗ Missing credentials for ${camera.model}`);
+            setDeploymentStatus(prev => {
+              const newMap = new Map(prev);
+              newMap.set(camera.id, { cameraId: camera.id, status: 'error', message: 'Missing credentials' });
+              return newMap;
+            });
+            continue;
+          }
+          
           const currentIP = cameraIPs[camera.id] || camera.ip;
           addLog(`Connecting to ${currentIP} with user '${credentials[camera.id].username}'...`);
           addLog(`Testing camera connection...`);
@@ -289,7 +300,13 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                 );
                 addLog(`✓ License key activated successfully`);
               } catch (licenseError: any) {
-                addLog(`⚠ License activation failed: ${licenseError.message}`);
+                if (licenseError.message?.includes('already licensed')) {
+                  addLog(`✓ Camera already has a valid license`);
+                } else if (licenseError.message?.includes('stream has been aborted')) {
+                  addLog(`⚠ License activation timeout - camera may be processing the request`);
+                } else {
+                  addLog(`⚠ License activation failed: ${licenseError.message}`);
+                }
                 // Non-fatal - continue with deployment
               }
             }

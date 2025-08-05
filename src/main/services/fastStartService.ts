@@ -114,19 +114,20 @@ export class FastStartService extends EventEmitter {
   }
 
   /**
-   * Find first camera with anava/baton or axis/baton credentials
+   * Find first camera - this method should not be used
    */
   private async findFirstCamera(): Promise<CameraInfo | null> {
-    // Try common credentials
-    const credentialsList = [
-      { username: 'anava', password: 'baton' },
-      { username: 'axis', password: 'baton' },
-      { username: 'root', password: 'pass' },
-      { username: 'root', password: 'root' },
-      { username: 'admin', password: 'admin' },
-      { username: 'root', password: '' }  // Some cameras have no password
-    ];
-    
+    // This method relies on hardcoded credentials which we've removed
+    // The startMagicalExperience method should be modified to require credentials
+    logger.error('findFirstCamera called without credentials - this is not supported');
+    return null;
+  }
+
+  /**
+   * DEPRECATED - Original method kept for reference but not used
+   */
+  // @ts-ignore - deprecated method
+  private async findFirstCameraDeprecated(): Promise<CameraInfo | null> {
     // First, try recently connected IPs from ARP/netstat
     const recentIPs = await this.getRecentlyConnectedIPs();
     if (recentIPs.length > 0) {
@@ -142,10 +143,10 @@ export class FastStartService extends EventEmitter {
         
         // Test all IPs in parallel
         const promises: Promise<CameraInfo | null>[] = [];
-        for (const ip of batch) {
-          // Only test port 80 first for speed
-          promises.push(this.quickTestCamera(ip, credentialsList));
-        }
+        // for (const ip of batch) {
+        //   // Only test port 80 first for speed
+        //   // promises.push(this.quickTestCamera(ip, credentialsList)); // No hardcoded credentials
+        // }
         
         const results = await Promise.allSettled(promises);
         for (const result of results) {
@@ -159,7 +160,7 @@ export class FastStartService extends EventEmitter {
     
     // If no camera found in recent connections, fall back to full scan
     const commonIPs = this.generateCommonCameraIPs();
-    logger.info(`Starting full scan across ${commonIPs.length} IPs with credentials: ${credentialsList.map(c => c.username).join(', ')}`);
+    logger.info(`Starting full scan across ${commonIPs.length} IPs`);
     
     // Try common IPs in parallel batches
     const batchSize = 20; // Increased batch size for faster scanning
@@ -171,11 +172,12 @@ export class FastStartService extends EventEmitter {
       
       // Try each IP with each credential set
       const promises: Promise<CameraInfo | null>[] = [];
-      for (const ip of batch) {
-        for (const credentials of credentialsList) {
-          promises.push(this.tryCamera(ip, credentials));
-        }
-      }
+      // for (const ip of batch) {
+      //   // No hardcoded credentials - skip
+      //   // for (const credentials of credentialsList) {
+      //   //   promises.push(this.tryCamera(ip, credentials));
+      //   // }
+      // }
       
       try {
         const results = await Promise.allSettled(promises);
@@ -1228,6 +1230,7 @@ export class FastStartService extends EventEmitter {
    * Quick test camera - optimized for speed
    * Tests only port 80 first, with all credentials in parallel
    */
+  // @ts-ignore - deprecated method
   private async quickTestCamera(ip: string, credentialsList: { username: string; password: string }[]): Promise<CameraInfo | null> {
     if (this.abortController?.signal.aborted) return null;
     

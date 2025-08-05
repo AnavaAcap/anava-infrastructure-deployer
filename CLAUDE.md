@@ -79,7 +79,7 @@
 }
 ```
 
-## Current State (v0.9.63)
+## Legacy Notes (v0.9.63)
 
 ### ✅ Code Signing & Distribution Fixed (Aug 1, 2025)
 - Fixed "damaged and can't be opened" error on macOS
@@ -100,22 +100,41 @@
 - `APPLE_ID_PASSWORD`: App-specific password
 - `APPLE_TEAM_ID`: Your Apple Developer Team ID (e.g., "3JVZNWGRYT")
 
-## Current State (v0.9.71)
+## Current State (v0.9.83)
 
-### Magical Installer Experience (Fixed in v0.9.71)
-- **Automatic Camera Discovery**: Pre-discovered cameras connect automatically
-- **ACAP Deployment**: Detects if BatonAnalytic is already installed (XML parsing fixed)
-- **Scene Analysis**: Captures and displays first image with AI description
-- **Error Handling**: Proper error serialization and visibility
-- **Image Display**: Fixed CSP to allow base64 data URIs
-- **API Integration**: Updated getSceneDescription to include GeminiApiKey parameter
+### Camera Setup Architecture
 
-### Known Issues Resolved
-- ✅ Empty error objects in ACAP deployment (fixed error serialization)
-- ✅ XML parsing for installed ACAPs (camera returns XML not text)
-- ✅ Duplicate connection attempts (added isConnecting flag)
-- ✅ Image display blocked by CSP (added img-src data: directive)
-- ✅ Scene description timeout (increased from 5s to 15s)
+#### Manual IP Connection Flow (`/src/renderer/pages/CameraSetupPage.tsx`)
+1. User enters IP and credentials → `handleManualConnect()` (line 110)
+2. Calls IPC `quickScanCamera` → returns camera array with auth status
+3. **Key Logic**: Check `discoveredCamera.status === 'accessible' || discoveredCamera.authenticated === true`
+4. **Common Issues**: 
+   - Auth succeeds but UI doesn't update (check console logs)
+   - Camera object missing `accessible` property
+   - Error messages not visible in current step
+
+#### Camera Discovery Service (`/src/main/services/camera/optimizedCameraDiscoveryService.ts`)
+- `quickScanSpecificCamera()` (line 434): Returns camera array with error details
+- `checkAxisCameraWithError()` (line 499): Returns `{camera, error}` for better debugging
+- `digestAuthWithError()` (line 565): Returns auth errors with specific messages
+- **Auth Flow**: 401 challenge → Digest auth → 200 success (normal pattern)
+
+#### License Key Handling
+1. **Trial License**: Auto-generates email, uses Firebase function
+2. **Manual License**: Direct entry, stored via `setManualLicenseKey()`
+3. **UI Flow**: No license → Prompt appears → User selects mode → Key applied
+
+### Known UI/UX Issues (v0.9.83)
+- ❌ Manual connection success not clearly shown in UI
+- ❌ Error alerts may appear outside visible step area
+- ❌ "Connecting..." state doesn't always clear on error
+- ❌ Need better logging for IPC responses
+
+### Recent Changes (v0.9.83)
+- **Removed hardcoded credentials**: No more fallback `root:pass` 
+- **Added manual license key entry**: Users can enter existing licenses
+- **Improved error handling**: Auth errors now return specific messages
+- **Fixed Stack import**: Added missing MUI import in SpeakerConfigPage
 
 ### What's Automated
 - GCP project setup and API enablement
@@ -194,3 +213,37 @@ curl -X POST "https://YOUR-GATEWAY-URL/device-auth/initiate" \
   -H "Content-Type: application/json" \
   -d '{"device_id": "test-device"}' -v
 ```
+
+## Debugging Camera Connection Issues
+
+### Check Console for IPC Results
+```javascript
+// In CameraSetupPage handleManualConnect(), after quickScanCamera:
+console.log('Quick scan result:', {
+  result,
+  hasResult: !!result,
+  length: result?.length,
+  firstItem: result?.[0],
+  accessible: result?.[0]?.accessible,
+  authenticated: result?.[0]?.authenticated,
+  status: result?.[0]?.status,
+  error: result?.[0]?.error
+});
+```
+
+### Test Camera Auth Manually
+```bash
+# Test digest auth with curl
+curl -v --digest -u anava:baton \
+  "http://192.168.50.156/axis-cgi/param.cgi?action=list&group=Brand"
+```
+
+### Common Authentication Patterns
+- **Success**: 401 → Auth challenge → 200 with data
+- **Wrong credentials**: 401 → Auth challenge → 401 again
+- **Network issue**: Connection timeout or refused
+
+### Key Files for Debugging
+- **UI Logic**: `/src/renderer/pages/CameraSetupPage.tsx:110-210`
+- **IPC Handlers**: `/src/main/services/camera/optimizedCameraDiscoveryService.ts:110-115`
+- **Auth Logic**: `/src/main/services/camera/optimizedCameraDiscoveryService.ts:565-625`

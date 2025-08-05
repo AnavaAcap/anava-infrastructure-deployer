@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "predeploy": [
+      "npm --prefix \"$RESOURCE_DIR\" install"
+    ],
+    "source": "functions/assign-axis-key"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

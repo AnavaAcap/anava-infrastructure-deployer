@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import axios from 'axios';
 import crypto from 'crypto';
-import FormData from 'form-data';
+// import FormData from 'form-data'; // Not used in current implementation
 import { Camera } from './cameraDiscoveryService';
 
 export interface ConfigurationResult {
@@ -423,6 +423,17 @@ export class CameraConfigurationService {
         console.warn(`[CameraConfig] Application ${applicationName} not found on camera, skipping license activation`);
         return;
       }
+      
+      // Check if application is already licensed
+      // VAPIX list.cgi returns format: <application> <version> - <status>
+      // Example: "BatonAnalytic 3.7.62 - Status: Registered"
+      const appLines = appListData.split('\n');
+      const appLine = appLines.find(line => line.includes(applicationName));
+      
+      if (appLine && appLine.includes('Status: Registered')) {
+        console.log(`[CameraConfig] ${applicationName} is already licensed, skipping activation`);
+        return;
+      }
 
       // Now activate the license key using the correct VAPIX endpoint
       const licenseUrl = `http://${ip}/axis-cgi/applications/control.cgi`;
@@ -706,11 +717,11 @@ export class CameraConfigurationService {
     console.log(`[CameraConfig] Loading audio clip: ${clipName}`);
     
     // Map clip names to actual audio data
-    const clips: { [key: string]: string } = {
-      'security-alert': 'Security alert. This area is being monitored.',
-      'weapon-detected': 'Weapon detected. Security has been notified.',
-      'custom-message': 'Please maintain social distance.'
-    };
+    // const clips: { [key: string]: string } = {
+    //   'security-alert': 'Security alert. This area is being monitored.',
+    //   'weapon-detected': 'Weapon detected. Security has been notified.',
+    //   'custom-message': 'Please maintain social distance.'
+    // };
     
     // For demo purposes, return test tone
     // In production, this would load actual MP3 files

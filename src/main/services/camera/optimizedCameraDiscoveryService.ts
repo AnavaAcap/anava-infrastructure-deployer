@@ -54,12 +54,7 @@ const DEFAULT_CAMERA_PORTS = {
   extended: [8443, 81, 8081]  // Finally these (2% of cameras)
 };
 
-const DEFAULT_CREDENTIALS = [
-  { username: 'root', password: 'pass' },
-  { username: 'admin', password: 'admin' },
-  { username: 'root', password: '' },
-  { username: 'admin', password: '12345' }
-];
+// Credentials should be provided by the user, not hardcoded
 
 export class OptimizedCameraDiscoveryService {
   private axiosInstance: AxiosInstance;
@@ -111,7 +106,10 @@ export class OptimizedCameraDiscoveryService {
       return this.discoverViaServices(event.sender);
     });
     
-    ipcMain.handle('quick-scan-camera', async (_event, ip: string, username = 'root', password = 'pass') => {
+    ipcMain.handle('quick-scan-camera', async (_event, ip: string, username: string, password: string) => {
+      if (!username || !password) {
+        throw new Error('Username and password are required');
+      }
       return this.quickScanSpecificCamera(ip, username, password);
     });
     
@@ -191,7 +189,12 @@ export class OptimizedCameraDiscoveryService {
           break;
         }
         
-        const result = await this.scanIP(ip, ports, options?.credentials || DEFAULT_CREDENTIALS, sender, networkSpeaker || undefined);
+        const credentials = options?.credentials || [];
+        if (credentials.length === 0) {
+          console.log(`Skipping ${ip} - no credentials provided`);
+          continue;
+        }
+        const result = await this.scanIP(ip, ports, credentials, sender, networkSpeaker || undefined);
         
         if (result.camera) {
           networkCamera = result.camera;
@@ -334,16 +337,8 @@ export class OptimizedCameraDiscoveryService {
             headers.SERVER?.toLowerCase().includes('axis') ||
             headers.SERVER?.toLowerCase().includes('camera')) {
           
-          const result = await this.scanIP(
-            rinfo.address,
-            [...DEFAULT_CAMERA_PORTS.priority],
-            DEFAULT_CREDENTIALS
-          );
-          
-          if (result.camera) {
-            result.camera.discoveryMethod = 'ssdp';
-            cameras.push(result.camera);
-          }
+          // Skip SSDP discovered devices without credentials
+          console.log(`  Found SSDP device but skipping - no credentials provided`);
         }
       });
       
@@ -436,28 +431,77 @@ export class OptimizedCameraDiscoveryService {
     return {};
   }
 
-  async quickScanSpecificCamera(ip: string, username = 'root', password = 'pass'): Promise<Camera[]> {
+  async quickScanSpecificCamera(ip: string, username: string, password: string): Promise<Camera[]> {
     try {
       console.log(`=== Quick scanning camera at ${ip} ===`);
       
       // Try all common ports
       const ports = [...DEFAULT_CAMERA_PORTS.priority, ...DEFAULT_CAMERA_PORTS.common];
+      let lastAuthError: string | null = null;
+      let foundOpenPort = false;
       
       for (const port of ports) {
-        const protocol = port === 443 || port === 8443 ? 'https' : 'http';
-        const camera = await this.checkAxisCamera(ip, username, password, port, protocol);
-        
-        if (camera) {
-          console.log(`✓ Found camera at ${ip}:${port}`);
-          return [camera];
+        // First check if port is open
+        if (await this.checkTCPConnection(ip, port, 2000)) {
+          foundOpenPort = true;
+          const protocol = port === 443 || port === 8443 ? 'https' : 'http';
+          
+          // Try to authenticate and get camera info
+          const authResult = await this.checkAxisCameraWithError(ip, username, password, port, protocol);
+          
+          if (authResult.camera) {
+            console.log(`✓ Found camera at ${ip}:${port}`);
+            return [authResult.camera];
+          } else if (authResult.error) {
+            lastAuthError = authResult.error;
+            console.log(`✗ Authentication failed on port ${port}: ${authResult.error}`);
+          }
         }
       }
       
-      console.log(`✗ No camera found at ${ip}`);
+      // Return a camera object with error status
+      if (foundOpenPort && lastAuthError) {
+        console.log(`✗ Camera found but authentication failed at ${ip}`);
+        return [{
+          id: `camera-${ip.replace(/\./g, '-')}`,
+          ip: ip,
+          port: 80,
+          protocol: 'http',
+          type: 'Unknown',
+          model: 'Authentication Failed',
+          manufacturer: 'Unknown',
+          mac: null,
+          capabilities: [],
+          discoveredAt: new Date().toISOString(),
+          discoveryMethod: 'manual',
+          status: 'requires_auth',
+          httpUrl: `http://${ip}`,
+          authenticated: false,
+          error: lastAuthError
+        }];
+      }
+      
+      console.log(`✗ No camera found at ${ip} (no open ports)`);
       return [];
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error scanning ${ip}:`, error);
-      return [];
+      return [{
+        id: `camera-${ip.replace(/\./g, '-')}`,
+        ip: ip,
+        port: 80,
+        protocol: 'http',
+        type: 'Unknown',
+        model: 'Connection Error',
+        manufacturer: 'Unknown',
+        mac: null,
+        capabilities: [],
+        discoveredAt: new Date().toISOString(),
+        discoveryMethod: 'manual',
+        status: 'error',
+        httpUrl: `http://${ip}`,
+        authenticated: false,
+        error: error.message || 'Connection failed'
+      }];
     }
   }
 
@@ -498,6 +542,72 @@ export class OptimizedCameraDiscoveryService {
         authenticated: false,
         message: `Error: ${error.message}`
       };
+    }
+  }
+
+  private async checkAxisCameraWithError(
+    ip: string,
+    username: string,
+    password: string,
+    port = 80,
+    protocol: 'http' | 'https' = 'http'
+  ): Promise<{ camera: Camera | null; error: string | null }> {
+    try {
+      console.log(`  Checking Axis camera at ${protocol}://${ip}:${port}`);
+      
+      // Try to get device info with digest auth
+      const authResult = await this.digestAuthWithError(
+        ip,
+        username,
+        password,
+        '/axis-cgi/param.cgi?action=list&group=Brand',
+        port,
+        protocol
+      );
+      
+      if (authResult.data && authResult.data.includes('Brand=AXIS')) {
+        console.log(`  ✓ Confirmed Axis device at ${ip}`);
+        const modelMatch = authResult.data.match(/ProdNbr=([^\r\n]+)/);
+        const typeMatch = authResult.data.match(/ProdType=([^\r\n]+)/);
+        const productType = typeMatch ? typeMatch[1] : '';
+        
+        // Filter out non-camera devices
+        if (productType.toLowerCase().includes('speaker') || 
+            productType.toLowerCase().includes('audio') ||
+            productType.toLowerCase().includes('sound')) {
+          console.log(`  ✗ Not a camera - Found speaker device: ${productType} at ${ip}`);
+          return { camera: null, error: 'Device is a speaker, not a camera' };
+        }
+        
+        const camera: Camera = {
+          id: `camera-${ip.replace(/\./g, '-')}-${port}`,
+          ip: ip,
+          port: port,
+          protocol: protocol,
+          type: 'Axis Camera',
+          model: modelMatch ? modelMatch[1] : 'Unknown Model',
+          manufacturer: 'Axis Communications',
+          mac: await this.getMACAddress(ip),
+          capabilities: ['HTTP', 'HTTPS', 'ACAP', 'VAPIX', 'RTSP'],
+          discoveredAt: new Date().toISOString(),
+          discoveryMethod: 'scan',
+          status: 'accessible',
+          credentials: { username, password },
+          rtspUrl: `rtsp://${username}:${password}@${ip}:554/axis-media/media.amp`,
+          httpUrl: `http://${ip}:${port === 80 ? '' : port}`,
+          httpsUrl: protocol === 'https' ? `https://${ip}:${port === 443 ? '' : port}` : undefined,
+          authenticated: true
+        };
+        
+        return { camera, error: null };
+      } else if (authResult.error) {
+        return { camera: null, error: authResult.error };
+      }
+      
+      return { camera: null, error: 'Not an Axis device' };
+    } catch (error: any) {
+      console.error(`  ✗ Error checking camera:`, error.message);
+      return { camera: null, error: error.message || 'Connection failed' };
     }
   }
 
@@ -566,6 +676,67 @@ export class OptimizedCameraDiscoveryService {
   }
 
 
+
+  private async digestAuthWithError(
+    ip: string,
+    username: string,
+    password: string,
+    path: string,
+    port = 80,
+    protocol: 'http' | 'https' = 'http'
+  ): Promise<{ data: string | null; error: string | null }> {
+    try {
+      const url = `${protocol}://${ip}:${port}${path}`;
+      console.log(`    Attempting digest auth to ${url}`);
+      
+      // First request to get the digest challenge
+      const response1 = await this.axiosInstance.get(url, {
+        timeout: 5000,
+        validateStatus: () => true
+      });
+
+      console.log(`    Initial response: ${response1.status}`);
+      
+      if (response1.status === 401) {
+        const wwwAuth = response1.headers['www-authenticate'];
+        
+        if (wwwAuth && wwwAuth.includes('Digest')) {
+          const digestData = this.parseDigestAuth(wwwAuth);
+          const authHeader = this.buildDigestHeader(username, password, 'GET', path, digestData);
+          
+          const response2 = await this.axiosInstance.get(url, {
+            headers: { 'Authorization': authHeader },
+            timeout: 5000,
+            validateStatus: () => true
+          });
+
+          console.log(`    Auth response: ${response2.status}`);
+          
+          if (response2.status === 200) {
+            return { data: response2.data, error: null };
+          } else if (response2.status === 401) {
+            return { data: null, error: 'Invalid username or password' };
+          } else {
+            return { data: null, error: `HTTP ${response2.status}: ${response2.statusText}` };
+          }
+        } else {
+          return { data: null, error: 'Device does not support digest authentication' };
+        }
+      } else if (response1.status === 200) {
+        return { data: response1.data, error: null };
+      } else {
+        return { data: null, error: `HTTP ${response1.status}: ${response1.statusText}` };
+      }
+    } catch (error: any) {
+      console.log(`    Auth error: ${error.message}`);
+      if (error.code === 'ECONNREFUSED') {
+        return { data: null, error: `Cannot connect to ${ip}:${port}` };
+      } else if (error.code === 'ETIMEDOUT') {
+        return { data: null, error: `Connection timeout to ${ip}:${port}` };
+      }
+      return { data: null, error: error.message || 'Connection failed' };
+    }
+  }
 
   private async digestAuth(
     ip: string,
@@ -868,10 +1039,8 @@ export class OptimizedCameraDiscoveryService {
       const orderedIPs = [...commonCameraIPs, ...otherIPs];
 
       const ports = [80, 443];
-      const credentials = [
-        { username: 'root', password: 'pass' },
-        { username: 'anava', password: 'baton' }
-      ];
+      // Do not use hardcoded credentials for pre-discovery
+      const credentials: Array<{ username: string; password: string }> = [];
 
       // Use higher concurrency for faster discovery
       const queue = new PQueue({ concurrency: 30 });

@@ -13,6 +13,7 @@ import { getLogger } from './utils/logger';
 import { configCacheService } from './services/configCache';
 import { fastStartService } from './services/fastStartService';
 import { AIStudioService } from './services/aiStudioService';
+import { UnifiedAuthService } from './services/unifiedAuthService';
 import { google } from 'googleapis';
 
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
@@ -22,6 +23,7 @@ let mainWindow: BrowserWindow | null = null;
 let deploymentEngine: DeploymentEngine;
 let stateManager: StateManager;
 let gcpOAuthService: GCPOAuthService;
+let unifiedAuthService: UnifiedAuthService;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -54,6 +56,24 @@ function createWindow() {
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+  });
+
+  // Configure Content Security Policy for Google Sign-In and Firebase Auth
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://*.firebaseapp.com https://*.googleapis.com; " +
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+          "font-src 'self' https://fonts.gstatic.com; " +
+          "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com; " +
+          "img-src 'self' data: https:; " +
+          "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com;"
+        ]
+      }
+    });
   });
 
   if (isDevelopment) {
@@ -109,6 +129,7 @@ app.whenReady().then(() => {
   // Initialize services
   stateManager = new StateManager();
   gcpOAuthService = new GCPOAuthService();
+  unifiedAuthService = new UnifiedAuthService();
   deploymentEngine = new DeploymentEngine(stateManager, gcpOAuthService);
   
   // Initialize camera services
@@ -260,7 +281,15 @@ ipcMain.handle('auth:login', async () => {
 });
 
 ipcMain.handle('auth:logout', async () => {
+  // Clear GCP auth
   await gcpOAuthService.logout();
+  
+  // Clear cached license key
+  const { LicenseKeyService } = await import('./services/licenseKeyService');
+  const licenseService = new LicenseKeyService();
+  licenseService.clearCachedLicenseKey();
+  licenseService.dispose();
+  
   return { success: true };
 });
 
@@ -658,8 +687,8 @@ ipcMain.handle('license:assign-key', async (_, params: {
     // Initialize with Firebase config
     await licenseService.initialize(params.firebaseConfig);
     
-    // Sign in user
-    await licenseService.signIn(params.email, params.password);
+    // Create user or sign in if already exists
+    await licenseService.createOrSignInUser(params.email, params.password);
     
     // Request license key assignment
     const result = await licenseService.assignLicenseKey();
@@ -699,6 +728,76 @@ ipcMain.handle('license:check-availability', async (_, firebaseConfig: any) => {
     };
   } catch (error: any) {
     logger.error('Failed to check license availability:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('license:set-manual-key', async (_, params: { 
+  key: string;
+  email?: string;
+}) => {
+  try {
+    const { LicenseKeyService } = await import('./services/licenseKeyService');
+    const licenseService = new LicenseKeyService();
+    
+    const result = await licenseService.setManualLicenseKey(params.key, params.email);
+    
+    licenseService.dispose();
+    
+    return result;
+  } catch (error: any) {
+    logger.error('Failed to set manual license key:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Unified authentication handler
+ipcMain.handle('auth:unified-google', async () => {
+  try {
+    if (!mainWindow) {
+      throw new Error('Main window not available');
+    }
+    
+    // Check for existing valid auth first
+    const existingAuth = await unifiedAuthService.getStoredAuth();
+    if (existingAuth) {
+      return existingAuth;
+    }
+    
+    // Perform new authentication
+    const result = await unifiedAuthService.authenticate(mainWindow);
+    return result;
+  } catch (error: any) {
+    logger.error('Unified authentication failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Unified auth sign out
+ipcMain.handle('auth:unified-signout', async () => {
+  try {
+    await unifiedAuthService.signOut();
+    return { success: true };
+  } catch (error: any) {
+    logger.error('Sign out failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Google Sign-In license assignment
+ipcMain.handle('license:assign-with-google', async (_, params: {
+  idToken: string;
+  firebaseConfig: any;
+}) => {
+  try {
+    const { GoogleLicenseService } = await import('./services/googleLicenseService');
+    const googleLicenseService = new GoogleLicenseService();
+    
+    const result = await googleLicenseService.assignLicenseWithGoogle(params);
+    
+    return result;
+  } catch (error: any) {
+    logger.error('Failed to assign license with Google:', error);
     return { success: false, error: error.message };
   }
 });

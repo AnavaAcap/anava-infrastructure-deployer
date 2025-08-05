@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Box, Container, ThemeProvider, CssBaseline, Typography, Button, CircularProgress } from '@mui/material';
 import WelcomePage from './pages/WelcomePage';
+import LoginPageUnified from './pages/LoginPageUnified';
 import AuthenticationPage from './pages/AuthenticationPage';
 import AIModeSelectionPage from './pages/AIModeSelectionPage';
 import ConfigurationPage from './pages/ConfigurationPage';
@@ -31,7 +32,9 @@ function App() {
   const [deploymentComplete, setDeploymentComplete] = useState(false);
   const [camerasConfigured, setCamerasConfigured] = useState(false);
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
-  const [eulaAccepted, setEulaAccepted] = useState(false);
+  // TEMPORARY: Set to true to bypass EULA during development
+  // Change back to false for production
+  const [eulaAccepted, setEulaAccepted] = useState(true); // TEMPORARILY BYPASSED
 
   useEffect(() => {
     // Subscribe to deployment events
@@ -40,6 +43,7 @@ function App() {
     // Check EULA acceptance
     const checkEula = () => {
       const accepted = localStorage.getItem('eulaAccepted') === 'true';
+      console.log('EULA acceptance status:', accepted);
       setEulaAccepted(accepted);
     };
 
@@ -50,11 +54,13 @@ function App() {
         const licenseResult = await window.electronAPI.license.getAssignedKey();
         if (licenseResult.success && licenseResult.key) {
           setLicenseKey(licenseResult.key);
+          // If we have a license key, consider authenticated
+          setAuthState('authenticated');
+        } else {
+          // Check standard GCP authentication
+          const result = await window.electronAPI.auth.check();
+          setAuthState(result.authenticated ? 'authenticated' : 'unauthenticated');
         }
-        
-        // Check standard authentication
-        const result = await window.electronAPI.auth.check();
-        setAuthState(result.authenticated ? 'authenticated' : 'unauthenticated');
         
       } catch (error) {
         console.error('Failed to initialize auth:', error);
@@ -107,15 +113,40 @@ function App() {
     setCamerasConfigured(true);
   };
 
+  const loadLicenseKey = async () => {
+    try {
+      const licenseResult = await window.electronAPI.license.getAssignedKey();
+      if (licenseResult.success && licenseResult.key) {
+        setLicenseKey(licenseResult.key);
+      }
+    } catch (error) {
+      console.error('Failed to load license key:', error);
+    }
+  };
+
   const handleLogout = async () => {
-    await window.electronAPI.auth.logout();
-    setAuthState('unauthenticated');
-    setLicenseKey(null);
-    setSelectedProject(null);
-    setDeploymentConfig(null);
-    setDeploymentResult(null);
-    setSelectedCameras([]);
-    setCurrentView('welcome');
+    try {
+      // Call the logout API
+      await window.electronAPI.auth.logout();
+      
+      // Reset all state
+      setAuthState('unauthenticated');
+      setLicenseKey(null);
+      setSelectedProject(null);
+      setDeploymentConfig(null);
+      setDeploymentResult(null);
+      setSelectedCameras([]);
+      setDeploymentComplete(false);
+      setCamerasConfigured(false);
+      setSelectedAIMode(null);
+      
+      // Navigate to welcome page
+      setCurrentView('welcome');
+      
+      console.log('Logout completed, state reset');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   const renderContent = () => {
@@ -155,6 +186,7 @@ function App() {
       case 'welcome':
         return (
           <WelcomePage
+            key={licenseKey || 'no-license'} // Force re-render when license changes
             onNewDeployment={() => setCurrentView('gcp-setup')}
             onCheckExisting={() => setCurrentView('gcp-setup')}
             onNavigate={(view) => setCurrentView(view as NavigationView)}
@@ -303,6 +335,26 @@ function App() {
 
   // Use the standard theme
   const theme = anavaTheme;
+
+  // Show login page if not authenticated and not initializing
+  if (authState === 'unauthenticated' && !licenseKey) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <EULADialog 
+          open={!eulaAccepted} 
+          onAccept={() => setEulaAccepted(true)} 
+        />
+        <LoginPageUnified 
+          onLoginSuccess={() => {
+            setAuthState('authenticated');
+            loadLicenseKey();
+          }}
+        />
+        <RetroEasterEgg trigger="konami" />
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={theme}>

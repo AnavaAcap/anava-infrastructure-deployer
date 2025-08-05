@@ -6,14 +6,19 @@ import anavaLogo from '../assets/anava-logo.png';
 interface TopBarProps {
   title: string;
   showLogout?: boolean;
-  onLogout?: () => void;
+  onLogout?: () => void | Promise<void>;
 }
 
 const TopBar: React.FC<TopBarProps> = ({ title, showLogout = true, onLogout }) => {
   const handleLogout = async () => {
     if (onLogout) {
-      await window.electronAPI.auth.logout();
-      onLogout();
+      try {
+        // Don't call logout here - let the parent handle it
+        // The parent's onLogout will call window.electronAPI.auth.logout()
+        await onLogout();
+      } catch (error) {
+        console.error('Logout error in TopBar:', error);
+      }
     }
   };
 

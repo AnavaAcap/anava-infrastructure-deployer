@@ -3,6 +3,7 @@ import {
   getAuth, 
   Auth, 
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   User
 } from 'firebase/auth';
 import { 
@@ -12,6 +13,7 @@ import {
   HttpsCallableResult
 } from 'firebase/functions';
 import { FirebaseConfig } from './firebaseAppDeployer';
+import Store from 'electron-store';
 
 export interface LicenseKeyResult {
   key: string;
@@ -29,6 +31,11 @@ export class LicenseKeyService {
   private auth: Auth | null = null;
   private functions: Functions | null = null;
   private currentUser: User | null = null;
+  private store: Store;
+
+  constructor() {
+    this.store = new Store();
+  }
 
   /**
    * Initialize the Firebase app for license management
@@ -43,7 +50,7 @@ export class LicenseKeyService {
       this.functions = getFunctions(this.app);
       
       // Listen for auth state changes
-      this.auth.onAuthStateChanged((user) => {
+      this.auth.onAuthStateChanged((user: User | null) => {
         this.currentUser = user;
         console.log('Auth state changed:', user ? user.email : 'signed out');
       });
@@ -71,6 +78,30 @@ export class LicenseKeyService {
     } catch (error: any) {
       console.error('Sign in failed:', error);
       throw new Error(`Sign in failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Create a new user or sign in if already exists
+   */
+  async createOrSignInUser(email: string, password: string): Promise<User> {
+    if (!this.auth) {
+      throw new Error('LicenseKeyService not initialized');
+    }
+
+    try {
+      console.log(`Creating user: ${email}`);
+      const credential = await createUserWithEmailAndPassword(this.auth, email, password);
+      this.currentUser = credential.user;
+      console.log(`User created successfully: ${email}`);
+      return credential.user;
+    } catch (error: any) {
+      if (error.code === 'auth/email-already-in-use') {
+        console.log('User already exists, attempting sign in...');
+        return this.signIn(email, password);
+      }
+      console.error('Failed to create user:', error);
+      throw new Error(`Failed to create user: ${error.message}`);
     }
   }
 
@@ -154,9 +185,7 @@ export class LicenseKeyService {
       };
       
       // Store in electron's app data directory
-      if (window.electronAPI) {
-        await window.electronAPI.setConfigValue('licenseKey', cacheData);
-      }
+      this.store.set('licenseKey', cacheData);
       
       console.log('License key cached successfully');
     } catch (error) {
@@ -170,20 +199,59 @@ export class LicenseKeyService {
    */
   async getCachedLicenseKey(): Promise<{ key: string; email: string } | null> {
     try {
-      if (window.electronAPI) {
-        const cached = await window.electronAPI.getConfigValue('licenseKey');
-        if (cached && cached.key && cached.email) {
-          return {
-            key: cached.key,
-            email: cached.email
-          };
-        }
+      const cached = this.store.get('licenseKey') as any;
+      if (cached && cached.key && cached.email) {
+        return {
+          key: cached.key,
+          email: cached.email
+        };
       }
     } catch (error) {
       console.error('Failed to get cached license key:', error);
     }
     
     return null;
+  }
+
+  /**
+   * Validate and cache a manually entered license key
+   */
+  async setManualLicenseKey(key: string, userEmail?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Basic validation - Axis license keys are typically 12-20 characters
+      const trimmedKey = key.trim();
+      if (!trimmedKey) {
+        return { success: false, error: 'License key cannot be empty' };
+      }
+      
+      if (trimmedKey.length < 10 || trimmedKey.length > 30) {
+        return { success: false, error: 'Invalid license key format' };
+      }
+      
+      // Use provided email or default to manual entry identifier
+      const email = userEmail || 'manual-entry@anava.ai';
+      
+      // Cache the manual license key
+      await this.cacheLicenseKey(trimmedKey, email);
+      
+      console.log('Manual license key set successfully');
+      return { success: true };
+    } catch (error: any) {
+      console.error('Failed to set manual license key:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Clear cached license key
+   */
+  clearCachedLicenseKey(): void {
+    try {
+      this.store.delete('licenseKey');
+      console.log('Cleared cached license key');
+    } catch (error) {
+      console.error('Failed to clear cached license key:', error);
+    }
   }
 
   /**
