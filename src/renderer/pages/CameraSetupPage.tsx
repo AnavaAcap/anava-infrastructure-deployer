@@ -310,7 +310,13 @@ const CameraSetupPage: React.FC = () => {
         }
       };
       
-      await window.electronAPI.deployACAP(cameraForDeployment, acapPath);
+      const deployResult = await window.electronAPI.deployACAP(cameraForDeployment, acapPath);
+      
+      if (!deployResult.success) {
+        throw new Error(deployResult.error || 'ACAP deployment failed');
+      }
+      
+      console.log('ACAP deployment successful:', deployResult.message);
 
       // Step 3: Apply license (only if not already licensed)
       if (!selectedCamera.isLicensed && licenseKey) {
@@ -385,6 +391,8 @@ const CameraSetupPage: React.FC = () => {
         error: error.message || 'Deployment failed',
       });
       setDeploymentStatus(`Error: ${error.message}`);
+      setError(error.message || 'Deployment failed. Please check the logs and try again.');
+      // DO NOT advance to next step on error
     } finally {
       setDeploying(false);
     }

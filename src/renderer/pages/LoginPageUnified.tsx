@@ -42,16 +42,24 @@ const LoginPageUnified: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setError(null);
 
     try {
-      // Use unified authentication
-      const authResult = await window.electronAPI.auth.unifiedGoogle();
+      // Use working GCP OAuth service instead
+      const gcpAuthResult = await window.electronAPI.auth.login();
       
-      if (!authResult.success) {
-        throw new Error(authResult.error || 'Authentication failed');
+      if (!gcpAuthResult.success) {
+        throw new Error(gcpAuthResult.error || 'Authentication failed');
       }
 
-      console.log('Unified auth successful:', authResult.user?.email);
+      console.log('GCP auth successful:', gcpAuthResult);
       
-      // Get Firebase config (same as before)
+      // Get the actual authenticated user's email
+      if (!gcpAuthResult.user || !gcpAuthResult.user.email) {
+        throw new Error('Authentication succeeded but no user email found');
+      }
+      
+      const userEmail = gcpAuthResult.user.email;
+      console.log('Using authenticated user email:', userEmail);
+      
+      // Get Firebase config
       const firebaseConfig = {
         apiKey: "AIzaSyCJbWAa-zQir1v8kmlye8Kv3kmhPb9r18s",
         authDomain: "anava-ai.firebaseapp.com",
@@ -61,10 +69,11 @@ const LoginPageUnified: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         appId: "1:392865621461:web:15db206ae4e9c72f7dc95c"
       };
       
-      // Assign license with the authenticated user's ID token
-      const licenseResult = await window.electronAPI.license.assignWithGoogle({
-        idToken: authResult.user!.idToken,
-        firebaseConfig
+      // Assign license using the real authenticated email
+      const licenseResult = await window.electronAPI.license.assignKey({
+        firebaseConfig,
+        email: userEmail,
+        password: 'TrialUser123!' // This will be used only if user doesn't exist in Firebase
       });
       
       if (licenseResult.success) {
