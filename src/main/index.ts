@@ -272,6 +272,20 @@ ipcMain.handle('auth:login', async () => {
     console.log('Starting authentication...');
     const result = await gcpOAuthService.authenticate();
     console.log('Authentication result:', result ? 'Success' : 'Failed');
+    
+    // Focus the main window after successful authentication
+    if (result && (result as any).success && mainWindow) {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.focus();
+          mainWindow.show();
+          if (process.platform === 'darwin') {
+            app.focus(); // Additional focus for macOS
+          }
+        }
+      }, 1000); // Small delay to let browser window close
+    }
+    
     return result;
   } catch (error: any) {
     console.error('Authentication error:', error);

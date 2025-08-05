@@ -392,10 +392,10 @@ export class GCPOAuthService {
         <div class="container">
           <h1>Authentication Successful</h1>
           <p>You can close this window and return to the Anava app.</p>
-          <p>This window will close automatically in 3 seconds...</p>
+          <p>This window will close automatically in 1 second...</p>
         </div>
         <script>
-          setTimeout(() => window.close(), 3000);
+          setTimeout(() => window.close(), 1000);
         </script>
       </body>
       </html>

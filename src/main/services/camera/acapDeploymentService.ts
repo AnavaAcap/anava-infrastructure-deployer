@@ -69,7 +69,7 @@ export class ACAPDeploymentService {
       }
       console.log(`[ACAPDeployment] Connection test successful`);
 
-      // Upload the ACAP
+      // Upload the ACAP (always upload, no checking)
       console.log(`[ACAPDeployment] Starting ACAP upload...`);
       const uploadResult = await this.uploadACAP(
         camera.ip,
@@ -256,36 +256,39 @@ export class ACAPDeploymentService {
   private async uploadACAP(ip: string, username: string, password: string, acapPath: string): Promise<any> {
     try {
       console.log('[uploadACAP] ===== VAPIX ACAP Upload Process =====');
-      console.log('[uploadACAP] Preparing multipart form data...');
       
-      const form = new FormData();
-      const fileStream = fs.createReadStream(acapPath);
       const fileName = path.basename(acapPath);
+      const fileStats = fs.statSync(acapPath);
       
-      // VAPIX expects the file field to be named 'packfil'
-      form.append('packfil', fileStream, {
-        filename: fileName,
-        contentType: 'application/octet-stream'
-      });
+      console.log('[uploadACAP] File path:', acapPath);
+      console.log('[uploadACAP] File size:', fileStats.size);
+      console.log('[uploadACAP] File name:', fileName);
+      
+      // Create a function to generate fresh form data
+      const createForm = () => {
+        const form = new FormData();
+        const fileStream = fs.createReadStream(acapPath);
+        
+        form.append('packfil', fileStream, {
+          filename: fileName,
+          contentType: 'application/octet-stream',
+          knownLength: fileStats.size
+        });
+        
+        return form;
+      };
 
-      const headers = form.getHeaders();
-      console.log('[uploadACAP] Form headers:', headers);
-      console.log('[uploadACAP] VAPIX endpoint: /axis-cgi/applications/upload.cgi');
-      console.log('[uploadACAP] File field name: packfil');
-      console.log('[uploadACAP] File name: ' + fileName);
-
-      const response = await this.digestAuth(
+      const response = await this.digestAuthWithFormFactory(
         ip,
         username,
         password,
         'POST',
         '/axis-cgi/applications/upload.cgi',
-        form,
+        createForm,
         {
-          headers: headers,
           maxContentLength: Infinity,
           maxBodyLength: Infinity,
-          timeout: 120000 // 120 second timeout for large files
+          timeout: 300000 // 5 minutes timeout for large ACAP files
         }
       );
 
@@ -329,6 +332,106 @@ export class ACAPDeploymentService {
     }
   }
 
+  private async digestAuthWithFormFactory(
+    ip: string,
+    username: string,
+    password: string,
+    method: string,
+    uri: string,
+    formFactory: () => FormData,
+    options: any = {}
+  ): Promise<any> {
+    try {
+      const url = `http://${ip}${uri}`;
+      const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+      
+      // First request to get the digest challenge
+      const form1 = formFactory();
+      const config1: any = {
+        method,
+        url,
+        httpsAgent,
+        timeout: options.timeout || 300000,
+        validateStatus: () => true,
+        data: form1,
+        headers: {
+          ...form1.getHeaders(),
+          ...options.headers
+        },
+        ...options
+      };
+
+      console.log(`[digestAuth] ${method} ${url}`);
+      console.log('[digestAuth] Making first request for digest challenge...');
+      const response1 = await axios(config1);
+
+      if (response1.status === 401) {
+        const wwwAuth = response1.headers['www-authenticate'];
+        console.log('[digestAuth] Got 401 challenge:', wwwAuth);
+        
+        if (wwwAuth && wwwAuth.includes('Digest')) {
+          // Parse digest parameters
+          const digestData: any = {};
+          const regex = /(\w+)=(?:"([^"]+)"|([^,]+))/g;
+          let match;
+          while ((match = regex.exec(wwwAuth)) !== null) {
+            digestData[match[1]] = match[2] || match[3];
+          }
+
+          console.log('[digestAuth] Building digest response...');
+
+          // Build digest header
+          const nc = '00000001';
+          const cnonce = crypto.randomBytes(8).toString('hex');
+          const ha1 = crypto.createHash('md5')
+            .update(`${username}:${digestData.realm}:${password}`)
+            .digest('hex');
+          const ha2 = crypto.createHash('md5')
+            .update(`${method}:${uri}`)
+            .digest('hex');
+          const response = crypto.createHash('md5')
+            .update(`${ha1}:${digestData.nonce}:${nc}:${cnonce}:${digestData.qop}:${ha2}`)
+            .digest('hex');
+          
+          let authHeader = `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop="${digestData.qop}", nc=${nc}, cnonce="${cnonce}", response="${response}"`;
+          
+          if (digestData.algorithm) {
+            authHeader += `, algorithm=${digestData.algorithm}`;
+          }
+          
+          console.log('[digestAuth] Making authenticated request with fresh form...');
+          
+          // Create fresh form for second request
+          const form2 = formFactory();
+          const config2 = {
+            ...config1,
+            data: form2,
+            headers: {
+              ...form2.getHeaders(),
+              'Authorization': authHeader,
+              ...options.headers
+            }
+          };
+
+          const response2 = await axios(config2);
+          console.log('[digestAuth] Authenticated response status:', response2.status);
+          return response2;
+        }
+      } else if (response1.status === 200) {
+        console.log('[digestAuth] No authentication required, got 200 OK');
+        return response1;
+      }
+      
+      throw new Error(`Unexpected response: ${response1.status}`);
+    } catch (error: any) {
+      console.error('[digestAuth] Error:', error.message);
+      if (error.code) {
+        console.error('[digestAuth] Error code:', error.code);
+      }
+      throw error;
+    }
+  }
+
   private async digestAuth(
     ip: string,
     username: string,
@@ -347,7 +450,7 @@ export class ACAPDeploymentService {
         method,
         url,
         httpsAgent,
-        timeout: options.timeout || 30000,
+        timeout: options.timeout || 300000, // 5 minutes for large file uploads (increased from 2 min)
         validateStatus: () => true,
         ...options
       };
@@ -407,9 +510,25 @@ export class ACAPDeploymentService {
             }
           };
 
-          const response2 = await axios(config2);
-          console.log('[digestAuth] Authenticated response status:', response2.status);
-          return response2;
+          try {
+            console.log('[digestAuth] Request config:', {
+              method: config2.method,
+              url: config2.url,
+              timeout: config2.timeout,
+              hasData: !!config2.data,
+              dataType: config2.data ? typeof config2.data : 'none'
+            });
+            
+            const response2 = await axios(config2);
+            console.log('[digestAuth] Authenticated response status:', response2.status);
+            return response2;
+          } catch (error: any) {
+            console.error('[digestAuth] Authenticated request failed:', error.message);
+            if (error.code === 'ECONNRESET') {
+              console.error('[digestAuth] Connection reset by camera - this may happen if ACAP is already installed');
+            }
+            throw error;
+          }
         }
       } else if (response1.status === 200) {
         // No auth required
