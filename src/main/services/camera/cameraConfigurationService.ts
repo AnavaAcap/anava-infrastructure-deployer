@@ -445,241 +445,14 @@ export class CameraConfigurationService {
         return;
       }
 
-      // Try multiple license activation approaches
-      console.log('[CameraConfig] Attempting license activation for', applicationName);
-      console.log('[CameraConfig] License key:', licenseKey);
+      // Direct license activation - just like the web UI does it
+      console.log('[CameraConfig] Activating license key:', licenseKey);
+      console.log('[CameraConfig] For application:', applicationName);
       
-      // Approach 1: Get license XML from Anava's license server
-      try {
-        console.log('[CameraConfig] Getting license XML from Anava license server...');
-        
-        // Wait a moment for camera to stabilize after ACAP installation
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Get camera serial number and model first
-        const paramUrl = `http://${ip}/axis-cgi/param.cgi?action=list&group=Properties.System.SerialNumber,Brand`;
-        let serialNumber = '';
-        let modelName = '';
-        
-        try {
-          console.log('[CameraConfig] Fetching device info from:', paramUrl);
-          const infoResponse1 = await axios.get(paramUrl, {
-            timeout: 10000,
-            validateStatus: () => true,
-            maxRedirects: 0
-          });
-          
-          console.log('[CameraConfig] Device info response status:', infoResponse1.status);
-          
-          if (infoResponse1.status === 401) {
-            const wwwAuth = infoResponse1.headers['www-authenticate'];
-            if (wwwAuth && wwwAuth.includes('Digest')) {
-              const authHeader = this.buildDigestAuth(
-                username,
-                password,
-                'GET',
-                '/axis-cgi/param.cgi?action=list&group=Properties.System.SerialNumber,Brand',
-                wwwAuth
-              );
-              
-              const infoResponse2 = await axios.get(paramUrl, {
-                headers: {
-                  'Authorization': authHeader
-                },
-                timeout: 10000,
-                maxRedirects: 0
-              });
-              
-              console.log('[CameraConfig] Device info data length:', infoResponse2.data.length);
-              const serialMatch = infoResponse2.data.match(/SerialNumber=([A-F0-9]+)/);
-              if (serialMatch) {
-                serialNumber = serialMatch[1];
-                console.log('[CameraConfig] Camera serial number:', serialNumber);
-              } else {
-                console.log('[CameraConfig] No serial number found in response');
-              }
-              
-              const modelMatch = infoResponse2.data.match(/Brand\.ProdFullName=([^\n]+)/);
-              if (modelMatch) {
-                modelName = modelMatch[1].trim();
-                console.log('[CameraConfig] Camera model:', modelName);
-              }
-            }
-          } else if (infoResponse1.status === 200) {
-            const serialMatch = infoResponse1.data.match(/SerialNumber=([A-F0-9]+)/);
-            if (serialMatch) {
-              serialNumber = serialMatch[1];
-              console.log('[CameraConfig] Camera serial number:', serialNumber);
-            }
-            
-            const modelMatch = infoResponse1.data.match(/Brand\.ProdFullName=([^\n]+)/);
-            if (modelMatch) {
-              modelName = modelMatch[1].trim();
-              console.log('[CameraConfig] Camera model:', modelName);
-            }
-          }
-        } catch (e: any) {
-          console.log('[CameraConfig] Could not get device info:', e.message);
-          console.log('[CameraConfig] Will fall back to original license activation method');
-        }
-        
-        if (!serialNumber) {
-          console.log('[CameraConfig] Could not retrieve camera serial number - falling back to control.cgi method');
-          // Don't throw, just fall through to the original method
-          throw new Error('Could not retrieve camera serial number');
-        }
-        
-        // Step 1: Call Anava's license server to get the XML
-        console.log('[CameraConfig] Calling Anava license server...');
-        const licenseServerUrl = 'https://licensing.anava.ai/ebizz-acap-web/api/oldGw/v2/licensekey';
-        
-        const licenseRequest = {
-          serial: serialNumber,
-          appId: 'com.anava.batonanalytic',
-          licensekey: licenseKey
-        };
-        
-        console.log('[CameraConfig] License server request:', JSON.stringify(licenseRequest, null, 2));
-        
-        let licenseServerResponse;
-        try {
-          licenseServerResponse = await axios.post(licenseServerUrl, licenseRequest, {
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            timeout: 30000,
-            maxBodyLength: Infinity,
-            maxContentLength: Infinity
-          });
-        } catch (serverError: any) {
-          console.error('[CameraConfig] License server error:', serverError.message);
-          if (serverError.code === 'ECONNABORTED') {
-            throw new Error('Connection to Anava license server timed out');
-          } else if (serverError.response) {
-            throw new Error(`License server returned error ${serverError.response.status}: ${serverError.response.data}`);
-          } else {
-            throw new Error(`Failed to contact license server: ${serverError.message}`);
-          }
-        }
-        
-        if (licenseServerResponse.status !== 200) {
-          throw new Error(`License server returned status ${licenseServerResponse.status}`);
-        }
-        
-        const licenseData = licenseServerResponse.data;
-        console.log('[CameraConfig] License server response received:', 
-          typeof licenseData === 'string' ? 'string response' : 'object response');
-        
-        // The response might be the XML directly as a string, or wrapped in an object
-        let licenseXML: string;
-        if (typeof licenseData === 'string') {
-          licenseXML = licenseData;
-        } else if (licenseData.xml) {
-          licenseXML = licenseData.xml;
-        } else if (licenseData.license) {
-          licenseXML = licenseData.license;
-        } else {
-          console.error('[CameraConfig] Unexpected license server response:', licenseData);
-          throw new Error('License server did not return XML data in expected format');
-        }
-        
-        // Step 2: Upload the XML to the camera
-        const licenseUrl = `http://${ip}/axis-cgi/applications/license.cgi?action=uploadlicensekey&package=${applicationName}`;
+      // Wait a moment for camera to stabilize after ACAP installation
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Create form data with file upload
-        const createFormData = () => {
-          const form = new FormData();
-          const buffer = Buffer.from(licenseXML);
-          form.append('fileData', buffer, {
-            filename: 'license.xml',
-            contentType: 'text/xml'  // Changed to text/xml to match the actual content
-          });
-          // Don't override form length - let form-data calculate it correctly
-          return form;
-        };
-
-        console.log('[CameraConfig] Uploading license XML to camera...');
-        
-        // First request to get digest challenge
-        const form1 = createFormData();
-        const licenseResponse1 = await axios.post(licenseUrl, form1, {
-          headers: {
-            ...form1.getHeaders()
-          },
-          timeout: 30000,
-          validateStatus: () => true,
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity
-        });
-
-        if (licenseResponse1.status === 401) {
-          // Handle digest authentication
-          const wwwAuth = licenseResponse1.headers['www-authenticate'];
-          if (wwwAuth && wwwAuth.includes('Digest')) {
-            const authHeader = this.buildDigestAuth(
-              username,
-              password,
-              'POST',
-              `/axis-cgi/applications/license.cgi?action=uploadlicensekey&package=${applicationName}`,
-              wwwAuth
-            );
-
-            // Create fresh form for second request
-            const form2 = createFormData();
-            const licenseResponse2 = await axios.post(licenseUrl, form2, {
-              headers: {
-                ...form2.getHeaders(),
-                'Authorization': authHeader
-              },
-              timeout: 30000,
-              maxBodyLength: Infinity,
-              maxContentLength: Infinity
-            });
-
-            if (licenseResponse2.status === 200) {
-              const responseBody = licenseResponse2.data.toString().trim();
-              if (responseBody === 'OK' || responseBody === '0') {
-                console.log('[CameraConfig] License key applied successfully!');
-                // Start the application
-                await this.startApplication(ip, username, password, applicationName);
-                return;
-              } else if (responseBody === 'Error: 10') {
-                // Error 10 might indicate the license is already applied or was applied successfully
-                console.log('[CameraConfig] license.cgi returned Error: 10 - may indicate license was already applied');
-                // Try to start the application anyway
-                await this.startApplication(ip, username, password, applicationName);
-                return;
-              } else {
-                console.log('[CameraConfig] license.cgi response:', responseBody);
-                throw new Error(`License activation failed with response: ${responseBody}`);
-              }
-            }
-          }
-        } else if (licenseResponse1.status === 200) {
-          const responseBody = licenseResponse1.data.toString().trim();
-          if (responseBody === 'OK' || responseBody === '0') {
-            console.log('[CameraConfig] License key applied successfully! (no auth)');
-            // Start the application
-            await this.startApplication(ip, username, password, applicationName);
-            return;
-          } else if (responseBody === 'Error: 10') {
-            // Error 10 might indicate the license is already applied or was applied successfully
-            console.log('[CameraConfig] license.cgi returned Error: 10 - may indicate license was already applied');
-            // Try to start the application anyway
-            await this.startApplication(ip, username, password, applicationName);
-            return;
-          } else {
-            console.log('[CameraConfig] license.cgi response:', responseBody);
-            throw new Error(`License activation failed with response: ${responseBody}`);
-          }
-        }
-      } catch (error: any) {
-        console.log('[CameraConfig] License activation via Anava server failed:', error.message);
-        // Fall through to try the original approach
-      }
-
-      // Approach 2: Original control.cgi endpoint
+      // Use the direct control.cgi endpoint exactly like the web UI
       const licenseUrl = `http://${ip}/axis-cgi/applications/control.cgi`;
       
       console.log('[CameraConfig] Trying control.cgi endpoint...');
@@ -695,6 +468,9 @@ export class CameraConfigurationService {
 
       // First request to get digest challenge
       const params1 = createParams();
+      console.log('[CameraConfig] POST data:', params1);
+      console.log('[CameraConfig] POST URL:', licenseUrl);
+      
       const licenseResponse1 = await axios.post(licenseUrl, params1, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -705,6 +481,9 @@ export class CameraConfigurationService {
         maxBodyLength: Infinity,
         maxContentLength: Infinity
       });
+      
+      console.log('[CameraConfig] First response status:', licenseResponse1.status);
+      console.log('[CameraConfig] First response headers:', licenseResponse1.headers);
 
       if (licenseResponse1.status === 401) {
         // Handle digest authentication
@@ -720,6 +499,9 @@ export class CameraConfigurationService {
 
           // Create fresh params for second request
           const params2 = createParams();
+          console.log('[CameraConfig] Sending authenticated request...');
+          console.log('[CameraConfig] Auth header:', authHeader.substring(0, 50) + '...');
+          
           const licenseResponse2 = await axios.post(licenseUrl, params2, {
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
@@ -730,6 +512,9 @@ export class CameraConfigurationService {
             maxBodyLength: Infinity,
             maxContentLength: Infinity
           });
+          
+          console.log('[CameraConfig] Second response status:', licenseResponse2.status);
+          console.log('[CameraConfig] Second response data:', licenseResponse2.data);
 
           if (licenseResponse2.status === 200) {
             const responseBody = licenseResponse2.data.toString().trim();

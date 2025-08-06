@@ -87,10 +87,12 @@ const CameraSetupPage: React.FC = () => {
   const [sceneImage, setSceneImage] = useState('');
   const [licenseMode, setLicenseMode] = useState<'trial' | 'manual'>('trial');
   const [manualLicenseKey, setManualLicenseKey] = useState('');
+  const [hasPreDiscoveredCameras, setHasPreDiscoveredCameras] = useState(false);
 
-  // Load license key on mount
+  // Load license key and check for pre-discovered cameras on mount
   useEffect(() => {
     loadLicenseKey();
+    checkPreDiscoveredCameras();
   }, []);
 
   const loadLicenseKey = async () => {
@@ -101,6 +103,17 @@ const CameraSetupPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load license key:', error);
+    }
+  };
+
+  const checkPreDiscoveredCameras = async () => {
+    try {
+      const result = await window.electronAPI.camera.getPreDiscoveredCameras();
+      if (result.success && result.cameras.length > 0) {
+        setHasPreDiscoveredCameras(true);
+      }
+    } catch (error) {
+      console.error('Failed to check pre-discovered cameras:', error);
     }
   };
 
@@ -216,7 +229,39 @@ const CameraSetupPage: React.FC = () => {
     setCameras([]);
 
     try {
-      // Use enhanced scan with credentials
+      // First, check if we have pre-discovered cameras from startup
+      const preDiscovered = await window.electronAPI.camera.getPreDiscoveredCameras();
+      
+      if (preDiscovered.success && preDiscovered.cameras.length > 0) {
+        console.log('Using pre-discovered cameras:', preDiscovered.cameras.length);
+        
+        const formattedCameras: CameraInfo[] = preDiscovered.cameras.map((cam: any) => ({
+          id: cam.id || `camera-${cam.ip}`,
+          ip: cam.ip,
+          model: cam.model || 'Unknown',
+          name: cam.name || `Camera at ${cam.ip}`,
+          firmwareVersion: cam.firmwareVersion,
+          accessible: cam.accessible || cam.status === 'accessible' || false,
+          hasACAP: false,
+          isLicensed: false,
+          status: 'idle',
+        }));
+
+        setCameras(formattedCameras);
+        
+        // Auto-select first accessible camera
+        const firstAccessible = formattedCameras.find(cam => cam.accessible);
+        if (firstAccessible) {
+          setSelectedCamera(firstAccessible);
+          setActiveStep(2);
+        }
+        
+        setScanning(false);
+        return;
+      }
+      
+      // If no pre-discovered cameras, do a fresh scan
+      console.log('No pre-discovered cameras, performing fresh scan...');
       const results = await window.electronAPI.enhancedScanNetwork({
         credentials: [{
           username: credentials.username,
