@@ -220,7 +220,7 @@ export class CameraConfigurationService {
       .update(`${ha1}:${digestData.nonce}:${nc}:${cnonce}:${digestData.qop}:${ha2}`)
       .digest('hex');
     
-    return `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop=${digestData.qop}, nc=${nc}, cnonce="${cnonce}", response="${response}"`;
+    return `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop="${digestData.qop}", nc="${nc}", cnonce="${cnonce}", response="${response}", algorithm="MD5"`;
   }
 
   async pushSystemConfig(
@@ -472,8 +472,8 @@ export class CameraConfigurationService {
       
       const licenseResponse1 = await axios.post(licenseUrl, params1, {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Content-Length': params1.length.toString()
+          'Content-Type': 'application/x-www-form-urlencoded'
+          // Let Axios calculate Content-Length automatically
         },
         timeout: 30000, // Increased timeout
         validateStatus: () => true,
@@ -504,8 +504,8 @@ export class CameraConfigurationService {
           const licenseResponse2 = await axios.post(licenseUrl, params2, {
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
-              'Content-Length': params2.length.toString(),
               'Authorization': authHeader
+              // Let Axios calculate Content-Length automatically
             },
             timeout: 30000,
             maxBodyLength: Infinity,
