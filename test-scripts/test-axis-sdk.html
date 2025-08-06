@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test Axis SDK License Conversion</title>
+</head>
+<body>
+  <h1>Axis SDK License Test</h1>
+  <div id="status">Loading SDK...</div>
+  <pre id="result"></pre>
+  
+  <script src="https://www.axis.com/app/acap/sdk.js"></script>
+  <script>
+    function onSdkReady() {
+      document.getElementById('status').textContent = 'SDK Ready! Converting license...';
+      
+      const applicationId = '415129';              // BatonAnalytic app ID from the logs
+      const deviceId      = 'B8A44F45D624';       // Your camera's MAC
+      const licenseCode   = '2Z7YMSDTTF44N5JAX422'; // Your license key
+
+      console.log('Calling ACAP.registerLicenseKey with:', { applicationId, deviceId, licenseCode });
+
+      window.ACAP.registerLicenseKey(
+        { applicationId, deviceId, licenseCode },
+        result => {
+          console.log('Full result:', result);
+          
+          if (result.data) {
+            console.log('Success:', result.data);
+            document.getElementById('status').textContent = 'Success! Check console for XML.';
+            document.getElementById('result').textContent = JSON.stringify(result.data, null, 2);
+            
+            // Log the XML specifically
+            if (result.data.licenseKey && result.data.licenseKey.xml) {
+              console.log('License XML:');
+              console.log(result.data.licenseKey.xml);
+            }
+          } else {
+            console.error('Error:', result.error);
+            document.getElementById('status').textContent = 'Error: ' + (result.error?.message || 'Unknown error');
+            document.getElementById('result').textContent = JSON.stringify(result.error, null, 2);
+          }
+        }
+      );
+    }
+
+    window.acapAsyncInit = onSdkReady;
+
+    if (window.ACAP && typeof window.ACAP.registerLicenseKey === 'function') {
+      onSdkReady();
+    }
+  </script>
+</body>
+</html>
