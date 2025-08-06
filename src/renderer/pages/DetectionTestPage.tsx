@@ -59,6 +59,10 @@ interface CameraOption {
   name: string;
   hasACAP: boolean;
   hasSpeaker: boolean;
+  credentials?: {
+    username: string;
+    password: string;
+  };
 }
 
 const DetectionTestPage: React.FC = () => {
@@ -93,14 +97,19 @@ const DetectionTestPage: React.FC = () => {
     try {
       // Load cameras that have been configured
       const savedCameras = await window.electronAPI?.getConfigValue('configuredCameras');
+      console.log('Loading configured cameras:', savedCameras);
       if (savedCameras && Array.isArray(savedCameras)) {
         setCameras(savedCameras.map((cam: any) => ({
           id: cam.id || `camera-${cam.ip}`,
           ip: cam.ip,
           name: cam.name || `Camera at ${cam.ip}`,
-          hasACAP: true,
+          hasACAP: cam.hasACAP !== false,
           hasSpeaker: cam.hasSpeaker || false,
+          credentials: cam.credentials, // Include credentials for API calls
         })));
+        console.log(`Loaded ${savedCameras.length} configured camera(s)`);
+      } else {
+        console.log('No configured cameras found in storage');
       }
     } catch (error) {
       console.error('Failed to load cameras:', error);
@@ -252,13 +261,27 @@ const DetectionTestPage: React.FC = () => {
             </Typography>
             
             {cameras.length === 0 ? (
-              <Alert severity="warning">
-                No configured cameras found. Please set up a camera first.
-              </Alert>
+              <Box>
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  No configured cameras found. Please set up a camera first.
+                </Alert>
+                <Button
+                  variant="outlined"
+                  startIcon={<RefreshIcon />}
+                  onClick={() => {
+                    setLoading(true);
+                    loadConfiguredCameras().finally(() => setLoading(false));
+                  }}
+                  disabled={loading}
+                >
+                  Refresh Camera List
+                </Button>
+              </Box>
             ) : (
-              <FormControl fullWidth>
-                <InputLabel>Select Camera</InputLabel>
-                <Select
+              <Box>
+                <FormControl fullWidth>
+                  <InputLabel>Select Camera</InputLabel>
+                  <Select
                   value={selectedCamera?.id || ''}
                   onChange={(e) => {
                     const cam = cameras.find(c => c.id === e.target.value);
@@ -277,6 +300,19 @@ const DetectionTestPage: React.FC = () => {
                   ))}
                 </Select>
               </FormControl>
+              <Button
+                variant="text"
+                startIcon={<RefreshIcon />}
+                onClick={() => {
+                  setLoading(true);
+                  loadConfiguredCameras().finally(() => setLoading(false));
+                }}
+                disabled={loading}
+                sx={{ mt: 2 }}
+              >
+                Refresh List
+              </Button>
+              </Box>
             )}
             
             {selectedCamera && (

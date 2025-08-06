@@ -441,6 +441,32 @@ const CameraSetupPage: React.FC = () => {
       setDeploymentProgress(100);
       setDeploymentStatus('Setup complete!');
       
+      // Save configured camera for Detection Test page
+      const configuredCamera = {
+        id: selectedCamera.id,
+        ip: selectedCamera.ip,
+        name: selectedCamera.model || `Camera at ${selectedCamera.ip}`,
+        hasACAP: true,
+        hasSpeaker: selectedCamera.hasSpeaker || false,
+        credentials: {
+          username: credentials.username,
+          password: credentials.password
+        },
+        isConfigured: true,
+        configuredAt: new Date().toISOString()
+      };
+      
+      // Get existing configured cameras
+      const existingCameras = await window.electronAPI.getConfigValue('configuredCameras') || [];
+      
+      // Add or update this camera
+      const updatedCameras = existingCameras.filter((cam: any) => cam.ip !== selectedCamera.ip);
+      updatedCameras.push(configuredCamera);
+      
+      // Save to config
+      await window.electronAPI.setConfigValue('configuredCameras', updatedCameras);
+      console.log('Saved configured camera:', configuredCamera);
+      
       // Move to completion
       setTimeout(() => {
         setActiveStep(3);
