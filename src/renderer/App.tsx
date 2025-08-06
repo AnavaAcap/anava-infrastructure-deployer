@@ -320,7 +320,7 @@ function App() {
         );
 
       case 'camera-setup':
-        return <CameraSetupPage />;
+        return <CameraSetupPage onNavigate={(view) => setCurrentView(view as NavigationView)} />;
 
       case 'speaker-config':
         return <SpeakerConfigPage />;

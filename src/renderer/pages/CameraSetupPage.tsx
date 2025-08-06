@@ -38,9 +38,9 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   Refresh as RefreshIcon,
+  VolumeUp as VolumeUpIcon,
   NetworkCheck as NetworkCheckIcon,
   PlayArrow as PlayArrowIcon,
-  VolumeUp as VolumeUpIcon,
   Security as SecurityIcon,
   CloudDownload as CloudDownloadIcon,
 } from '@mui/icons-material';
@@ -63,7 +63,11 @@ interface CameraInfo {
   };
 }
 
-const CameraSetupPage: React.FC = () => {
+interface CameraSetupPageProps {
+  onNavigate?: (view: string) => void;
+}
+
+const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [mode, setMode] = useState<'manual' | 'scan'>('manual');
   const [credentials, setCredentials] = useState({
@@ -1008,7 +1012,8 @@ const CameraSetupPage: React.FC = () => {
                   <Button
                     variant="outlined"
                     fullWidth
-                    onClick={() => window.location.href = '#speaker-config'}
+                    onClick={() => onNavigate?.('speaker-config')}
+                    startIcon={<VolumeUpIcon />}
                   >
                     Configure Speaker
                   </Button>
@@ -1017,12 +1022,31 @@ const CameraSetupPage: React.FC = () => {
                   <Button
                     variant="outlined"
                     fullWidth
-                    onClick={() => window.location.href = '#detection-test'}
+                    onClick={() => onNavigate?.('detection-test')}
+                    startIcon={<VideocamIcon />}
                   >
                     Test Detection
                   </Button>
                 </Grid>
               </Grid>
+              
+              <Box sx={{ mt: 3 }}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  onClick={() => {
+                    // Reset to start and configure another camera
+                    setActiveStep(0);
+                    setSelectedCamera(null);
+                    setDeploymentProgress(0);
+                    setDeploymentStatus('');
+                    setError(null);
+                  }}
+                  startIcon={<VideocamIcon />}
+                >
+                  Set Up Another Camera
+                </Button>
+              </Box>
             </Box>
           </Box>
         );
