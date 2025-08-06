@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import axios from 'axios';
 import crypto from 'crypto';
 import { Camera } from './cameraDiscoveryService';
+import AxiosDigestAuth from '@mhoc/axios-digest-auth';
 
 export interface ConfigurationResult {
   success: boolean;
@@ -239,65 +240,25 @@ export class CameraConfigurationService {
       // Extract Anava key from the payload if it exists
       const anavaKey = configPayload?.anavaKey;
       
-      // First request to get digest challenge
-      const response1 = await axios.post(url, configPayload, {
-        timeout: 10000,
-        validateStatus: () => true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      // Create digest auth client
+      const digestAuth = new AxiosDigestAuth({
+        username,
+        password,
       });
 
-      if (response1.status === 401) {
-        // Handle digest authentication
-        const wwwAuth = response1.headers['www-authenticate'];
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          const authHeader = this.buildDigestAuth(
-            username,
-            password,
-            'POST',
-            '/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig',
-            wwwAuth
-          );
+      try {
+        // Use digest auth to post the config
+        const response = await digestAuth.request({
+          url,
+          method: 'POST',
+          data: configPayload,
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
 
-          // Second request with auth
-          const response2 = await axios.post(url, configPayload, {
-            headers: {
-              'Authorization': authHeader,
-              'Content-Type': 'application/json'
-            },
-            timeout: 10000
-          });
-
-          if (response2.status === 200) {
-            console.log('[CameraConfig] SystemConfig push response:', response2.data);
-            
-            // If we have an Anava license key, activate it
-            if (anavaKey) {
-              console.log('[CameraConfig] Activating Anava license key...');
-              try {
-                await this.activateLicenseKey(ip, username, password, anavaKey, 'BatonAnalytic');
-                console.log('[CameraConfig] License key activated successfully');
-                return { success: true, data: response2.data, licenseActivated: true };
-              } catch (licenseError: any) {
-                console.error('[CameraConfig] Failed to activate license key:', licenseError.message || licenseError);
-                console.error('[CameraConfig] License activation error details:', {
-                  code: licenseError.code,
-                  stack: licenseError.stack
-                });
-                // Non-fatal - configuration succeeded, just license activation failed
-                return { success: true, data: response2.data, licenseActivated: false, licenseError: licenseError.message };
-              }
-            }
-            
-            return { success: true, data: response2.data };
-          } else {
-            throw new Error(`Configuration failed with status ${response2.status}`);
-          }
-        }
-      } else if (response1.status === 200) {
-        // No auth required
-        console.log('[CameraConfig] SystemConfig push response:', response1.data);
+        console.log('[CameraConfig] SystemConfig push response:', response.data);
         
         // If we have an Anava license key, activate it
         if (anavaKey) {
@@ -305,7 +266,7 @@ export class CameraConfigurationService {
           try {
             await this.activateLicenseKey(ip, username, password, anavaKey, 'BatonAnalytic');
             console.log('[CameraConfig] License key activated successfully');
-            return { success: true, data: response1.data, licenseActivated: true };
+            return { success: true, data: response.data, licenseActivated: true };
           } catch (licenseError: any) {
             console.error('[CameraConfig] Failed to activate license key:', licenseError.message || licenseError);
             console.error('[CameraConfig] License activation error details:', {
@@ -313,14 +274,44 @@ export class CameraConfigurationService {
               stack: licenseError.stack
             });
             // Non-fatal - configuration succeeded, just license activation failed
-            return { success: true, data: response1.data, licenseActivated: false, licenseError: licenseError.message };
+            return { success: true, data: response.data, licenseActivated: false, licenseError: licenseError.message };
           }
         }
         
-        return { success: true, data: response1.data };
-      }
+        return { success: true, data: response.data };
+      } catch (digestError: any) {
+        // Try without auth if digest fails
+        console.log('[CameraConfig] Digest auth failed, trying without authentication...');
+        
+        const response = await axios.post(url, configPayload, {
+          timeout: 10000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
 
-      throw new Error(`Unexpected response: ${response1.status}`);
+        if (response.status === 200) {
+          console.log('[CameraConfig] SystemConfig push response:', response.data);
+          
+          // If we have an Anava license key, activate it
+          if (anavaKey) {
+            console.log('[CameraConfig] Activating Anava license key...');
+            try {
+              await this.activateLicenseKey(ip, username, password, anavaKey, 'BatonAnalytic');
+              console.log('[CameraConfig] License key activated successfully');
+              return { success: true, data: response.data, licenseActivated: true };
+            } catch (licenseError: any) {
+              console.error('[CameraConfig] Failed to activate license key:', licenseError.message || licenseError);
+              // Non-fatal - configuration succeeded, just license activation failed
+              return { success: true, data: response.data, licenseActivated: false, licenseError: licenseError.message };
+            }
+          }
+          
+          return { success: true, data: response.data };
+        } else {
+          throw digestError; // Re-throw the original error
+        }
+      }
     } catch (error: any) {
       console.error('[CameraConfig] Error pushing SystemConfig:', error);
       return { success: false, error: error.message };
@@ -338,46 +329,37 @@ export class CameraConfigurationService {
       
       console.log('[CameraConfig] Getting SystemConfig from camera:', ip);
       
-      // First request to get digest challenge
-      const response1 = await axios.get(url, {
-        timeout: 10000,
-        validateStatus: () => true
+      // Create digest auth client
+      const digestAuth = new AxiosDigestAuth({
+        username,
+        password,
       });
 
-      if (response1.status === 401) {
-        // Handle digest authentication
-        const wwwAuth = response1.headers['www-authenticate'];
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          const authHeader = this.buildDigestAuth(
-            username,
-            password,
-            'GET',
-            '/local/BatonAnalytic/baton_analytic.cgi?command=getSystemConfig',
-            wwwAuth
-          );
+      try {
+        // Use digest auth to get the config
+        const response = await digestAuth.request({
+          url,
+          method: 'GET',
+          timeout: 10000
+        });
 
-          // Second request with auth
-          const response2 = await axios.get(url, {
-            headers: {
-              'Authorization': authHeader
-            },
-            timeout: 10000
-          });
+        console.log('[CameraConfig] SystemConfig retrieved:', response.data);
+        return { success: true, data: response.data };
+      } catch (digestError: any) {
+        // Try without auth if digest fails
+        console.log('[CameraConfig] Digest auth failed, trying without authentication...');
+        
+        const response = await axios.get(url, {
+          timeout: 10000
+        });
 
-          if (response2.status === 200) {
-            console.log('[CameraConfig] SystemConfig retrieved:', response2.data);
-            return { success: true, data: response2.data };
-          } else {
-            throw new Error(`Get config failed with status ${response2.status}`);
-          }
+        if (response.status === 200) {
+          console.log('[CameraConfig] SystemConfig retrieved:', response.data);
+          return { success: true, data: response.data };
+        } else {
+          throw digestError; // Re-throw the original error
         }
-      } else if (response1.status === 200) {
-        // No auth required
-        console.log('[CameraConfig] SystemConfig retrieved:', response1.data);
-        return { success: true, data: response1.data };
       }
-
-      throw new Error(`Unexpected response: ${response1.status}`);
     } catch (error: any) {
       console.error('[CameraConfig] Error getting SystemConfig:', error);
       return { success: false, error: error.message };
@@ -397,37 +379,33 @@ export class CameraConfigurationService {
       
       console.log('[CameraConfig] Checking application status for license activation...');
       
-      // Get installed applications
-      const response1 = await axios.get(listUrl, {
-        timeout: 10000,
-        validateStatus: () => true
+      // Create digest auth client for list.cgi
+      const digestAuthList = new AxiosDigestAuth({
+        username,
+        password,
       });
 
+      // Get installed applications
       let appListData = '';
-      
-      if (response1.status === 401) {
-        // Handle digest authentication
-        const wwwAuth = response1.headers['www-authenticate'];
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          const authHeader = this.buildDigestAuth(
-            username,
-            password,
-            'GET',
-            '/axis-cgi/applications/list.cgi',
-            wwwAuth
-          );
-
-          const response2 = await axios.get(listUrl, {
-            headers: {
-              'Authorization': authHeader
-            },
-            timeout: 10000
-          });
-
-          appListData = response2.data;
+      try {
+        const listResponse = await digestAuthList.request({
+          url: listUrl,
+          method: 'GET',
+          timeout: 10000,
+        });
+        appListData = listResponse.data;
+      } catch (listError: any) {
+        console.error('[CameraConfig] Error getting application list:', listError.message);
+        // Try without auth if digest fails
+        const response = await axios.get(listUrl, {
+          timeout: 10000,
+          validateStatus: () => true
+        });
+        if (response.status === 200) {
+          appListData = response.data;
+        } else {
+          throw new Error(`Failed to get application list: ${listError.message}`);
         }
-      } else if (response1.status === 200) {
-        appListData = response1.data;
       }
 
       // Check if application is in the list
@@ -457,117 +435,107 @@ export class CameraConfigurationService {
       console.log('[CameraConfig] Trying control.cgi endpoint...');
 
       // Prepare form data as URL encoded
-      const createParams = () => {
-        const params = new URLSearchParams();
-        params.append('action', 'license');
-        params.append('ApplicationName', applicationName);
-        params.append('LicenseKey', licenseKey);
-        return params.toString();
-      };
-
-      // First request to get digest challenge
-      const params1 = createParams();
-      console.log('[CameraConfig] POST data:', params1);
+      const params = new URLSearchParams();
+      params.append('action', 'license');
+      params.append('ApplicationName', applicationName);
+      params.append('LicenseKey', licenseKey);
+      const formData = params.toString();
+      
+      console.log('[CameraConfig] POST data:', formData);
       console.log('[CameraConfig] POST URL:', licenseUrl);
-      
-      const licenseResponse1 = await axios.post(licenseUrl, params1, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-          // Let Axios calculate Content-Length automatically
-        },
-        timeout: 30000, // Increased timeout
-        validateStatus: () => true,
-        maxBodyLength: Infinity,
-        maxContentLength: Infinity
+
+      // Create digest auth client for control.cgi
+      const digestAuthControl = new AxiosDigestAuth({
+        username,
+        password,
+        axios: axios.create({
+          // Use custom axios instance with specific settings to prevent stream abort
+          timeout: 30000,
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+          // Important: disable automatic decompression which can cause stream issues
+          decompress: false,
+          // Keep the connection alive
+          httpAgent: new (require('http').Agent)({
+            keepAlive: true,
+            keepAliveMsecs: 1000,
+          }),
+        })
       });
-      
-      console.log('[CameraConfig] First response status:', licenseResponse1.status);
-      console.log('[CameraConfig] First response headers:', licenseResponse1.headers);
 
-      if (licenseResponse1.status === 401) {
-        // Handle digest authentication
-        const wwwAuth = licenseResponse1.headers['www-authenticate'];
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          const authHeader = this.buildDigestAuth(
-            username,
-            password,
-            'POST',
-            '/axis-cgi/applications/control.cgi',
-            wwwAuth
-          );
+      try {
+        // Use digest auth to post the license data
+        const licenseResponse = await digestAuthControl.request({
+          url: licenseUrl,
+          method: 'POST',
+          data: formData,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': Buffer.byteLength(formData).toString(),
+            // Prevent connection close which can cause stream abort
+            'Connection': 'keep-alive',
+          },
+        });
+        
+        console.log('[CameraConfig] License response status:', licenseResponse.status);
+        console.log('[CameraConfig] License response data:', licenseResponse.data);
 
-          // Create fresh params for second request
-          const params2 = createParams();
-          console.log('[CameraConfig] Sending authenticated request...');
-          console.log('[CameraConfig] Auth header:', authHeader.substring(0, 50) + '...');
-          
-          const licenseResponse2 = await axios.post(licenseUrl, params2, {
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Authorization': authHeader
-              // Let Axios calculate Content-Length automatically
-            },
-            timeout: 30000,
-            maxBodyLength: Infinity,
-            maxContentLength: Infinity
-          });
-          
-          console.log('[CameraConfig] Second response status:', licenseResponse2.status);
-          console.log('[CameraConfig] Second response data:', licenseResponse2.data);
-
-          if (licenseResponse2.status === 200) {
-            const responseBody = licenseResponse2.data.toString().trim();
-            if (responseBody === 'OK') {
-              console.log('[CameraConfig] License key applied successfully via control.cgi');
-              return;
-            } else if (responseBody.includes('Error')) {
-              console.log('[CameraConfig] License response:', responseBody);
-              // Check for specific errors
-              if (responseBody === 'Error: 1') {
-                // For now, log the error but don't throw - we need to investigate further
-                console.warn('[CameraConfig] License activation returned Error: 1 - this may indicate the key format needs conversion');
-                console.warn('[CameraConfig] The web UI may convert the simple key to a different format before submission');
-              } else if (responseBody.includes('Invalid license key')) {
-                throw new Error('Invalid license key');
-              } else if (responseBody.includes('not valid for this product')) {
-                throw new Error('License key not valid for this product');
-              } else if (responseBody.includes('could not be activated')) {
-                throw new Error('License could not be activated (check internet connection)');
-              } else {
-                console.warn(`[CameraConfig] License activation warning: ${responseBody}`);
-              }
+        if (licenseResponse.status === 200) {
+          const responseBody = licenseResponse.data.toString().trim();
+          if (responseBody === 'OK') {
+            console.log('[CameraConfig] License key applied successfully via control.cgi');
+            return;
+          } else if (responseBody.includes('Error')) {
+            console.log('[CameraConfig] License response:', responseBody);
+            // Check for specific errors
+            if (responseBody === 'Error: 1') {
+              // For now, log the error but don't throw - we need to investigate further
+              console.warn('[CameraConfig] License activation returned Error: 1 - this may indicate the key format needs conversion');
+              console.warn('[CameraConfig] The web UI may convert the simple key to a different format before submission');
+            } else if (responseBody.includes('Invalid license key')) {
+              throw new Error('Invalid license key');
+            } else if (responseBody.includes('not valid for this product')) {
+              throw new Error('License key not valid for this product');
+            } else if (responseBody.includes('could not be activated')) {
+              throw new Error('License could not be activated (check internet connection)');
+            } else {
+              console.warn(`[CameraConfig] License activation warning: ${responseBody}`);
             }
-          } else {
-            throw new Error(`License activation failed with status ${licenseResponse2.status}`);
-          }
-        }
-      } else if (licenseResponse1.status === 200) {
-        // No auth required
-        const responseBody = licenseResponse1.data.toString().trim();
-        if (responseBody === 'OK') {
-          console.log('[CameraConfig] License key applied successfully (no auth required)');
-          return;
-        } else if (responseBody.includes('Error')) {
-          console.log('[CameraConfig] License response:', responseBody);
-          // Check for specific errors
-          if (responseBody === 'Error: 1') {
-            // For now, log the error but don't throw - we need to investigate further
-            console.warn('[CameraConfig] License activation returned Error: 1 - this may indicate the key format needs conversion');
-            console.warn('[CameraConfig] The web UI may convert the simple key to a different format before submission');
-          } else if (responseBody.includes('Invalid license key')) {
-            throw new Error('Invalid license key');
-          } else if (responseBody.includes('not valid for this product')) {
-            throw new Error('License key not valid for this product');
-          } else if (responseBody.includes('could not be activated')) {
-            throw new Error('License could not be activated (check internet connection)');
-          } else {
-            console.warn(`[CameraConfig] License activation warning: ${responseBody}`);
           }
         } else {
-          console.warn(`[CameraConfig] Unexpected license response: ${responseBody}`);
+          throw new Error(`License activation failed with status ${licenseResponse.status}`);
         }
-      } else {
-        throw new Error(`License activation failed with status ${licenseResponse1.status}`);
+      } catch (digestError: any) {
+        // If digest auth fails, try without auth (some cameras might not require it)
+        console.log('[CameraConfig] Digest auth failed, trying without authentication...');
+        
+        const response = await axios.post(licenseUrl, formData, {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': Buffer.byteLength(formData).toString(),
+            'Connection': 'keep-alive',
+          },
+          timeout: 30000,
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+          decompress: false,
+          httpAgent: new (require('http').Agent)({
+            keepAlive: true,
+            keepAliveMsecs: 1000,
+          }),
+        });
+
+        if (response.status === 200) {
+          const responseBody = response.data.toString().trim();
+          if (responseBody === 'OK') {
+            console.log('[CameraConfig] License key applied successfully (no auth required)');
+            return;
+          } else {
+            console.warn(`[CameraConfig] Unexpected license response: ${responseBody}`);
+          }
+        } else {
+          throw digestError; // Re-throw the original digest error
+        }
       }
       
       // Log final status
