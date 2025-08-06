@@ -235,6 +235,9 @@ const CameraSetupPage: React.FC = () => {
       if (preDiscovered.success && preDiscovered.cameras.length > 0) {
         console.log('Using pre-discovered cameras:', preDiscovered.cameras.length);
         
+        // Show cameras immediately without scanning animation
+        setScanning(false);
+        
         const formattedCameras: CameraInfo[] = preDiscovered.cameras.map((cam: any) => ({
           id: cam.id || `camera-${cam.ip}`,
           ip: cam.ip,
@@ -256,7 +259,6 @@ const CameraSetupPage: React.FC = () => {
           setActiveStep(2);
         }
         
-        setScanning(false);
         return;
       }
       
@@ -596,9 +598,21 @@ const CameraSetupPage: React.FC = () => {
                   control={<Radio />}
                   label={
                     <Box>
-                      <Typography variant="subtitle2">Network Scan</Typography>
+                      <Typography variant="subtitle2">
+                        Network Scan
+                        {hasPreDiscoveredCameras && (
+                          <Chip 
+                            label="Cameras Ready" 
+                            color="success" 
+                            size="small" 
+                            sx={{ ml: 1, verticalAlign: 'middle' }}
+                          />
+                        )}
+                      </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Automatically find cameras on your network
+                        {hasPreDiscoveredCameras 
+                          ? 'View cameras already discovered on your network'
+                          : 'Automatically find cameras on your network'}
                       </Typography>
                     </Box>
                   }
@@ -612,7 +626,7 @@ const CameraSetupPage: React.FC = () => {
                       disabled={scanning}
                       startIcon={scanning ? <CircularProgress size={20} /> : <NetworkCheckIcon />}
                     >
-                      {scanning ? 'Scanning...' : 'Start Network Scan'}
+                      {scanning ? 'Scanning...' : hasPreDiscoveredCameras ? 'View Available Cameras' : 'Start Network Scan'}
                     </Button>
                   </Box>
                 </Collapse>
