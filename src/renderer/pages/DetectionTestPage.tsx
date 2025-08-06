@@ -247,7 +247,7 @@ const DetectionTestPage: React.FC = () => {
 
   const openACAPInterface = () => {
     if (selectedCamera) {
-      window.electronAPI?.openExternal(`http://${selectedCamera.ip}/local/BatonAnalytic/`);
+      window.electronAPI?.openExternal(`http://${selectedCamera.ip}/local/BatonAnalytic/local-events.html`);
     }
   };
 
@@ -512,7 +512,7 @@ const DetectionTestPage: React.FC = () => {
                       onClick={openACAPInterface}
                       endIcon={<OpenInNewIcon />}
                     >
-                      Open ACAP Interface
+                      Open Anava
                     </Button>
                   </CardContent>
                 </Card>
