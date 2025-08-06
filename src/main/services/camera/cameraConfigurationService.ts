@@ -534,11 +534,9 @@ export class CameraConfigurationService {
         const licenseServerUrl = 'https://licensing.anava.ai/ebizz-acap-web/api/oldGw/v2/licensekey';
         
         const licenseRequest = {
-          code: licenseKey,
-          device: {
-            serialNumber: serialNumber,
-            modelName: modelName || 'AXIS Camera'
-          }
+          serial: serialNumber,
+          appId: 'com.anava.batonanalytic',
+          licensekey: licenseKey
         };
         
         console.log('[CameraConfig] License server request:', JSON.stringify(licenseRequest, null, 2));
@@ -570,15 +568,24 @@ export class CameraConfigurationService {
         }
         
         const licenseData = licenseServerResponse.data;
-        console.log('[CameraConfig] License server response received');
+        console.log('[CameraConfig] License server response received:', 
+          typeof licenseData === 'string' ? 'string response' : 'object response');
         
-        if (!licenseData.xml) {
-          throw new Error('License server did not return XML data');
+        // The response might be the XML directly as a string, or wrapped in an object
+        let licenseXML: string;
+        if (typeof licenseData === 'string') {
+          licenseXML = licenseData;
+        } else if (licenseData.xml) {
+          licenseXML = licenseData.xml;
+        } else if (licenseData.license) {
+          licenseXML = licenseData.license;
+        } else {
+          console.error('[CameraConfig] Unexpected license server response:', licenseData);
+          throw new Error('License server did not return XML data in expected format');
         }
         
         // Step 2: Upload the XML to the camera
         const licenseUrl = `http://${ip}/axis-cgi/applications/license.cgi?action=uploadlicensekey&package=${applicationName}`;
-        const licenseXML = licenseData.xml;
 
         // Create form data with file upload
         const createFormData = () => {
@@ -586,13 +593,9 @@ export class CameraConfigurationService {
           const buffer = Buffer.from(licenseXML);
           form.append('fileData', buffer, {
             filename: 'license.xml',
-            contentType: 'application/octet-stream',
-            knownLength: buffer.length
+            contentType: 'text/xml'  // Changed to text/xml to match the actual content
           });
-          // Set the form length to prevent stream issues
-          form.getLengthSync = () => {
-            return buffer.length + 200; // Add some overhead for form boundaries
-          };
+          // Don't override form length - let form-data calculate it correctly
           return form;
         };
 
