@@ -16,6 +16,68 @@ export class CameraConfigurationService {
     this.setupIPC();
   }
 
+
+  async getSceneDescription(camera: any, apiKey: string, includeSpeaker: boolean = false): Promise<any> {
+    try {
+      console.log('[getSceneDescription] Starting scene analysis for camera:', camera.ip);
+      
+      const requestData: any = {
+        viewArea: 1,  // Default camera channel
+        GeminiApiKey: apiKey
+      };
+      
+      // Include speaker credentials if requested and available
+      if (includeSpeaker && camera.speaker) {
+        requestData.speakerIp = camera.speaker.ip;
+        requestData.speakerUser = camera.speaker.username;
+        requestData.speakerPass = camera.speaker.password;
+        console.log('[getSceneDescription] Including speaker in request');
+      }
+      
+      console.log('[getSceneDescription] Request payload:', JSON.stringify(requestData, null, 2));
+      
+      const response = await this.simpleDigestAuth(
+        camera.ip,
+        camera.credentials?.username || 'root',
+        camera.credentials?.password || '',
+        'POST',
+        '/local/BatonAnalytic/baton_analytic.cgi?command=getSceneDescription',
+        JSON.stringify(requestData)
+      );
+
+      if (!response || response.status !== 200) {
+        throw new Error('Failed to get scene description from ACAP');
+      }
+
+      const data = response.data;
+      
+      console.log('[getSceneDescription] Response:', {
+        status: data.status,
+        hasDescription: !!data.description,
+        hasImage: !!data.imageBase64,
+        hasAudio: !!data.audioMP3Base64
+      });
+      
+      if (data.status === 'success') {
+        return {
+          success: true,
+          description: data.description,
+          imageBase64: data.imageBase64,
+          audioMP3Base64: data.audioMP3Base64
+        };
+      } else {
+        throw new Error(data.message || 'Scene analysis failed');
+      }
+      
+    } catch (error: any) {
+      console.error('[getSceneDescription] Error:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to analyze scene'
+      };
+    }
+  }
+
   // Simple digest auth implementation for list.cgi
   private async simpleDigestAuth(
     ip: string,
@@ -192,6 +254,10 @@ export class CameraConfigurationService {
     
     ipcMain.handle('play-speaker-audio', async (_event, speakerIp: string, username: string, password: string, audioFile: string) => {
       return this.playSpeakerAudio(speakerIp, username, password, audioFile);
+    });
+    
+    ipcMain.handle('get-scene-description', async (_event, camera: any, apiKey: string, includeSpeaker: boolean = false) => {
+      return this.getSceneDescription(camera, apiKey, includeSpeaker);
     });
   }
 

@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
   Button,
   Card,
   CardContent,
+  CardMedia,
   Grid,
   Alert,
   CircularProgress,
@@ -18,40 +19,25 @@ import {
   StepLabel,
   StepContent,
   Chip,
-  LinearProgress,
   IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  TextField,
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
   Stop as StopIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
-  Timer as TimerIcon,
   Videocam as VideocamIcon,
-  PanTool as HandIcon,
   VolumeUp as VolumeUpIcon,
   OpenInNew as OpenInNewIcon,
   Refresh as RefreshIcon,
-  Warning as WarningIcon,
-  Info as InfoIcon,
+  Image as ImageIcon,
+  Description as DescriptionIcon,
 } from '@mui/icons-material';
-
-interface TestResult {
-  triggered: boolean;
-  talkdownPlayed: boolean;
-  timestamp: string;
-  detectionType?: string;
-  confidence?: number;
-  audioPlayed?: string;
-}
 
 interface CameraOption {
   id: string;
@@ -65,37 +51,51 @@ interface CameraOption {
   };
 }
 
+interface SceneAnalysis {
+  description: string;
+  imageBase64?: string;
+  audioMP3Base64?: string;
+  timestamp: string;
+}
+
 const DetectionTestPage: React.FC = () => {
   const [activeStep, setActiveStep] = useState(0);
   const [selectedCamera, setSelectedCamera] = useState<CameraOption | null>(null);
-  const [countdown, setCountdown] = useState(10);
-  const [isRunning, setIsRunning] = useState(false);
-  const [testComplete, setTestComplete] = useState(false);
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [cameras, setCameras] = useState<CameraOption[]>([]);
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showInstructions, setShowInstructions] = useState(false);
-  
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const monitoringIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [apiKey, setApiKey] = useState<string>('');
+  const [sceneAnalysis, setSceneAnalysis] = useState<SceneAnalysis | null>(null);
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     loadConfiguredCameras();
+    loadApiKey();
     
     return () => {
-      if (countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current);
-      }
-      if (monitoringIntervalRef.current) {
-        clearInterval(monitoringIntervalRef.current);
+      // Cleanup audio on unmount
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.src = '';
       }
     };
   }, []);
 
+  const loadApiKey = async () => {
+    try {
+      // Try to get the API key from config
+      const storedKey = await window.electronAPI?.getConfigValue('geminiApiKey');
+      if (storedKey) {
+        setApiKey(storedKey);
+      }
+    } catch (error) {
+      console.error('Failed to load API key:', error);
+    }
+  };
+
   const loadConfiguredCameras = async () => {
     try {
-      // Load cameras that have been configured
       const savedCameras = await window.electronAPI?.getConfigValue('configuredCameras');
       console.log('Loading configured cameras:', savedCameras);
       if (savedCameras && Array.isArray(savedCameras)) {
@@ -105,7 +105,7 @@ const DetectionTestPage: React.FC = () => {
           name: cam.name || `Camera at ${cam.ip}`,
           hasACAP: cam.hasACAP !== false,
           hasSpeaker: cam.hasSpeaker || false,
-          credentials: cam.credentials, // Include credentials for API calls
+          credentials: cam.credentials,
         })));
         console.log(`Loaded ${savedCameras.length} configured camera(s)`);
       } else {
@@ -113,141 +113,93 @@ const DetectionTestPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load cameras:', error);
-      // Mock data for testing
-      setCameras([
-        {
-          id: 'camera-1',
-          ip: '192.168.1.100',
-          name: 'Front Entrance Camera',
-          hasACAP: true,
-          hasSpeaker: true,
-        },
-      ]);
     }
   };
 
-  const startTest = () => {
-    if (!selectedCamera) return;
-    
-    setIsRunning(true);
-    setTestComplete(false);
-    setTestResult(null);
+  const handleStartTest = () => {
+    if (selectedCamera && apiKey) {
+      setActiveStep(1);
+      analyzeScene();
+    } else if (!apiKey) {
+      setError('Please enter your Gemini API key');
+    }
+  };
+
+  const analyzeScene = async () => {
+    if (!selectedCamera || !apiKey) return;
+
+    setAnalyzing(true);
     setError(null);
-    setCountdown(10);
-    
-    // Start countdown
-    countdownIntervalRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          if (countdownIntervalRef.current) {
-            clearInterval(countdownIntervalRef.current);
-          }
-          triggerDetection();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
+    setSceneAnalysis(null);
 
-  const triggerDetection = async () => {
     try {
-      // Enable virtual trigger via VAPIX
-      await enableVirtualTrigger(true);
+      console.log('Starting scene analysis for camera:', selectedCamera.ip);
       
-      // Monitor for detection events
-      monitorForEvents();
-      
-      // Disable trigger after 5 seconds
-      setTimeout(async () => {
-        await enableVirtualTrigger(false);
-      }, 5000);
-    } catch (error) {
-      console.error('Failed to trigger detection:', error);
-      setError('Failed to trigger detection test');
-      setIsRunning(false);
-    }
-  };
+      const result = await window.electronAPI?.getSceneDescription(
+        selectedCamera,
+        apiKey,
+        false // Don't include speaker for test
+      );
 
-  const enableVirtualTrigger = async (enable: boolean) => {
-    if (!selectedCamera) return;
-    
-    try {
-      // VAPIX command to enable/disable virtual input
-      const command = enable ? '6:/' : '6:\\';
-      const url = `http://${selectedCamera.ip}/axis-cgi/io/virtualinput.cgi?action=${encodeURIComponent(command)}`;
-      
-      // In real implementation, this would make the actual API call
-      console.log(`Virtual trigger ${enable ? 'enabled' : 'disabled'}`);
-    } catch (error) {
-      console.error('Failed to control virtual trigger:', error);
-      throw error;
-    }
-  };
-
-  const monitorForEvents = () => {
-    // Monitor for detection events for 15 seconds
-    let monitoringTime = 0;
-    const maxMonitoringTime = 15000; // 15 seconds
-    
-    monitoringIntervalRef.current = setInterval(() => {
-      monitoringTime += 1000;
-      
-      // Check for events (mock implementation)
-      if (monitoringTime >= 3000 && !testResult) {
-        // Simulate detection after 3 seconds
-        const result: TestResult = {
-          triggered: true,
-          talkdownPlayed: selectedCamera?.hasSpeaker || false,
-          timestamp: new Date().toISOString(),
-          detectionType: 'Hand with 2 fingers',
-          confidence: 0.95,
-          audioPlayed: 'Security alert message',
+      if (result.success) {
+        const analysis: SceneAnalysis = {
+          description: result.description || 'No description available',
+          imageBase64: result.imageBase64,
+          audioMP3Base64: result.audioMP3Base64,
+          timestamp: new Date().toLocaleTimeString(),
         };
         
-        setTestResult(result);
-        setTestComplete(true);
-        setIsRunning(false);
+        setSceneAnalysis(analysis);
         
-        if (monitoringIntervalRef.current) {
-          clearInterval(monitoringIntervalRef.current);
+        // Play audio if available
+        if (result.audioMP3Base64) {
+          playAudio(result.audioMP3Base64);
         }
+        
+        setActiveStep(2);
+      } else {
+        throw new Error(result.error || 'Failed to analyze scene');
       }
+    } catch (error: any) {
+      console.error('Scene analysis failed:', error);
+      setError(error.message || 'Failed to analyze scene');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const playAudio = (base64Audio: string) => {
+    try {
+      // Stop any existing audio
+      if (audioElement) {
+        audioElement.pause();
+      }
+
+      // Create new audio element
+      const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+      audio.play().catch(e => {
+        console.error('Failed to play audio:', e);
+      });
       
-      if (monitoringTime >= maxMonitoringTime) {
-        // No detection
-        setTestResult({
-          triggered: false,
-          talkdownPlayed: false,
-          timestamp: new Date().toISOString(),
-        });
-        setTestComplete(true);
-        setIsRunning(false);
-        
-        if (monitoringIntervalRef.current) {
-          clearInterval(monitoringIntervalRef.current);
-        }
-      }
-    }, 1000);
+      setAudioElement(audio);
+    } catch (error) {
+      console.error('Failed to play audio:', error);
+    }
   };
 
-  const stopTest = () => {
-    setIsRunning(false);
-    
-    if (countdownIntervalRef.current) {
-      clearInterval(countdownIntervalRef.current);
-    }
-    if (monitoringIntervalRef.current) {
-      clearInterval(monitoringIntervalRef.current);
-    }
-    
-    // Disable virtual trigger
-    enableVirtualTrigger(false);
-  };
-
-  const openACAPInterface = () => {
+  const openAnavaInterface = () => {
     if (selectedCamera) {
       window.electronAPI?.openExternal(`http://${selectedCamera.ip}/local/BatonAnalytic/local-events.html`);
+    }
+  };
+
+  const handleReset = () => {
+    setActiveStep(0);
+    setSceneAnalysis(null);
+    setError(null);
+    if (audioElement) {
+      audioElement.pause();
+      audioElement.src = '';
     }
   };
 
@@ -257,7 +209,7 @@ const DetectionTestPage: React.FC = () => {
         return (
           <Box>
             <Typography variant="body2" color="text.secondary" paragraph>
-              Select a camera that has been configured with Anava AI analytics
+              Test the AI vision capabilities of your configured camera
             </Typography>
             
             {cameras.length === 0 ? (
@@ -279,43 +231,53 @@ const DetectionTestPage: React.FC = () => {
               </Box>
             ) : (
               <Box>
-                <FormControl fullWidth>
+                <FormControl fullWidth sx={{ mb: 3 }}>
                   <InputLabel>Select Camera</InputLabel>
                   <Select
-                  value={selectedCamera?.id || ''}
-                  onChange={(e) => {
-                    const cam = cameras.find(c => c.id === e.target.value);
-                    setSelectedCamera(cam || null);
+                    value={selectedCamera?.id || ''}
+                    onChange={(e) => {
+                      const cam = cameras.find(c => c.id === e.target.value);
+                      setSelectedCamera(cam || null);
+                    }}
+                  >
+                    {cameras.map((camera) => (
+                      <MenuItem key={camera.id} value={camera.id}>
+                        <Box>
+                          <Typography variant="body1">{camera.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {camera.ip}
+                          </Typography>
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <TextField
+                  fullWidth
+                  label="Gemini API Key"
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  helperText="Enter your Gemini API key for AI analysis"
+                  sx={{ mb: 3 }}
+                />
+
+                <Button
+                  variant="text"
+                  startIcon={<RefreshIcon />}
+                  onClick={() => {
+                    setLoading(true);
+                    loadConfiguredCameras().finally(() => setLoading(false));
                   }}
+                  disabled={loading}
                 >
-                  {cameras.map((camera) => (
-                    <MenuItem key={camera.id} value={camera.id}>
-                      <Box>
-                        <Typography variant="body1">{camera.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {camera.ip} {camera.hasSpeaker && '• Has Speaker'}
-                        </Typography>
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <Button
-                variant="text"
-                startIcon={<RefreshIcon />}
-                onClick={() => {
-                  setLoading(true);
-                  loadConfiguredCameras().finally(() => setLoading(false));
-                }}
-                disabled={loading}
-                sx={{ mt: 2 }}
-              >
-                Refresh List
-              </Button>
+                  Refresh List
+                </Button>
               </Box>
             )}
             
-            {selectedCamera && (
+            {selectedCamera && apiKey && (
               <Box sx={{ mt: 3 }}>
                 <Card variant="outlined">
                   <CardContent>
@@ -329,28 +291,14 @@ const DetectionTestPage: React.FC = () => {
                           {selectedCamera.ip}
                         </Typography>
                       </Grid>
-                      <Grid item>
-                        {selectedCamera.hasSpeaker && (
-                          <Chip
-                            icon={<VolumeUpIcon />}
-                            label="Speaker Ready"
-                            size="small"
-                            color="success"
-                          />
-                        )}
-                      </Grid>
+                      {selectedCamera.hasACAP && (
+                        <Grid item>
+                          <Chip label="ACAP Installed" color="success" size="small" />
+                        </Grid>
+                      )}
                     </Grid>
                   </CardContent>
                 </Card>
-                
-                <Button
-                  variant="contained"
-                  fullWidth
-                  sx={{ mt: 2 }}
-                  onClick={() => setActiveStep(1)}
-                >
-                  Continue
-                </Button>
               </Box>
             )}
           </Box>
@@ -359,244 +307,92 @@ const DetectionTestPage: React.FC = () => {
       case 1:
         return (
           <Box>
-            <Alert severity="info" sx={{ mb: 3 }}>
-              <Typography variant="subtitle2" gutterBottom>
-                Test Instructions:
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Analyzing the camera's view using AI...
+            </Typography>
+            
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
+              <CircularProgress size={60} sx={{ mb: 3 }} />
+              <Typography variant="h6" gutterBottom>
+                Capturing Scene
               </Typography>
-              <List dense>
-                <ListItem>
-                  <ListItemIcon sx={{ minWidth: 36 }}>
-                    <HandIcon />
-                  </ListItemIcon>
-                  <ListItemText primary="Stand in front of the camera" />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon sx={{ minWidth: 36 }}>
-                    <HandIcon />
-                  </ListItemIcon>
-                  <ListItemText primary="Hold up 2 fingers when the countdown reaches zero" />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon sx={{ minWidth: 36 }}>
-                    <TimerIcon />
-                  </ListItemIcon>
-                  <ListItemText primary="Keep your hand visible for 3-5 seconds" />
-                </ListItem>
-              </List>
-            </Alert>
-
-            {!isRunning && !testComplete && (
-              <Box textAlign="center">
-                <Button
-                  variant="contained"
-                  size="large"
-                  onClick={startTest}
-                  startIcon={<PlayIcon />}
-                  sx={{ mb: 2 }}
-                >
-                  Start Detection Test
-                </Button>
-                
-                <Typography variant="body2" color="text.secondary">
-                  Make sure you're ready in front of the camera
-                </Typography>
-              </Box>
-            )}
-
-            {isRunning && (
-              <Box textAlign="center">
-                <Paper sx={{ p: 4, backgroundColor: 'primary.50' }}>
-                  <Typography variant="h1" color="primary" sx={{ fontSize: 120, fontWeight: 'bold' }}>
-                    {countdown}
-                  </Typography>
-                  <Typography variant="h6" color="text.secondary">
-                    {countdown > 0 ? 'Get ready...' : 'Show 2 fingers now!'}
-                  </Typography>
-                  
-                  <LinearProgress
-                    variant="determinate"
-                    value={(10 - countdown) * 10}
-                    sx={{ mt: 2, height: 8, borderRadius: 4 }}
-                  />
-                  
-                  <Button
-                    variant="outlined"
-                    onClick={stopTest}
-                    startIcon={<StopIcon />}
-                    sx={{ mt: 3 }}
-                  >
-                    Cancel Test
-                  </Button>
-                </Paper>
-              </Box>
-            )}
-
-            {testComplete && testResult && (
-              <Box>
-                {testResult.triggered ? (
-                  <Alert severity="success" sx={{ mb: 3 }}>
-                    <Typography variant="subtitle1" gutterBottom>
-                      Detection Successful!
-                    </Typography>
-                    <Typography variant="body2">
-                      AI detected: {testResult.detectionType} (Confidence: {(testResult.confidence! * 100).toFixed(0)}%)
-                    </Typography>
-                    {testResult.talkdownPlayed && (
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        Audio talkdown played: "{testResult.audioPlayed}"
-                      </Typography>
-                    )}
-                  </Alert>
-                ) : (
-                  <Alert severity="warning" sx={{ mb: 3 }}>
-                    <Typography variant="subtitle1" gutterBottom>
-                      No Detection
-                    </Typography>
-                    <Typography variant="body2">
-                      The AI did not detect the gesture. Try again with clearer hand positioning.
-                    </Typography>
-                  </Alert>
-                )}
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <Button
-                      variant="contained"
-                      fullWidth
-                      onClick={() => {
-                        setTestComplete(false);
-                        setTestResult(null);
-                        startTest();
-                      }}
-                      startIcon={<RefreshIcon />}
-                    >
-                      Try Again
-                    </Button>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Button
-                      variant="outlined"
-                      fullWidth
-                      onClick={() => setActiveStep(2)}
-                    >
-                      View Results
-                    </Button>
-                  </Grid>
-                </Grid>
-              </Box>
-            )}
+              <Typography variant="body2" color="text.secondary">
+                AI is analyzing what the camera sees...
+              </Typography>
+            </Box>
           </Box>
         );
 
       case 2:
         return (
           <Box>
-            <Typography variant="body1" paragraph>
-              Your camera AI is working perfectly! Here's what you can do next:
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Scene analysis complete
             </Typography>
+            
+            {sceneAnalysis && (
+              <Grid container spacing={3}>
+                {sceneAnalysis.imageBase64 && (
+                  <Grid item xs={12}>
+                    <Card>
+                      <CardMedia
+                        component="img"
+                        image={`data:image/jpeg;base64,${sceneAnalysis.imageBase64}`}
+                        alt="Camera view"
+                        sx={{ maxHeight: 400, objectFit: 'contain' }}
+                      />
+                    </Card>
+                  </Grid>
+                )}
+                
+                <Grid item xs={12}>
+                  <Paper elevation={2} sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <DescriptionIcon sx={{ mr: 1, color: 'primary.main' }} />
+                      <Typography variant="h6">AI Analysis</Typography>
+                    </Box>
+                    <Typography variant="body1" paragraph>
+                      {sceneAnalysis.description}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Analyzed at {sceneAnalysis.timestamp}
+                    </Typography>
+                  </Paper>
+                </Grid>
 
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      ACAP Interface
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" paragraph>
-                      Access the full analytics interface to configure detection zones, 
-                      adjust sensitivity, and view real-time events.
-                    </Typography>
+                {sceneAnalysis.audioMP3Base64 && (
+                  <Grid item xs={12}>
+                    <Paper elevation={1} sx={{ p: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <VolumeUpIcon sx={{ mr: 1, color: 'success.main' }} />
+                        <Typography variant="body2">
+                          Audio talkdown played through your speakers
+                        </Typography>
+                      </Box>
+                    </Paper>
+                  </Grid>
+                )}
+
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
                     <Button
                       variant="contained"
-                      fullWidth
-                      onClick={openACAPInterface}
+                      onClick={analyzeScene}
+                      startIcon={<RefreshIcon />}
+                    >
+                      Analyze Again
+                    </Button>
+                    
+                    <Button
+                      variant="outlined"
+                      onClick={openAnavaInterface}
                       endIcon={<OpenInNewIcon />}
                     >
                       Open Anava
                     </Button>
-                  </CardContent>
-                </Card>
+                  </Box>
+                </Grid>
               </Grid>
-
-              <Grid item xs={12} md={6}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      Detection Types
-                    </Typography>
-                    <List dense>
-                      <ListItem>
-                        <ListItemIcon>
-                          <CheckCircleIcon color="success" fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText primary="Hand gestures (1-5 fingers)" />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemIcon>
-                          <CheckCircleIcon color="success" fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText primary="Weapon detection" />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemIcon>
-                          <CheckCircleIcon color="success" fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText primary="Person detection & tracking" />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemIcon>
-                          <CheckCircleIcon color="success" fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText primary="Custom AI prompts" />
-                      </ListItem>
-                    </List>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-
-            {testResult && (
-              <Box sx={{ mt: 3 }}>
-                <Paper sx={{ p: 3, backgroundColor: 'grey.50' }}>
-                  <Typography variant="h6" gutterBottom>
-                    Test Summary
-                  </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">
-                        Detection Result
-                      </Typography>
-                      <Typography variant="body1">
-                        {testResult.triggered ? 'Success' : 'No Detection'}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">
-                        Audio Talkdown
-                      </Typography>
-                      <Typography variant="body1">
-                        {testResult.talkdownPlayed ? 'Played' : 'Not Available'}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">
-                        Detection Type
-                      </Typography>
-                      <Typography variant="body1">
-                        {testResult.detectionType || 'N/A'}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">
-                        Timestamp
-                      </Typography>
-                      <Typography variant="body1">
-                        {new Date(testResult.timestamp).toLocaleTimeString()}
-                      </Typography>
-                    </Grid>
-                  </Grid>
-                </Paper>
-              </Box>
             )}
           </Box>
         );
@@ -607,74 +403,64 @@ const DetectionTestPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3, maxWidth: 800, mx: 'auto' }}>
+    <Box sx={{ p: 3, height: '100%', overflow: 'auto' }}>
       <Typography variant="h4" gutterBottom>
-        Test Detection
+        AI Vision Test
       </Typography>
+      
       <Typography variant="body1" color="text.secondary" paragraph>
-        Verify your AI analytics are working correctly with a simple hand gesture test
+        Test your camera's AI capabilities by capturing and analyzing the current scene
       </Typography>
+
+      {error && (
+        <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
 
       <Stepper activeStep={activeStep} orientation="vertical">
         <Step>
-          <StepLabel>Select Camera</StepLabel>
-          <StepContent>{getStepContent(0)}</StepContent>
+          <StepLabel>
+            Select Camera & API Key
+          </StepLabel>
+          <StepContent>
+            {getStepContent(0)}
+            <Box sx={{ mb: 2, mt: 2 }}>
+              <Button
+                variant="contained"
+                onClick={handleStartTest}
+                disabled={!selectedCamera || !apiKey}
+                startIcon={<PlayIcon />}
+              >
+                Start Test
+              </Button>
+            </Box>
+          </StepContent>
         </Step>
-        
+
         <Step>
-          <StepLabel>Run Detection Test</StepLabel>
-          <StepContent>{getStepContent(1)}</StepContent>
+          <StepLabel>
+            Analyzing Scene
+          </StepLabel>
+          <StepContent>
+            {getStepContent(1)}
+          </StepContent>
         </Step>
-        
+
         <Step>
-          <StepLabel>Results & Next Steps</StepLabel>
-          <StepContent>{getStepContent(2)}</StepContent>
+          <StepLabel>
+            Review Results
+          </StepLabel>
+          <StepContent>
+            {getStepContent(2)}
+            <Box sx={{ mb: 2, mt: 3 }}>
+              <Button onClick={handleReset} sx={{ mr: 1 }}>
+                Test Another Camera
+              </Button>
+            </Box>
+          </StepContent>
         </Step>
       </Stepper>
-
-      {/* Instructions Dialog */}
-      <Dialog open={showInstructions} onClose={() => setShowInstructions(false)}>
-        <DialogTitle>Detection Test Instructions</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" paragraph>
-            This test verifies that your camera's AI analytics are working correctly.
-          </Typography>
-          <Typography variant="subtitle2" gutterBottom>
-            How it works:
-          </Typography>
-          <List>
-            <ListItem>
-              <ListItemText
-                primary="1. Position yourself"
-                secondary="Stand in clear view of the camera"
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText
-                primary="2. Wait for countdown"
-                secondary="A 10-second countdown will begin"
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText
-                primary="3. Show 2 fingers"
-                secondary="When countdown reaches zero, hold up 2 fingers"
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText
-                primary="4. Wait for detection"
-                secondary="Keep your hand visible for 3-5 seconds"
-              />
-            </ListItem>
-          </List>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowInstructions(false)}>
-            Got it
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
