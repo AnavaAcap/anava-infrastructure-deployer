@@ -100,7 +100,33 @@
 - `APPLE_ID_PASSWORD`: App-specific password
 - `APPLE_TEAM_ID`: Your Apple Developer Team ID (e.g., "3JVZNWGRYT")
 
-## Current State (v0.9.83)
+## License Activation Solution (v0.9.105+)
+
+### Automatic License Activation
+**Breakthrough**: Axis provides a public JavaScript SDK that converts license keys to signed XML format!
+
+**Implementation**:
+- Uses Puppeteer to load `https://www.axis.com/app/acap/sdk.js`
+- Calls `ACAP.registerLicenseKey()` with applicationId, deviceId, and licenseCode
+- Returns properly signed XML with cryptographic signature
+- No authentication or API keys required
+
+**Key Code** (`cameraConfigurationService.ts`):
+```typescript
+const browser = await puppeteer.launch({ headless: true });
+const page = await browser.newPage();
+// Load Axis SDK and call registerLicenseKey
+const result = await page.evaluate(() => 
+  window.ACAP.registerLicenseKey({ applicationId, deviceId, licenseCode })
+);
+```
+
+**Error Handling**:
+- Retry logic for "ThreadPool" errors (app still starting)
+- 3-second initial delay after ACAP deployment
+- Comprehensive logging throughout the process
+
+## Current State (v0.9.105)
 
 ### Camera Setup Architecture
 
@@ -130,7 +156,14 @@
 - ❌ "Connecting..." state doesn't always clear on error
 - ❌ Need better logging for IPC responses
 
-### Recent Changes (v0.9.83)
+### Recent Changes
+#### v0.9.105
+- **Automatic license activation**: Using Axis public SDK to convert keys to XML
+- **Fixed stream abort errors**: Replaced failing digest auth library
+- **Added retry logic**: Handles ThreadPool errors when app is starting
+- **Comprehensive logging**: Every step of license activation is logged
+
+#### v0.9.83
 - **Removed hardcoded credentials**: No more fallback `root:pass` 
 - **Added manual license key entry**: Users can enter existing licenses
 - **Improved error handling**: Auth errors now return specific messages
@@ -147,6 +180,7 @@
 - Workload Identity Federation setup
 - Camera discovery and configuration
 - ACAP deployment to cameras
+- **License activation** (v0.9.105+) - Fully automatic using Axis SDK
 
 ### What's Manual
 - Google Sign-In OAuth client configuration (optional)
@@ -198,6 +232,8 @@ APPLE_ID="email" APPLE_ID_PASSWORD="pass" APPLE_TEAM_ID="team" npm run dist:mac
 6. Don't set `identity: null` in package.json - it disables code signing
 7. Don't forget to export Developer ID certificate as .p12 for CI/CD
 8. Don't compress .dmg or .exe files - they're already optimized
+9. Don't try to upload plain license keys - they must be converted to signed XML format
+10. Don't skip the retry logic for ThreadPool errors - apps need time to start
 
 ### Testing Commands
 ```bash
