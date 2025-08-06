@@ -1,7 +1,6 @@
 import { ipcMain } from 'electron';
 import axios from 'axios';
 import crypto from 'crypto';
-import FormData from 'form-data';
 import { Camera } from './cameraDiscoveryService';
 
 export interface ConfigurationResult {
