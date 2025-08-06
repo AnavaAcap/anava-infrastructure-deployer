@@ -3,6 +3,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
 import https from 'https';
 import { Camera } from './cameraDiscoveryService';
@@ -13,6 +14,8 @@ export interface DeploymentResult {
   ip: string;
   message: string;
   error?: string;
+  firmwareVersion?: string;
+  osVersion?: 'OS11' | 'OS12';
 }
 
 export class ACAPDeploymentService {
@@ -32,6 +35,10 @@ export class ACAPDeploymentService {
       return this.deployACAP(camera, acapPath);
     });
     
+    ipcMain.handle('deploy-acap-auto', async (_event, camera: Camera, availableAcaps: any[]) => {
+      return this.deployACAPAuto(camera, availableAcaps);
+    });
+    
     ipcMain.handle('uninstall-acap', async (_event, camera: Camera, appName: string) => {
       return this.uninstallACAP(camera, appName);
     });
@@ -39,6 +46,140 @@ export class ACAPDeploymentService {
     ipcMain.handle('list-installed-acaps', async (_event, camera: Camera) => {
       return this.listInstalledACAPs(camera);
     });
+    
+    ipcMain.handle('get-camera-firmware', async (_event, camera: Camera) => {
+      return this.getCameraFirmwareInfo(camera);
+    });
+  }
+
+  async getCameraFirmwareInfo(camera: Camera): Promise<{ firmwareVersion: string; osVersion: 'OS11' | 'OS12'; architecture?: string }> {
+    try {
+      const credentials = camera.credentials;
+      if (!credentials || !credentials.username || !credentials.password) {
+        throw new Error('Camera credentials are required');
+      }
+      
+      const firmwareVersion = await this.getFirmwareVersion(camera.ip, credentials.username, credentials.password);
+      const isOS12 = this.isOS12Firmware(firmwareVersion);
+      
+      // Try to get architecture info
+      let architecture = 'aarch64'; // Default to most common
+      try {
+        // First try the specific Architecture property
+        const archResponse = await this.digestAuth(
+          camera.ip,
+          credentials.username,
+          credentials.password,
+          'GET',
+          '/axis-cgi/param.cgi?action=list&group=Properties.System.Architecture'
+        );
+        
+        if (archResponse && archResponse.data) {
+          const data = String(archResponse.data);
+          const archMatch = data.match(/Properties\.System\.Architecture=([^\r\n]+)/);
+          if (archMatch) {
+            architecture = archMatch[1].toLowerCase().trim();
+            console.log(`[getCameraFirmwareInfo] Architecture from Properties.System.Architecture: ${architecture}`);
+          }
+        }
+        
+        // If not found, try to get from full system properties
+        if (architecture === 'aarch64') {
+          const response = await this.digestAuth(
+            camera.ip,
+            credentials.username,
+            credentials.password,
+            'GET',
+            '/axis-cgi/param.cgi?action=list&group=Properties.System'
+          );
+          
+          if (response && response.data) {
+            const data = String(response.data);
+            // Look for architecture info in system properties
+            if (data.includes('Architecture=')) {
+              const archMatch = data.match(/Architecture=([^\r\n]+)/);
+              if (archMatch) {
+                architecture = archMatch[1].toLowerCase().trim();
+                console.log(`[getCameraFirmwareInfo] Architecture from Properties.System: ${architecture}`);
+              }
+            }
+            
+            // Also check SOC for architecture inference
+            if (data.includes('Soc=')) {
+              const socMatch = data.match(/Soc=([^\r\n]+)/);
+              if (socMatch) {
+                const soc = socMatch[1];
+                console.log(`[getCameraFirmwareInfo] System on Chip: ${soc}`);
+                // Map known SOCs to architectures
+                if (soc.includes('CV25') || soc.includes('Artpec-8') || soc.includes('ARTPEC-8')) {
+                  architecture = 'aarch64';
+                } else if (soc.includes('ARTPEC-7') || soc.includes('Artpec-7')) {
+                  architecture = 'armv7hf';
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.log('[getCameraFirmwareInfo] Could not get architecture, using default: aarch64');
+      }
+      
+      return {
+        firmwareVersion,
+        osVersion: isOS12 ? 'OS12' : 'OS11',
+        architecture
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to get firmware info: ${error.message}`);
+    }
+  }
+
+  async deployACAPAuto(camera: Camera, availableAcaps: any[]): Promise<DeploymentResult> {
+    try {
+      console.log(`[deployACAPAuto] ========== AUTO DEPLOYMENT STARTING ==========`);
+      console.log(`[deployACAPAuto] Available ACAPs:`, availableAcaps.map(a => a.filename));
+      
+      // Get camera firmware info
+      const firmwareInfo = await this.getCameraFirmwareInfo(camera);
+      console.log(`[deployACAPAuto] Camera firmware: ${firmwareInfo.firmwareVersion} (${firmwareInfo.osVersion})`);
+      console.log(`[deployACAPAuto] Camera architecture: ${firmwareInfo.architecture}`);
+      
+      // Find matching ACAP for this camera
+      const osVersionLower = firmwareInfo.osVersion.toLowerCase();
+      const matchingAcap = availableAcaps.find(acap => {
+        const filename = acap.filename.toLowerCase();
+        // Check if filename contains the OS version
+        const hasCorrectOS = filename.includes(osVersionLower);
+        // Check if filename contains the architecture (if known)
+        const hasCorrectArch = !firmwareInfo.architecture || 
+                              filename.includes(firmwareInfo.architecture) ||
+                              (firmwareInfo.architecture === 'aarch64' && filename.includes('aarch64'));
+        
+        console.log(`[deployACAPAuto] Checking ${acap.filename}: OS match=${hasCorrectOS}, Arch match=${hasCorrectArch}`);
+        return hasCorrectOS && hasCorrectArch && acap.isDownloaded;
+      });
+      
+      if (!matchingAcap) {
+        throw new Error(`No suitable ACAP found for ${firmwareInfo.osVersion} (firmware ${firmwareInfo.firmwareVersion}). Please download the correct ACAP version.`);
+      }
+      
+      console.log(`[deployACAPAuto] Selected ACAP: ${matchingAcap.filename}`);
+      
+      // Get the local path and deploy
+      const acapPath = path.join(os.tmpdir(), 'anava-acaps', matchingAcap.filename);
+      return this.deployACAP(camera, acapPath);
+      
+    } catch (error: any) {
+      console.error(`[deployACAPAuto] ========== AUTO DEPLOYMENT FAILED ==========`);
+      console.error(`[deployACAPAuto] Error:`, error);
+      return {
+        success: false,
+        cameraId: camera.id,
+        ip: camera.ip,
+        message: 'Auto deployment failed',
+        error: error.message
+      };
+    }
   }
 
   async deployACAP(camera: Camera, acapPath: string): Promise<DeploymentResult> {
@@ -69,6 +210,14 @@ export class ACAPDeploymentService {
       }
       console.log(`[ACAPDeployment] Connection test successful`);
 
+      // Detect firmware version to determine OS11 vs OS12
+      const firmwareVersion = await this.getFirmwareVersion(camera.ip, credentials.username, credentials.password);
+      console.log(`[ACAPDeployment] Camera firmware version: ${firmwareVersion}`);
+      
+      // Determine if this is OS12 (firmware 11.x or higher) or OS11 (firmware 10.x or lower)
+      const isOS12 = this.isOS12Firmware(firmwareVersion);
+      console.log(`[ACAPDeployment] Camera is running ${isOS12 ? 'OS12' : 'OS11'} based on firmware ${firmwareVersion}`);
+
       // Upload the ACAP (always upload, no checking)
       console.log(`[ACAPDeployment] Starting ACAP upload...`);
       const uploadResult = await this.uploadACAP(
@@ -84,7 +233,9 @@ export class ACAPDeploymentService {
           success: true,
           cameraId: camera.id,
           ip: camera.ip,
-          message: 'ACAP deployed successfully'
+          message: 'ACAP deployed successfully',
+          firmwareVersion,
+          osVersion: isOS12 ? 'OS12' : 'OS11'
         };
       } else {
         throw new Error(uploadResult.error || 'Upload failed');
@@ -251,6 +402,57 @@ export class ACAPDeploymentService {
     } catch (error) {
       return false;
     }
+  }
+
+  private async getFirmwareVersion(ip: string, username: string, password: string): Promise<string> {
+    try {
+      console.log('[getFirmwareVersion] Fetching firmware version from camera...');
+      const response = await this.digestAuth(
+        ip,
+        username,
+        password,
+        'GET',
+        '/axis-cgi/param.cgi?action=list&group=Properties.Firmware.Version'
+      );
+
+      if (response && response.data) {
+        const data = String(response.data);
+        console.log('[getFirmwareVersion] Raw response:', data);
+        
+        // Parse firmware version from response
+        // Format is typically: Properties.Firmware.Version=11.10.69
+        const versionMatch = data.match(/Properties\.Firmware\.Version=([^\r\n]+)/);
+        if (versionMatch) {
+          const version = versionMatch[1].trim();
+          console.log('[getFirmwareVersion] Extracted version:', version);
+          return version;
+        }
+      }
+      
+      console.log('[getFirmwareVersion] Could not extract firmware version, defaulting to 10.0.0');
+      return '10.0.0'; // Default to OS11 if we can't determine
+    } catch (error: any) {
+      console.error('[getFirmwareVersion] Error fetching firmware version:', error.message);
+      return '10.0.0'; // Default to OS11 on error
+    }
+  }
+
+  private isOS12Firmware(firmwareVersion: string): boolean {
+    try {
+      // Parse the major version number
+      const parts = firmwareVersion.split('.');
+      if (parts.length > 0) {
+        const majorVersion = parseInt(parts[0], 10);
+        // OS12 is firmware 11.x and higher
+        // OS11 is firmware 10.x and lower
+        const isOS12 = majorVersion >= 11;
+        console.log(`[isOS12Firmware] Firmware ${firmwareVersion} major version ${majorVersion} -> ${isOS12 ? 'OS12' : 'OS11'}`);
+        return isOS12;
+      }
+    } catch (error) {
+      console.error('[isOS12Firmware] Error parsing firmware version:', error);
+    }
+    return false; // Default to OS11 if parsing fails
   }
 
   private async uploadACAP(ip: string, username: string, password: string, acapPath: string): Promise<any> {

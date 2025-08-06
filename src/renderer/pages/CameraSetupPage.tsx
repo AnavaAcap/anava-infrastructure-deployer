@@ -339,13 +339,22 @@ const CameraSetupPage: React.FC = () => {
         throw new Error('No ACAP releases found');
       }
 
-      const latestRelease = releases[0];
-      const downloadResult = await window.electronAPI.acap.download(latestRelease);
-      const acapPath = downloadResult.path;
+      // Download all available releases first
+      const downloadedReleases = [];
+      for (const release of releases) {
+        if (!release.isDownloaded) {
+          const downloadResult = await window.electronAPI.acap.download(release);
+          if (downloadResult.success) {
+            downloadedReleases.push({ ...release, isDownloaded: true });
+          }
+        } else {
+          downloadedReleases.push(release);
+        }
+      }
 
-      // Step 2: Deploy ACAP
+      // Step 2: Deploy ACAP with automatic OS version selection
       setDeploymentProgress(30);
-      setDeploymentStatus('Installing ACAP on camera...');
+      setDeploymentStatus('Detecting camera firmware and installing appropriate ACAP...');
       updateCameraStatus(selectedCamera.id, 'deploying');
 
       // Create camera object with credentials for deployment
@@ -357,13 +366,18 @@ const CameraSetupPage: React.FC = () => {
         }
       };
       
-      const deployResult = await window.electronAPI.deployACAP(cameraForDeployment, acapPath);
+      // Use automatic deployment which will detect firmware and select correct ACAP
+      const deployResult = await window.electronAPI.deployACAPAuto(cameraForDeployment, downloadedReleases);
       
       if (!deployResult.success) {
         throw new Error(deployResult.error || 'ACAP deployment failed');
       }
       
       console.log('ACAP deployment successful:', deployResult.message);
+      if (deployResult.firmwareVersion && deployResult.osVersion) {
+        console.log(`Deployed ${deployResult.osVersion} ACAP for firmware ${deployResult.firmwareVersion}`);
+        setDeploymentStatus(`Installed ${deployResult.osVersion} ACAP for firmware ${deployResult.firmwareVersion}`);
+      }
 
       // Step 3: Apply license (only if not already licensed)
       if (!selectedCamera.isLicensed && licenseKey) {

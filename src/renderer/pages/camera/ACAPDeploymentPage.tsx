@@ -230,19 +230,18 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
       // First check if we have any downloaded ACAP files
       addLog('Checking for downloaded ACAP packages...');
       const releases = await window.electronAPI.acap.getReleases();
-      const downloadedRelease = releases.find(r => r.isDownloaded);
+      const downloadedReleases = releases.filter(r => r.isDownloaded);
       
-      if (!downloadedRelease) {
-        setError('No ACAP package downloaded. Please download an ACAP package first.');
-        addLog('ERROR: No ACAP package found. Please go to ACAP Manager to download.');
+      if (downloadedReleases.length === 0) {
+        setError('No ACAP packages downloaded. Please download ACAP packages first.');
+        addLog('ERROR: No ACAP packages found. Please go to ACAP Manager to download.');
         return;
       }
       
-      addLog(`Found ACAP package: ${downloadedRelease.name}`);
-      
-      // Get the local path of the downloaded ACAP
-      const acapPath = await window.electronAPI.acap.getLocalPath(downloadedRelease.filename);
-      addLog(`ACAP file location: ${acapPath}`);
+      addLog(`Found ${downloadedReleases.length} ACAP package(s):`);
+      downloadedReleases.forEach(r => {
+        addLog(` - ${r.name}`);
+      });
       
       for (const camera of cameras) {
         const currentIP = cameraIPs[camera.id] || camera.ip;
@@ -275,18 +274,24 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
           
           const currentIP = cameraIPs[camera.id] || camera.ip;
           addLog(`Connecting to ${currentIP} with user '${credentials[camera.id].username}'...`);
-          addLog(`Testing camera connection...`);
           
-          // Actually deploy the ACAP
-          addLog(`Uploading ACAP package to camera...`);
-          addLog(`POST http://${currentIP}/axis-cgi/applications/upload.cgi`);
+          // First detect firmware version
+          addLog(`Detecting camera firmware version...`);
+          const firmwareInfo = await window.electronAPI.getCameraFirmware(cameraWithCreds);
+          addLog(`Camera firmware: ${firmwareInfo.firmwareVersion} (${firmwareInfo.osVersion})`);
+          if (firmwareInfo.architecture) {
+            addLog(`Camera architecture: ${firmwareInfo.architecture}`);
+          }
           
-          const result = await window.electronAPI.deployACAP(cameraWithCreds, acapPath);
+          // Deploy appropriate ACAP based on firmware
+          addLog(`Selecting appropriate ACAP for ${firmwareInfo.osVersion}...`);
+          const result = await window.electronAPI.deployACAPAuto(cameraWithCreds, releases);
           
           if (result.success) {
-            addLog(`✓ Upload successful`);
-            addLog(`✓ ACAP installation completed`);
-            
+            addLog(`✓ ACAP uploaded and installed successfully`);
+            if (result.firmwareVersion) {
+              addLog(`✓ Deployed correct ACAP for firmware ${result.firmwareVersion} (${result.osVersion})`);
+            }
             // Apply license key if provided
             if (deploymentConfig?.anavaKey) {
               addLog(`Applying Anava license key...`);

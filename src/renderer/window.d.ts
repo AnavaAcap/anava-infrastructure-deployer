@@ -82,6 +82,8 @@ declare global {
       quickScanCamera: (ip: string, username: string, password: string) => Promise<any[]>;
       testCameraCredentials: (cameraId: string, ip: string, username: string, password: string) => Promise<any>;
       deployACAP: (camera: any, acapPath: string) => Promise<any>;
+      deployACAPAuto: (camera: any, availableAcaps: any[]) => Promise<any>;
+      getCameraFirmware: (camera: any) => Promise<{ firmwareVersion: string; osVersion: 'OS11' | 'OS12'; architecture?: string }>;
       uninstallACAP: (camera: any, appName: string) => Promise<any>;
       listInstalledACAPs: (camera: any) => Promise<string[]>;
       configureCamera: (camera: any, config: any) => Promise<any>;
