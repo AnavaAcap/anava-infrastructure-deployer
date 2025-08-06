@@ -81,6 +81,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   testCameraCredentials: (cameraId: string, ip: string, username: string, password: string) =>
     ipcRenderer.invoke('test-camera-credentials', cameraId, ip, username, password),
   deployACAP: (camera: any, acapPath: string) => ipcRenderer.invoke('deploy-acap', camera, acapPath),
+  deployACAPAuto: (camera: any, availableAcaps: any[]) => ipcRenderer.invoke('deploy-acap-auto', camera, availableAcaps),
+  getCameraFirmware: (camera: any) => ipcRenderer.invoke('get-camera-firmware', camera),
   uninstallACAP: (camera: any, appName: string) => ipcRenderer.invoke('uninstall-acap', camera, appName),
   listInstalledACAPs: (camera: any) => ipcRenderer.invoke('list-installed-acaps', camera),
   configureCamera: (camera: any, config: any) => ipcRenderer.invoke('configure-camera', camera, config),
