@@ -170,6 +170,10 @@ export class LicenseKeyService {
       throw new Error('Unable to retrieve your existing license. Please contact support.');
     }
 
+    if (!this.functions) {
+      throw new Error('Firebase functions not initialized');
+    }
+
     try {
       console.log('Requesting license key assignment...');
       
