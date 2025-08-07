@@ -28,9 +28,9 @@ let unifiedAuthService: UnifiedAuthService;
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
-    height: 800,
+    height: 900,
     minWidth: 900,
-    minHeight: 600,
+    minHeight: 700,
     title: 'Anava Vision',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

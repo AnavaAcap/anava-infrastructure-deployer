@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -19,6 +19,10 @@ import {
   CircularProgress,
   ListItemIcon,
   TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -30,6 +34,9 @@ import {
   Error as ErrorIcon,
   Science as ScienceIcon,
   Person,
+  Videocam as VideocamIcon,
+  Send as SendIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { DeploymentResult } from '../../types';
 import TopBar from '../components/TopBar';
@@ -52,6 +59,13 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   const [creatingUser, setCreatingUser] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userCreated, setUserCreated] = useState(false);
+  
+  // Camera-related state
+  const [cameras, setCameras] = useState<any[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<string>('');
+  const [scanningCameras, setScanningCameras] = useState(false);
+  const [pushingSettings, setPushingSettings] = useState(false);
+  const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const handleCopy = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -121,6 +135,89 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
       setCreatingUser(false);
     }
   };
+
+  const scanForCameras = async () => {
+    setScanningCameras(true);
+    setPushResult(null);
+    try {
+      const discoveredCameras = await window.electronAPI.discoverCamerasOnNetwork();
+      const authenticatedCameras = discoveredCameras.filter((cam: any) => cam.authenticated);
+      setCameras(authenticatedCameras);
+      if (authenticatedCameras.length > 0 && !selectedCamera) {
+        setSelectedCamera(authenticatedCameras[0].id);
+      }
+    } catch (err: any) {
+      console.error('Failed to scan for cameras:', err);
+    } finally {
+      setScanningCameras(false);
+    }
+  };
+
+  const handlePushSettings = async () => {
+    if (!selectedCamera) return;
+
+    const camera = cameras.find(c => c.id === selectedCamera);
+    if (!camera) return;
+
+    setPushingSettings(true);
+    setPushResult(null);
+
+    try {
+      // Prepare the configuration payload
+      const configPayload = {
+        firebase: result.firebaseConfig ? {
+          apiKey: result.firebaseConfig.apiKey,
+          authDomain: result.firebaseConfig.authDomain || `${result.firebaseConfig.projectId}.firebaseapp.com`,
+          projectId: result.firebaseConfig.projectId,
+          storageBucket: result.firebaseConfig.storageBucket || `${result.firebaseConfig.projectId}.appspot.com`,
+          messagingSenderId: result.firebaseConfig.messagingSenderId || '',
+          appId: result.firebaseConfig.appId || '',
+          databaseId: result.firebaseConfig.databaseId || '(default)'
+        } : {},
+        gemini: result.aiMode === 'ai-studio' ? {
+          apiKey: result.aiStudioApiKey || '',
+          vertexApiGatewayUrl: '',
+          vertexApiGatewayKey: '',
+          vertexGcpProjectId: result.firebaseConfig?.projectId || '',
+          vertexGcpRegion: 'us-central1',
+          vertexGcsBucketName: `${result.firebaseConfig?.projectId || 'unknown'}-anava-analytics`
+        } : {
+          apiKey: '',
+          vertexApiGatewayUrl: result.apiGatewayUrl || '',
+          vertexApiGatewayKey: result.apiKey || '',
+          vertexGcpProjectId: result.firebaseConfig?.projectId || '',
+          vertexGcpRegion: 'us-central1',
+          vertexGcsBucketName: `${result.firebaseConfig?.projectId || 'unknown'}-anava-analytics`
+        },
+        anavaKey: '',
+        customerId: result.adminEmail || 'default'
+      };
+
+      const response = await window.electronAPI.pushCameraSettings(
+        camera.ip,
+        camera.credentials?.username || 'root',
+        camera.credentials?.password || '',
+        configPayload
+      );
+
+      if (response.success) {
+        setPushResult({ success: true, message: 'Settings pushed successfully!' });
+      } else {
+        setPushResult({ success: false, message: response.message || 'Failed to push settings' });
+      }
+    } catch (err: any) {
+      setPushResult({ success: false, message: err.message || 'Failed to push settings' });
+    } finally {
+      setPushingSettings(false);
+    }
+  };
+
+  // Auto-scan for cameras when component mounts if we have AI settings
+  useEffect(() => {
+    if ((result.aiMode === 'vertex-ai' && result.apiGatewayUrl) || (result.aiMode === 'ai-studio' && result.aiStudioApiKey)) {
+      scanForCameras();
+    }
+  }, []);
 
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
@@ -291,6 +388,66 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
           )}
         </List>
       </Paper>
+
+      {/* Camera Configuration Section */}
+      {((result.aiMode === 'vertex-ai' && result.apiGatewayUrl) || (result.aiMode === 'ai-studio' && result.aiStudioApiKey)) && (
+        <Paper elevation={1} sx={{ p: 3, mb: 4, backgroundColor: 'background.default' }}>
+          <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <VideocamIcon />
+            Camera Configuration
+          </Typography>
+          
+          <Box sx={{ mt: 2 }}>
+            <Stack direction="row" spacing={2} alignItems="flex-end">
+              <FormControl fullWidth sx={{ flex: 1 }}>
+                <InputLabel>Select Camera</InputLabel>
+                <Select
+                  value={selectedCamera}
+                  onChange={(e) => setSelectedCamera(e.target.value)}
+                  disabled={scanningCameras || cameras.length === 0}
+                  label="Select Camera"
+                >
+                  {cameras.map((camera) => (
+                    <MenuItem key={camera.id} value={camera.id}>
+                      {camera.model} - {camera.ip} ({camera.name || 'No name'})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              
+              <Button
+                variant="outlined"
+                startIcon={scanningCameras ? <CircularProgress size={20} /> : <RefreshIcon />}
+                onClick={scanForCameras}
+                disabled={scanningCameras}
+              >
+                {scanningCameras ? 'Scanning...' : 'Scan'}
+              </Button>
+              
+              <Button
+                variant="contained"
+                startIcon={pushingSettings ? <CircularProgress size={20} /> : <SendIcon />}
+                onClick={handlePushSettings}
+                disabled={!selectedCamera || pushingSettings}
+              >
+                {pushingSettings ? 'Pushing...' : 'Push Settings'}
+              </Button>
+            </Stack>
+            
+            {cameras.length === 0 && !scanningCameras && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                No authenticated cameras found. Please run Camera Setup first.
+              </Alert>
+            )}
+            
+            {pushResult && (
+              <Alert severity={pushResult.success ? 'success' : 'error'} sx={{ mt: 2 }}>
+                {pushResult.message}
+              </Alert>
+            )}
+          </Box>
+        </Paper>
+      )}
 
       {result.aiMode !== 'ai-studio' && (
         <>

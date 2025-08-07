@@ -30,6 +30,11 @@ import {
   RadioGroup,
   Radio,
   Tooltip,
+  Switch,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
 } from '@mui/material';
 import {
   Visibility,
@@ -43,6 +48,8 @@ import {
   PlayArrow as PlayArrowIcon,
   Security as SecurityIcon,
   CloudDownload as CloudDownloadIcon,
+  Speaker as SpeakerIcon,
+  SkipNext as SkipNextIcon,
 } from '@mui/icons-material';
 
 interface CameraInfo {
@@ -92,6 +99,16 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [licenseMode, setLicenseMode] = useState<'trial' | 'manual'>('trial');
   const [manualLicenseKey, setManualLicenseKey] = useState('');
   const [hasPreDiscoveredCameras, setHasPreDiscoveredCameras] = useState(false);
+  
+  // Speaker configuration state
+  const [configureSpeaker, setConfigureSpeaker] = useState(false);
+  const [speakerConfig, setSpeakerConfig] = useState({
+    ip: '',
+    username: 'root',
+    password: ''
+  });
+  const [showSpeakerPassword, setShowSpeakerPassword] = useState(false);
+  const [availableSpeakers, setAvailableSpeakers] = useState<Array<{ ip: string; model?: string }>>([]);
 
   // Load license key and check for pre-discovered cameras on mount
   useEffect(() => {
@@ -101,7 +118,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
   const loadLicenseKey = async () => {
     try {
-      const result = await window.electronAPI.license.getAssignedKey();
+      const result = await (window.electronAPI as any).license?.getAssignedKey?.();
       if (result.success && result.key) {
         setLicenseKey(result.key);
       }
@@ -112,7 +129,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
   const checkPreDiscoveredCameras = async () => {
     try {
-      const result = await window.electronAPI.camera.getPreDiscoveredCameras();
+      const result = await (window.electronAPI as any).camera?.getPreDiscoveredCameras?.();
       if (result && result.cameras && result.cameras.length > 0) {
         setHasPreDiscoveredCameras(true);
         console.log('Pre-discovered cameras available:', result.cameras.length);
@@ -122,8 +139,51 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
     }
   };
 
-  const handleCredentialsSubmit = () => {
+  const handleCredentialsSubmit = async () => {
     if (credentials.username && credentials.password) {
+      // Classify any pre-discovered Axis devices with the provided credentials
+      try {
+        const result = await (window.electronAPI as any).camera?.classifyAxisDevices?.(credentials);
+        if (result) {
+          console.log('Classified devices:', result);
+          // Store classified devices for later use
+          if (result.cameras && result.cameras.length > 0) {
+            console.log(`Found ${result.cameras.length} cameras after classification`);
+            // Populate the cameras list
+            setCameras(result.cameras.map((camera: any) => ({
+              ...camera,
+              accessible: true,
+              authenticated: true,
+            })));
+            setHasPreDiscoveredCameras(true);
+          } else {
+            // No cameras found
+            setCameras([]);
+            setHasPreDiscoveredCameras(false);
+          }
+          if (result.speakers && result.speakers.length > 0) {
+            console.log(`Found ${result.speakers.length} speakers after classification`);
+            setAvailableSpeakers(result.speakers);
+            // Auto-fill speaker config if we found one
+            if (result.speakers[0]) {
+              setSpeakerConfig({
+                ip: result.speakers[0].ip,
+                username: credentials.username,
+                password: credentials.password
+              });
+            }
+          }
+        } else {
+          // No result, no cameras
+          setCameras([]);
+          setHasPreDiscoveredCameras(false);
+        }
+      } catch (error) {
+        console.error('Failed to classify devices:', error);
+        setCameras([]);
+        setHasPreDiscoveredCameras(false);
+      }
+      
       setActiveStep(1);
     }
   };
@@ -149,7 +209,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       
       // Test connection
       console.log('Calling quickScanCamera...');
-      const result = await window.electronAPI.quickScanCamera(
+      const result = await (window.electronAPI as any).quickScanCamera?.(
         manualIP,
         credentials.username,
         credentials.password
@@ -164,7 +224,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           console.log('Authentication successful, checking for ACAP...');
           
           // Check if camera already has ACAP installed
-          const installedACAPs = await window.electronAPI.listInstalledACAPs({
+          const installedACAPs = await (window.electronAPI as any).listInstalledACAPs?.({
             ip: manualIP,
             credentials: {
               username: credentials.username,
@@ -234,23 +294,28 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
     setCameras([]);
     
     try {
-      // First, check if we have pre-discovered cameras from startup
-      const preDiscovered = await window.electronAPI.camera.getPreDiscoveredCameras();
-      console.log('Pre-discovered cameras response:', preDiscovered);
+      // First, classify any pre-discovered Axis devices with current credentials
+      const classified = await (window.electronAPI as any).camera?.classifyAxisDevices?.(credentials);
+      console.log('Classification result:', classified);
       
-      if (preDiscovered && preDiscovered.cameras && preDiscovered.cameras.length > 0) {
-        console.log('Using pre-discovered cameras:', preDiscovered.cameras.length);
+      // Check if we have pre-discovered and now classified cameras
+      const preDiscovered = await (window.electronAPI as any).camera?.getPreDiscoveredCameras?.();
+      console.log('Pre-discovered response:', preDiscovered);
+      
+      if (classified && classified.cameras && classified.cameras.length > 0) {
+        console.log('Using classified cameras:', classified.cameras.length);
         
-        const formattedCameras: CameraInfo[] = preDiscovered.cameras.map((cam: any) => ({
+        const formattedCameras: CameraInfo[] = classified.cameras.map((cam: any) => ({
           id: cam.id || `camera-${cam.ip}`,
           ip: cam.ip,
           model: cam.model || 'Unknown',
           name: cam.name || `Camera at ${cam.ip}`,
           firmwareVersion: cam.firmwareVersion,
-          accessible: cam.accessible || cam.status === 'accessible' || false,
+          accessible: cam.authenticated || cam.status === 'accessible' || false,
           hasACAP: false,
           isLicensed: false,
           status: 'idle',
+          credentials: cam.credentials
         }));
 
         setCameras(formattedCameras);
@@ -269,7 +334,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       // If no pre-discovered cameras, do a fresh scan
       console.log('No pre-discovered cameras, performing fresh scan...');
       
-      const results = await window.electronAPI.enhancedScanNetwork({
+      const results = await (window.electronAPI as any).enhancedScanNetwork?.({
         credentials: [{
           username: credentials.username,
           password: credentials.password,
@@ -339,7 +404,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       setDeploymentProgress(10);
       setDeploymentStatus('Downloading latest ACAP...');
       
-      const releases = await window.electronAPI.acap.getReleases();
+      const releases = await (window.electronAPI as any).acap?.getReleases?.();
       if (!releases || releases.length === 0) {
         throw new Error('No ACAP releases found');
       }
@@ -348,7 +413,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       const downloadedReleases = [];
       for (const release of releases) {
         if (!release.isDownloaded) {
-          const downloadResult = await window.electronAPI.acap.download(release);
+          const downloadResult = await (window.electronAPI as any).acap?.download?.(release);
           if (downloadResult.success) {
             downloadedReleases.push({ ...release, isDownloaded: true });
           }
@@ -372,7 +437,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       };
       
       // Use automatic deployment which will detect firmware and select correct ACAP
-      const deployResult = await window.electronAPI.deployACAPAuto(cameraForDeployment, downloadedReleases);
+      const deployResult = await (window.electronAPI as any).deployACAPAuto?.(cameraForDeployment, downloadedReleases);
       
       if (!deployResult.success) {
         throw new Error(deployResult.error || 'ACAP deployment failed');
@@ -390,7 +455,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         setDeploymentStatus('Applying license key...');
         updateCameraStatus(selectedCamera.id, 'licensing');
 
-        await window.electronAPI.activateLicenseKey(
+        await (window.electronAPI as any).activateLicenseKey?.(
           selectedCamera.ip,
           credentials.username,
           credentials.password,
@@ -423,7 +488,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         customerId: 'trial-user',
       };
 
-      await window.electronAPI.pushCameraSettings(
+      await (window.electronAPI as any).pushCameraSettings?.(
         selectedCamera.ip,
         credentials.username,
         credentials.password,
@@ -452,7 +517,12 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         ip: selectedCamera.ip,
         name: selectedCamera.model || `Camera at ${selectedCamera.ip}`,
         hasACAP: true,
-        hasSpeaker: selectedCamera.hasSpeaker || false,
+        hasSpeaker: configureSpeaker && speakerConfig.ip ? true : false,
+        speaker: configureSpeaker && speakerConfig.ip ? {
+          ip: speakerConfig.ip,
+          username: speakerConfig.username,
+          password: speakerConfig.password
+        } : undefined,
         credentials: {
           username: credentials.username,
           password: credentials.password
@@ -462,17 +532,21 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       };
       
       // Get existing configured cameras
-      const existingCameras = await window.electronAPI.getConfigValue('configuredCameras') || [];
+      const existingCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras') || [];
       
       // Add or update this camera
       const updatedCameras = existingCameras.filter((cam: any) => cam.ip !== selectedCamera.ip);
       updatedCameras.push(configuredCamera);
       
       // Save to config
-      await window.electronAPI.setConfigValue('configuredCameras', updatedCameras);
+      await (window.electronAPI as any).setConfigValue?.('configuredCameras', updatedCameras);
       console.log('Saved configured camera:', configuredCamera);
       
-      // Move to completion
+      // Start background scene capture for Detection Test page
+      // This runs in the background while user configures speaker
+      startBackgroundSceneCapture(configuredCamera);
+      
+      // Move to speaker configuration step
       setTimeout(() => {
         setActiveStep(3);
       }, 1500);
@@ -519,6 +593,48 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       imageBase64: "", // Would contain actual image
       audioMP3Base64: "", // Would contain audio response
     };
+  };
+
+  const startBackgroundSceneCapture = async (camera: any) => {
+    try {
+      console.log('Starting background scene capture for Detection Test page...');
+      
+      // Get API key
+      const apiKey = await (window.electronAPI as any).getConfigValue?.('geminiApiKey');
+      if (!apiKey) {
+        console.log('No API key available, skipping background capture');
+        return;
+      }
+      
+      // Start the capture in the background - don't await
+      (window.electronAPI as any).getSceneDescription?.(
+        camera,
+        apiKey,
+        camera.hasSpeaker
+      ).then(result => {
+        if (result.success) {
+          // Store the pre-fetched scene data
+          (window.electronAPI as any).setConfigValue?.('preFetchedScene', {
+            cameraId: camera.id,
+            cameraIp: camera.ip,
+            description: result.description,
+            imageBase64: result.imageBase64,
+            audioBase64: result.audioBase64,
+            audioFormat: result.audioFormat,
+            audioMP3Base64: result.audioMP3Base64,
+            timestamp: Date.now(),
+            hasSpeaker: camera.hasSpeaker || false
+          });
+          console.log('Background scene capture completed successfully');
+        } else {
+          console.error('Background scene capture failed:', result.error);
+        }
+      }).catch(err => {
+        console.error('Background scene capture error:', err);
+      });
+    } catch (error) {
+      console.error('Failed to start background scene capture:', error);
+    }
   };
 
   const getStepContent = (step: number) => {
@@ -600,6 +716,47 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               </Button>
             </Box>
 
+            {/* Show dropdown if cameras were pre-discovered, otherwise show "No Cameras" message */}
+            {hasPreDiscoveredCameras ? (
+              <Box sx={{ mb: 3 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Select Camera from Network</InputLabel>
+                  <Select
+                    value={selectedCamera?.id || ''}
+                    label="Select Camera from Network"
+                    onChange={async (e: any) => {
+                      const cameraId = e.target.value;
+                      const camera = cameras.find(c => c.id === cameraId);
+                      if (camera) {
+                        setSelectedCamera(camera);
+                      }
+                    }}
+                  >
+                    {cameras.map((camera) => (
+                      <MenuItem key={camera.id} value={camera.id}>
+                        {camera.name} - {camera.ip} ({camera.model})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                {cameras.length > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                    {cameras.length} camera{cameras.length !== 1 ? 's' : ''} discovered on your network
+                  </Typography>
+                )}
+              </Box>
+            ) : (
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: 1, borderColor: 'divider' }}>
+                <Typography variant="body2" color="text.secondary" textAlign="center">
+                  No Cameras Automatically Discovered
+                </Typography>
+              </Box>
+            )}
+
+            <Divider sx={{ my: 3 }}>
+              <Typography variant="caption" color="text.secondary">OR</Typography>
+            </Divider>
+
             <RadioGroup value={mode} onChange={(e) => setMode(e.target.value as any)}>
               <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
                 <FormControlLabel
@@ -644,20 +801,10 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   label={
                     <Box>
                       <Typography variant="subtitle2">
-                        Network Scan
-                        {hasPreDiscoveredCameras && (
-                          <Chip 
-                            label="Cameras Ready" 
-                            color="success" 
-                            size="small" 
-                            sx={{ ml: 1, verticalAlign: 'middle' }}
-                          />
-                        )}
+                        Scan Network Again
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {hasPreDiscoveredCameras 
-                          ? 'View cameras already discovered on your network'
-                          : 'Automatically find cameras on your network'}
+                        Search for cameras on your network
                       </Typography>
                     </Box>
                   }
@@ -671,7 +818,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                       disabled={scanning}
                       startIcon={scanning ? <CircularProgress size={20} /> : <NetworkCheckIcon />}
                     >
-                      {scanning ? 'Scanning...' : hasPreDiscoveredCameras ? 'View Available Cameras' : 'Start Network Scan'}
+                      {scanning ? 'Scanning...' : 'Start Network Scan'}
                     </Button>
                   </Box>
                 </Collapse>
@@ -838,9 +985,9 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                       setError('Validating license key...');
                       
                       try {
-                        const result = await window.electronAPI.license.setManualKey({
+                        const result = await (window.electronAPI as any).license?.setManualKey?.({
                           key: manualLicenseKey,
-                          email: await window.electronAPI.getConfigValue('userEmail') || undefined
+                          email: await (window.electronAPI as any).getConfigValue?.('userEmail') || undefined
                         });
                         
                         if (result.success) {
@@ -874,7 +1021,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                         
                         // Try to get a trial license
                         const email = `trial-${Date.now()}@anava.ai`;
-                        const result = await window.electronAPI.license.assignKey({
+                        const result = await (window.electronAPI as any).license?.assignKey?.({
                           firebaseConfig,
                           email,
                           password: 'TrialUser123!'
@@ -884,7 +1031,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                           setLicenseKey(result.key);
                           setError(null);
                           // Store for future use
-                          await window.electronAPI.setConfigValue('userEmail', email);
+                          await (window.electronAPI as any).setConfigValue?.('userEmail', email);
                           // Retry deployment
                           handleDeploy();
                         } else {
@@ -995,6 +1142,144 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
       case 3:
         return (
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Optional: Configure Audio Speaker
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph>
+              If you have an Axis network speaker, you can associate it with this camera to enable audio responses when the AI detects specific events. This allows your system to actively engage with the environment through audible deterrents or notifications.
+            </Typography>
+            
+            <Card variant="outlined" sx={{ mb: 3 }}>
+              <CardContent>
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item>
+                    <SpeakerIcon sx={{ fontSize: 48, color: 'action.active' }} />
+                  </Grid>
+                  <Grid item xs>
+                    <Typography variant="subtitle1">
+                      Audio Deterrence System
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Play pre-recorded messages when suspicious activity is detected
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+            
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={configureSpeaker}
+                  onChange={(e) => setConfigureSpeaker(e.target.checked)}
+                />
+              }
+              label="I have a network speaker to configure"
+              sx={{ mb: 3 }}
+            />
+            
+            <Collapse in={configureSpeaker}>
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  {availableSpeakers.length > 0 ? (
+                    <TextField
+                      fullWidth
+                      select
+                      label="Select Speaker"
+                      value={speakerConfig.ip}
+                      onChange={(e) => {
+                        const selectedSpeaker = availableSpeakers.find(s => s.ip === e.target.value);
+                        if (selectedSpeaker) {
+                          setSpeakerConfig({
+                            ...speakerConfig,
+                            ip: selectedSpeaker.ip
+                          });
+                        }
+                      }}
+                      helperText={`Found ${availableSpeakers.length} speaker(s) on your network`}
+                    >
+                      {availableSpeakers.map((speaker) => (
+                        <MenuItem key={speaker.ip} value={speaker.ip}>
+                          {speaker.model ? `${speaker.model} (${speaker.ip})` : speaker.ip}
+                        </MenuItem>
+                      ))}
+                      <MenuItem value="">
+                        <em>Enter manually</em>
+                      </MenuItem>
+                    </TextField>
+                  ) : (
+                    <TextField
+                      fullWidth
+                      label="Speaker IP Address"
+                      value={speakerConfig.ip}
+                      onChange={(e) => setSpeakerConfig({ ...speakerConfig, ip: e.target.value })}
+                      placeholder="192.168.1.101"
+                      helperText="IP address of your Axis network speaker"
+                    />
+                  )}
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Speaker Username"
+                    value={speakerConfig.username}
+                    onChange={(e) => setSpeakerConfig({ ...speakerConfig, username: e.target.value })}
+                    helperText="Default is usually 'root'"
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    type={showSpeakerPassword ? 'text' : 'password'}
+                    label="Speaker Password"
+                    value={speakerConfig.password}
+                    onChange={(e) => setSpeakerConfig({ ...speakerConfig, password: e.target.value })}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowSpeakerPassword(!showSpeakerPassword)}
+                            edge="end"
+                          >
+                            {showSpeakerPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </Collapse>
+            
+            <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+              <Button
+                variant="outlined"
+                onClick={() => setActiveStep(4)}
+                startIcon={<SkipNextIcon />}
+              >
+                Skip This Step
+              </Button>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  // Save speaker config if configured
+                  if (configureSpeaker && speakerConfig.ip) {
+                    // This will be passed along with test detection
+                    console.log('Speaker configured:', speakerConfig);
+                  }
+                  setActiveStep(4);
+                }}
+                disabled={configureSpeaker && (!speakerConfig.ip || !speakerConfig.password)}
+              >
+                Continue
+              </Button>
+            </Box>
+          </Box>
+        );
+
+      case 4:
+        return (
           <Box textAlign="center" sx={{ py: 4 }}>
             <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
             <Typography variant="h5" gutterBottom>
@@ -1009,16 +1294,6 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                 What's Next?
               </Typography>
               <Grid container spacing={2} sx={{ mt: 1 }}>
-                <Grid item xs={12} sm={6}>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    onClick={() => onNavigate?.('speaker-config')}
-                    startIcon={<VolumeUpIcon />}
-                  >
-                    Configure Speaker
-                  </Button>
-                </Grid>
                 <Grid item xs={12} sm={6}>
                   <Button
                     variant="outlined"
@@ -1092,13 +1367,20 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         </Step>
         
         <Step>
-          <StepLabel>Deploy AI Analytics</StepLabel>
+          <StepLabel>Deploy Anava</StepLabel>
           <StepContent>{getStepContent(2)}</StepContent>
         </Step>
         
         <Step>
-          <StepLabel>Complete</StepLabel>
+          <StepLabel optional={<Typography variant="caption">Optional</Typography>}>
+            Configure Audio Speaker
+          </StepLabel>
           <StepContent>{getStepContent(3)}</StepContent>
+        </Step>
+        
+        <Step>
+          <StepLabel>Complete</StepLabel>
+          <StepContent>{getStepContent(4)}</StepContent>
         </Step>
       </Stepper>
     </Box>

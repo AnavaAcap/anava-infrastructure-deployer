@@ -35,6 +35,7 @@ export const ACAPManager: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadReleases();
@@ -59,7 +60,8 @@ export const ACAPManager: React.FC = () => {
     setError(null);
     
     try {
-      const result = await window.electronAPI.acap.download(release);
+      // Download directly to user's Downloads folder
+      const result = await window.electronAPI.acap.downloadToUser(release);
       
       if (result.success) {
         // Update the release to show it's downloaded
@@ -68,6 +70,12 @@ export const ACAPManager: React.FC = () => {
             ? { ...r, isDownloaded: true }
             : r
         ));
+        
+        // Show success message with download location
+        if (result.path) {
+          setSuccess(`Downloaded ${release.filename} to your Downloads folder`);
+          setTimeout(() => setSuccess(null), 5000);
+        }
       } else {
         setError(`Failed to download ${release.filename}: ${result.error}`);
       }
@@ -105,6 +113,12 @@ export const ACAPManager: React.FC = () => {
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
+        </Alert>
+      )}
+      
+      {success && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
+          {success}
         </Alert>
       )}
 

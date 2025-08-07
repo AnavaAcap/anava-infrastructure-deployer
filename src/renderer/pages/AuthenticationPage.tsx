@@ -283,7 +283,7 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
     return (
       <Paper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
         <TopBar 
-          title="Google Cloud Authentication" 
+          title="Vertex AI Infrastructure - Project Selection" 
           showLogout={authStatus?.authenticated && !!onLogout}
           onLogout={onLogout}
         />
@@ -308,13 +308,27 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
     <>
       <Paper elevation={3} sx={{ p: 6 }}>
       <TopBar 
-        title="Google Cloud Authentication" 
+        title="Vertex AI Infrastructure - Project Selection" 
         showLogout={authStatus?.authenticated && !!onLogout}
         onLogout={onLogout}
       />
       
       {authStatus?.authenticated ? (
         <>
+          <Alert severity="info" sx={{ mb: 4 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              <strong>Time to upgrade from testing to production!</strong>
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              You've been using Google AI Studio for testing your cameras - that was perfect for validation. 
+              Now we'll deploy enterprise-grade Vertex AI infrastructure for secure, scalable production use.
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              <strong>Key improvements:</strong> Enterprise security (IAM vs API keys), unlimited scale, 
+              complete audit trails, and full GCP integration.
+            </Typography>
+          </Alert>
+
           <Box sx={{ mb: 4 }}>
             <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
               <CheckCircle color="success" />

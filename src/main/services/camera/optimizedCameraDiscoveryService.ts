@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import net from 'net';
 import https from 'https';
 const PQueue = require('p-queue').default || require('p-queue');
-const Bonjour = require('bonjour-service');
+const Bonjour = require('bonjour-service').Bonjour || require('bonjour-service');
 const { Client: SSDPClient } = require('node-ssdp');
 
 export interface Camera {
@@ -59,6 +59,8 @@ const DEFAULT_CAMERA_PORTS = {
 export class OptimizedCameraDiscoveryService {
   private axiosInstance: AxiosInstance;
   private preDiscoveredCameras: Camera[] = [];
+  private preDiscoveredSpeakers: Array<{ ip: string; username: string; password: string; authenticated: boolean }> = [];
+  private preDiscoveredAxisDevices: string[] = []; // Just store IPs of confirmed Axis devices
   private isPreDiscovering = false;
   private preDiscoveryComplete = false;
 
@@ -80,11 +82,110 @@ export class OptimizedCameraDiscoveryService {
     // Get pre-discovered cameras if available
     ipcMain.handle('get-pre-discovered-cameras', async () => {
       console.log('[Pre-Discovery] Returning pre-discovered cameras:', this.preDiscoveredCameras.length);
+      console.log('[Pre-Discovery] Returning pre-discovered speakers:', this.preDiscoveredSpeakers.length);
+      console.log('[Pre-Discovery] Axis devices found (not classified):', this.preDiscoveredAxisDevices.length);
       return {
         cameras: this.preDiscoveredCameras,
+        speakers: this.preDiscoveredSpeakers,
+        axisDevices: this.preDiscoveredAxisDevices, // Unclassified Axis device IPs
         isComplete: this.preDiscoveryComplete,
         isDiscovering: this.isPreDiscovering
       };
+    });
+    
+    ipcMain.handle('get-pre-discovered-speakers', async () => {
+      console.log('[Pre-Discovery] Returning pre-discovered speakers:', this.preDiscoveredSpeakers.length);
+      return {
+        speakers: this.preDiscoveredSpeakers,
+        isComplete: this.preDiscoveryComplete,
+        isDiscovering: this.isPreDiscovering
+      };
+    });
+    
+    // Classify pre-discovered Axis devices with credentials
+    ipcMain.handle('classify-axis-devices', async (_event, credentials: { username: string; password: string }) => {
+      console.log(`[Classify] Classifying ${this.preDiscoveredAxisDevices.length} Axis devices with provided credentials`);
+      
+      const cameras: Camera[] = [];
+      const speakers: Array<{ ip: string; model?: string; authenticated: boolean }> = [];
+      
+      for (const ip of this.preDiscoveredAxisDevices) {
+        try {
+          // Try to authenticate and get device info
+          const response = await this.digestAuth(
+            ip,
+            credentials.username,
+            credentials.password,
+            '/axis-cgi/param.cgi?action=list&group=Brand',
+            80,
+            'http'
+          );
+          
+          if (response && (response.includes('Brand=AXIS') || response.includes('root.Brand.Brand=AXIS'))) {
+            // Extract product type and model
+            const typeMatch = response.match(/(?:root\.Brand\.)?ProdType=([^\r\n]+)/);
+            const modelMatch = response.match(/(?:root\.Brand\.)?ProdNbr=([^\r\n]+)/);
+            const productType = typeMatch ? typeMatch[1] : '';
+            const model = modelMatch ? modelMatch[1] : 'Unknown';
+            
+            // Check if it's a speaker
+            if (productType.toLowerCase().includes('speaker') || 
+                productType.toLowerCase().includes('audio') ||
+                productType.toLowerCase().includes('sound')) {
+              console.log(`  ✓ ${ip} is a speaker: ${model}`);
+              speakers.push({
+                ip,
+                model,
+                authenticated: true
+              });
+              
+              // Update global cache
+              if (!this.preDiscoveredSpeakers.some(s => s.ip === ip)) {
+                this.preDiscoveredSpeakers.push({
+                  ip,
+                  username: credentials.username,
+                  password: credentials.password,
+                  authenticated: true
+                });
+              }
+            } else {
+              console.log(`  ✓ ${ip} is a camera: ${model}`);
+              const camera: Camera = {
+                id: `camera-${ip.replace(/\./g, '-')}`,
+                ip,
+                port: 80,
+                protocol: 'http',
+                type: 'Axis Camera',
+                model,
+                manufacturer: 'Axis Communications',
+                mac: null,
+                capabilities: ['HTTP', 'HTTPS', 'ACAP', 'VAPIX', 'RTSP'],
+                discoveredAt: new Date().toISOString(),
+                discoveryMethod: 'scan',
+                status: 'accessible',
+                credentials: { username: credentials.username, password: credentials.password },
+                rtspUrl: `rtsp://${credentials.username}:${credentials.password}@${ip}:554/axis-media/media.amp`,
+                httpUrl: `http://${ip}`,
+                authenticated: true
+              };
+              cameras.push(camera);
+              
+              // Update global cache
+              const existingIndex = this.preDiscoveredCameras.findIndex(c => c.ip === ip);
+              if (existingIndex >= 0) {
+                this.preDiscoveredCameras[existingIndex] = camera;
+              } else {
+                this.preDiscoveredCameras.push(camera);
+              }
+            }
+          }
+        } catch (error) {
+          console.log(`  ✗ Failed to classify ${ip}: ${error}`);
+        }
+      }
+      
+      console.log(`[Classify] Found ${cameras.length} cameras and ${speakers.length} speakers`);
+      return { cameras, speakers };
     });
     
     // Standard scan method for backward compatibility
@@ -354,6 +455,37 @@ export class OptimizedCameraDiscoveryService {
     });
   }
 
+  private async checkIfAxisDevice(ip: string, port: number = 80, protocol: 'http' | 'https' = 'http'): Promise<boolean> {
+    try {
+      const url = `${protocol}://${ip}:${port}/axis-cgi/param.cgi?action=list&group=Brand`;
+      
+      // Just check if the endpoint exists - 401 means it's an Axis device that needs auth
+      const response = await this.axiosInstance.get(url, {
+        timeout: 2000,
+        validateStatus: () => true // Accept any status
+      });
+      
+      // If we get 401 with Digest auth or 200 response, it's an Axis device
+      if (response.status === 401) {
+        const wwwAuth = response.headers['www-authenticate'];
+        if (wwwAuth && wwwAuth.includes('Digest')) {
+          console.log(`  ✓ Found Axis device at ${ip}:${port} (requires auth)`);
+          return true;
+        }
+      } else if (response.status === 200) {
+        // Somehow no auth required
+        const data = response.data?.toString() || '';
+        if (data.includes('Brand=AXIS') || data.includes('root.Brand.Brand=AXIS')) {
+          console.log(`  ✓ Found Axis device at ${ip}:${port} (no auth required)`);
+          return true;
+        }
+      }
+    } catch (error) {
+      // Connection failed - not an Axis device or not reachable
+    }
+    return false;
+  }
+
   private async scanIP(
     ip: string,
     ports: number[],
@@ -391,8 +523,9 @@ export class OptimizedCameraDiscoveryService {
               protocol
             );
             
-            if (response && response.includes('Brand=AXIS')) {
-              const typeMatch = response.match(/ProdType=([^\r\n]+)/);
+            if (response && (response.includes('Brand=AXIS') || response.includes('root.Brand.Brand=AXIS'))) {
+              // Handle both old and new response formats
+              const typeMatch = response.match(/(?:root\.Brand\.)?ProdType=([^\r\n]+)/);
               const productType = typeMatch ? typeMatch[1] : '';
               
               // Check if it's a speaker
@@ -517,7 +650,7 @@ export class OptimizedCameraDiscoveryService {
           const protocol = port === 443 || port === 8443 ? 'https' : 'http';
           const result = await this.digestAuth(ip, username, password, '/axis-cgi/param.cgi?action=list&group=Brand', port, protocol);
           
-          if (result && result.includes('Brand=AXIS')) {
+          if (result && (result.includes('Brand=AXIS') || result.includes('root.Brand.Brand=AXIS'))) {
             console.log(`✓ Credentials work on port ${port}`);
             return {
               success: true,
@@ -565,10 +698,11 @@ export class OptimizedCameraDiscoveryService {
         protocol
       );
       
-      if (authResult.data && authResult.data.includes('Brand=AXIS')) {
+      if (authResult.data && (authResult.data.includes('Brand=AXIS') || authResult.data.includes('root.Brand.Brand=AXIS'))) {
         console.log(`  ✓ Confirmed Axis device at ${ip}`);
-        const modelMatch = authResult.data.match(/ProdNbr=([^\r\n]+)/);
-        const typeMatch = authResult.data.match(/ProdType=([^\r\n]+)/);
+        // Handle both old and new response formats
+        const modelMatch = authResult.data.match(/(?:root\.Brand\.)?ProdNbr=([^\r\n]+)/);
+        const typeMatch = authResult.data.match(/(?:root\.Brand\.)?ProdType=([^\r\n]+)/);
         const productType = typeMatch ? typeMatch[1] : '';
         
         // Filter out non-camera devices
@@ -631,10 +765,11 @@ export class OptimizedCameraDiscoveryService {
         protocol
       );
       
-      if (response && response.includes('Brand=AXIS')) {
+      if (response && (response.includes('Brand=AXIS') || response.includes('root.Brand.Brand=AXIS'))) {
         console.log(`  ✓ Confirmed Axis device at ${ip}`);
-        const modelMatch = response.match(/ProdNbr=([^\r\n]+)/);
-        const typeMatch = response.match(/ProdType=([^\r\n]+)/);
+        // Handle both old and new response formats
+        const modelMatch = response.match(/(?:root\.Brand\.)?ProdNbr=([^\r\n]+)/);
+        const typeMatch = response.match(/(?:root\.Brand\.)?ProdType=([^\r\n]+)/);
         const productType = typeMatch ? typeMatch[1] : '';
         
         // Filter out non-camera devices
@@ -1039,8 +1174,7 @@ export class OptimizedCameraDiscoveryService {
       const orderedIPs = [...commonCameraIPs, ...otherIPs];
 
       const ports = [80, 443];
-      // Do not use hardcoded credentials for pre-discovery
-      const credentials: Array<{ username: string; password: string }> = [];
+      // No credentials for initial scan - just detect Axis devices
 
       // Use higher concurrency for faster discovery
       const queue = new PQueue({ concurrency: 30 });
@@ -1050,19 +1184,18 @@ export class OptimizedCameraDiscoveryService {
         if (foundCamera) break;
 
         const promise = queue.add(async () => {
-          if (foundCamera) return;
-          
-          const result = await this.scanIP(ip, ports, credentials, undefined);
-          
-          if (result.camera && !foundCamera) {
-            const isAxis = result.camera.manufacturer?.toLowerCase().includes('axis');
-            const isAccessible = result.camera.status === 'accessible' || result.camera.authenticated === true;
+          // Just check if it's an Axis device - no credentials needed
+          for (const port of ports) {
+            const protocol = port === 443 ? 'https' : 'http';
+            const isAxis = await this.checkIfAxisDevice(ip, port, protocol);
             
-            if (isAxis && isAccessible) {
-              console.log(`[Pre-Discovery] Found accessible Axis camera at ${result.camera.ip}`);
-              this.preDiscoveredCameras = [result.camera];
-              foundCamera = true;
-              queue.clear(); // Stop all pending scans
+            if (isAxis) {
+              // Store this IP as an Axis device
+              if (!this.preDiscoveredAxisDevices.includes(ip)) {
+                this.preDiscoveredAxisDevices.push(ip);
+                console.log(`[Pre-Discovery] Found Axis device at ${ip} - total found: ${this.preDiscoveredAxisDevices.length}`);
+              }
+              break; // No need to check other ports
             }
           }
         });

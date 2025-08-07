@@ -19,20 +19,17 @@ import {
   CheckCircle as CheckCircleIcon,
   Settings as SettingsIcon,
   Download as DownloadIcon,
-  Speaker as SpeakerIcon,
   PlayCircleOutline as PlayCircleIcon,
 } from '@mui/icons-material';
 
 export type NavigationView = 
   | 'welcome' 
   | 'camera-setup'
-  | 'speaker-config'
   | 'detection-test'
   | 'gcp-setup' 
   | 'camera-discovery' 
   | 'acap-manager'
-  | 'camera-deployment' 
-  | 'status';
+  | 'camera-deployment';
 
 interface NavigationSidebarProps {
   currentView: NavigationView;
@@ -75,12 +72,6 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       badge: 'NEW' as const
     },
     { 
-      id: 'speaker-config' as NavigationView, 
-      label: 'Speaker Config', 
-      icon: <SpeakerIcon />,
-      alwaysEnabled: true 
-    },
-    { 
       id: 'detection-test' as NavigationView, 
       label: 'Test Detection', 
       icon: <PlayCircleIcon />,
@@ -99,12 +90,6 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       id: 'acap-manager' as NavigationView, 
       label: 'ACAP Manager', 
       icon: <DownloadIcon />,
-      alwaysEnabled: true 
-    },
-    { 
-      id: 'status' as NavigationView, 
-      label: 'Status & Logs', 
-      icon: <SettingsIcon />,
       alwaysEnabled: true 
     },
   ];
