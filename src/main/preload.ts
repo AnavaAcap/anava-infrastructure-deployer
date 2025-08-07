@@ -144,6 +144,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('license:assign-key', params),
     assignWithGoogle: (params: { idToken: string; firebaseConfig: any }) =>
       ipcRenderer.invoke('license:assign-with-google', params),
+    assignWithFirebaseGoogle: (params: { googleIdToken: string; googleAccessToken: string; firebaseConfig: any }) =>
+      ipcRenderer.invoke('license:assign-with-firebase-google', params),
     checkAvailability: (firebaseConfig: any) => ipcRenderer.invoke('license:check-availability', firebaseConfig),
     setManualKey: (params: { key: string; email?: string }) => 
       ipcRenderer.invoke('license:set-manual-key', params),
