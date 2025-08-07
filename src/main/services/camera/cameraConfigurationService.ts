@@ -252,6 +252,10 @@ export class CameraConfigurationService {
     ipcMain.handle('push-camera-settings', async (_event, ip: string, username: string, password: string, configPayload: any) => {
       return this.pushSystemConfig(ip, username, password, configPayload);
     });
+    
+    ipcMain.handle('push-system-config', async (_event, ip: string, username: string, password: string, configPayload: any) => {
+      return this.pushSystemConfig(ip, username, password, configPayload);
+    });
 
     ipcMain.handle('get-camera-settings', async (_event, ip: string, username: string, password: string) => {
       return this.getSystemConfig(ip, username, password);

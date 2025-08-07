@@ -90,6 +90,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   configureCamera: (camera: any, config: any) => ipcRenderer.invoke('configure-camera', camera, config),
   pushCameraSettings: (ip: string, username: string, password: string, configPayload: any) =>
     ipcRenderer.invoke('push-camera-settings', ip, username, password, configPayload),
+  pushSystemConfig: (params: { cameraIp: string; username: string; password: string; systemConfig: any }) =>
+    ipcRenderer.invoke('push-system-config', params.cameraIp, params.username, params.password, params.systemConfig),
   getCameraSettings: (ip: string, username: string, password: string) =>
     ipcRenderer.invoke('get-camera-settings', ip, username, password),
   getSceneDescription: (camera: any, apiKey: string, includeSpeaker?: boolean) =>
