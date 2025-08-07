@@ -79,6 +79,8 @@ export interface DeploymentResult {
   aiMode?: 'vertex' | 'ai-studio';
   aiStudioApiKey?: string;
   gcsBucketName?: string;
+  anavaKey?: string;
+  customerId?: string;
 }
 
 export interface AuthStatus {

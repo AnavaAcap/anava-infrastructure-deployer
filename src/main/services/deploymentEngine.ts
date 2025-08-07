@@ -232,6 +232,8 @@ export class DeploymentEngine extends EventEmitter {
             aiMode: state.configuration.aiMode,
             aiStudioApiKey: state.configuration.aiStudioApiKey,
             gcsBucketName: gcsBucketName,
+            anavaKey: state.configuration.anavaKey,
+            customerId: state.configuration.customerId,
             warning: hasPlaceholderFunctions ? 'Cloud Functions build failed - you may need to deploy them manually' : undefined
           });
           break;

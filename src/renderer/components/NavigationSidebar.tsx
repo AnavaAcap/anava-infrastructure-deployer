@@ -20,6 +20,7 @@ import {
   Settings as SettingsIcon,
   Download as DownloadIcon,
   PlayCircleOutline as PlayCircleIcon,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 
 export type NavigationView = 
@@ -45,6 +46,7 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   camerasConfigured 
 }) => {
   const [version, setVersion] = useState<string>('0.9.71');
+  const [latestCameraIp, setLatestCameraIp] = useState<string | null>(null);
 
   useEffect(() => {
     const getVersion = async () => {
@@ -55,7 +57,26 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
         console.error('Failed to get version:', error);
       }
     };
+    
+    const getLatestCamera = async () => {
+      try {
+        const configuredCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras');
+        if (configuredCameras && configuredCameras.length > 0) {
+          // Get the most recently configured camera
+          const latestCamera = configuredCameras[configuredCameras.length - 1];
+          setLatestCameraIp(latestCamera.ip);
+        }
+      } catch (error) {
+        console.error('Failed to get configured cameras:', error);
+      }
+    };
+    
     getVersion();
+    getLatestCamera();
+    
+    // Poll for camera changes every 5 seconds
+    const interval = setInterval(getLatestCamera, 5000);
+    return () => clearInterval(interval);
   }, []);
   const menuItems = [
     { 
@@ -119,6 +140,39 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       </Box>
       
       <Divider />
+      
+      {latestCameraIp && (
+        <>
+          <List sx={{ px: 1, pt: 2, pb: 1 }}>
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton
+                onClick={() => {
+                  const url = `http://${latestCameraIp}/local/BatonAnalytic/local-events.html`;
+                  window.open(url, '_blank');
+                }}
+                sx={{
+                  borderRadius: 1,
+                  backgroundColor: 'rgba(46, 125, 50, 0.08)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(46, 125, 50, 0.12)',
+                  },
+                }}
+              >
+                <ListItemIcon>
+                  <OpenInNewIcon color="success" />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="On Camera UI" 
+                  secondary={latestCameraIp}
+                  primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                  secondaryTypographyProps={{ fontSize: '0.75rem' }}
+                />
+              </ListItemButton>
+            </ListItem>
+          </List>
+          <Divider sx={{ mx: 2 }} />
+        </>
+      )}
       
       <List sx={{ px: 1, py: 2 }}>
         {menuItems.map((item, index) => {

@@ -52,6 +52,7 @@ import {
   Speaker as SpeakerIcon,
   SkipNext as SkipNextIcon,
   SmartToy as SmartToyIcon,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 
 interface CameraInfo {
@@ -1438,28 +1439,45 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                 See what your AI-powered camera can detect
               </Typography>
               
-              <Divider sx={{ my: 3 }}>
-                <Typography variant="caption" color="text.secondary">OR</Typography>
-              </Divider>
+              <Grid container spacing={2} sx={{ mt: 2 }}>
+                <Grid item xs={12} sm={6}>
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    onClick={() => {
+                      const url = `http://${selectedCamera?.ip}/local/BatonAnalytic/local-events.html`;
+                      window.open(url, '_blank');
+                    }}
+                    startIcon={<OpenInNewIcon />}
+                  >
+                    Open Camera UI
+                  </Button>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    onClick={() => {
+                      // Reset to start and configure another camera
+                      setActiveStep(0);
+                      setSelectedCamera(null);
+                      setDeploymentProgress(0);
+                      setDeploymentStatus('');
+                      setError(null);
+                      setCredentials({ username: 'root', password: '' });
+                      setConfigureSpeaker(false);
+                      setSpeakerConfig({ ip: '', username: 'root', password: '' });
+                    }}
+                    startIcon={<VideocamIcon />}
+                  >
+                    Set Up Another Camera
+                  </Button>
+                </Grid>
+              </Grid>
               
-              <Button
-                variant="outlined"
-                fullWidth
-                onClick={() => {
-                  // Reset to start and configure another camera
-                  setActiveStep(0);
-                  setSelectedCamera(null);
-                  setDeploymentProgress(0);
-                  setDeploymentStatus('');
-                  setError(null);
-                  setCredentials({ username: 'root', password: '' });
-                  setConfigureSpeaker(false);
-                  setSpeakerConfig({ ip: '', username: 'root', password: '' });
-                }}
-                startIcon={<VideocamIcon />}
-              >
-                Set Up Another Camera
-              </Button>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 3, textAlign: 'center' }}>
+                The Camera UI allows you to view live events and manage settings directly on the camera
+              </Typography>
             </Box>
           </Box>
         );

@@ -67,6 +67,31 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   const [pushingSettings, setPushingSettings] = useState(false);
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  useEffect(() => {
+    // Save the deployment for future reference
+    saveDeployment();
+  }, []);
+
+  const saveDeployment = async () => {
+    if (result.success && result.apiGatewayUrl && result.firebaseConfig) {
+      try {
+        const projectId = result.firebaseConfig.projectId;
+        const savedDeployments = await (window.electronAPI as any).getConfigValue?.('deployments') || {};
+        
+        // Save the deployment with all necessary information
+        savedDeployments[projectId] = {
+          ...result,
+          timestamp: new Date().toISOString(),
+          region: result.resources?.region || 'us-central1'
+        };
+        
+        await (window.electronAPI as any).setConfigValue?.('deployments', savedDeployments);
+      } catch (error) {
+        console.error('Failed to save deployment:', error);
+      }
+    }
+  };
+
   const handleCopy = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
     setCopied(field);
@@ -136,18 +161,18 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     }
   };
 
-  const scanForCameras = async () => {
+  const loadConfiguredCameras = async () => {
     setScanningCameras(true);
     setPushResult(null);
     try {
-      const discoveredCameras = await window.electronAPI.discoverCamerasOnNetwork();
-      const authenticatedCameras = discoveredCameras.filter((cam: any) => cam.authenticated);
-      setCameras(authenticatedCameras);
-      if (authenticatedCameras.length > 0 && !selectedCamera) {
-        setSelectedCamera(authenticatedCameras[0].id);
+      // Load cameras that have been configured previously
+      const configuredCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras') || [];
+      setCameras(configuredCameras);
+      if (configuredCameras.length > 0 && !selectedCamera) {
+        setSelectedCamera(configuredCameras[0].id || `${configuredCameras[0].ip}_${configuredCameras[0].model}`);
       }
     } catch (err: any) {
-      console.error('Failed to scan for cameras:', err);
+      console.error('Failed to load configured cameras:', err);
     } finally {
       setScanningCameras(false);
     }
@@ -156,15 +181,18 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   const handlePushSettings = async () => {
     if (!selectedCamera) return;
 
-    const camera = cameras.find(c => c.id === selectedCamera);
+    const camera = cameras.find(c => (c.id || `${c.ip}_${c.model}`) === selectedCamera);
     if (!camera) return;
 
     setPushingSettings(true);
     setPushResult(null);
 
     try {
-      // Prepare the configuration payload
-      const configPayload = {
+      // Get the GCS bucket name
+      const bucketName = result.gcsBucketName || `${result.firebaseConfig?.projectId || 'unknown'}-anava-analytics`;
+      
+      // Prepare the systemConfig payload matching the expected format
+      const systemConfig = {
         firebase: result.firebaseConfig ? {
           apiKey: result.firebaseConfig.apiKey,
           authDomain: result.firebaseConfig.authDomain || `${result.firebaseConfig.projectId}.firebaseapp.com`,
@@ -172,7 +200,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
           storageBucket: result.firebaseConfig.storageBucket || `${result.firebaseConfig.projectId}.appspot.com`,
           messagingSenderId: result.firebaseConfig.messagingSenderId || '',
           appId: result.firebaseConfig.appId || '',
-          databaseId: result.firebaseConfig.databaseId || '(default)'
+          databaseId: '(default)'
         } : {},
         gemini: result.aiMode === 'ai-studio' ? {
           apiKey: result.aiStudioApiKey || '',
@@ -180,43 +208,48 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
           vertexApiGatewayKey: '',
           vertexGcpProjectId: result.firebaseConfig?.projectId || '',
           vertexGcpRegion: 'us-central1',
-          vertexGcsBucketName: `${result.firebaseConfig?.projectId || 'unknown'}-anava-analytics`
+          vertexGcsBucketName: bucketName
         } : {
           apiKey: '',
           vertexApiGatewayUrl: result.apiGatewayUrl || '',
           vertexApiGatewayKey: result.apiKey || '',
           vertexGcpProjectId: result.firebaseConfig?.projectId || '',
           vertexGcpRegion: 'us-central1',
-          vertexGcsBucketName: `${result.firebaseConfig?.projectId || 'unknown'}-anava-analytics`
+          vertexGcsBucketName: bucketName
         },
-        anavaKey: '',
-        customerId: result.adminEmail || 'default'
+        axis: camera.hasSpeaker && camera.speaker ? {
+          speakerIp: camera.speaker.ip || '',
+          speakerUser: camera.speaker.username || '',
+          speakerPass: camera.speaker.password || ''
+        } : undefined,
+        anavaKey: result.anavaKey || '',
+        customerId: result.customerId || ''
       };
 
-      const response = await window.electronAPI.pushCameraSettings(
-        camera.ip,
-        camera.credentials?.username || 'root',
-        camera.credentials?.password || '',
-        configPayload
-      );
+      // Use the correct IPC handler
+      const response = await (window.electronAPI as any).pushSystemConfig({
+        cameraIp: camera.ip,
+        username: camera.username || 'anava',
+        password: camera.password || 'baton',
+        systemConfig
+      });
 
       if (response.success) {
-        setPushResult({ success: true, message: 'Settings pushed successfully!' });
+        setPushResult({ success: true, message: 'Configuration pushed successfully to camera!' });
       } else {
-        setPushResult({ success: false, message: response.message || 'Failed to push settings' });
+        setPushResult({ success: false, message: response.error || 'Failed to push configuration' });
       }
     } catch (err: any) {
-      setPushResult({ success: false, message: err.message || 'Failed to push settings' });
+      setPushResult({ success: false, message: err.message || 'Failed to push configuration' });
     } finally {
       setPushingSettings(false);
     }
   };
 
-  // Auto-scan for cameras when component mounts if we have AI settings
+  // Load configured cameras when component mounts
   useEffect(() => {
-    if ((result.aiMode === 'vertex-ai' && result.apiGatewayUrl) || (result.aiMode === 'ai-studio' && result.aiStudioApiKey)) {
-      scanForCameras();
-    }
+    saveDeployment();
+    loadConfiguredCameras();
   }, []);
 
   return (
@@ -390,11 +423,16 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
       </Paper>
 
       {/* Camera Configuration Section */}
-      {((result.aiMode === 'vertex-ai' && result.apiGatewayUrl) || (result.aiMode === 'ai-studio' && result.aiStudioApiKey)) && (
+      {(result.apiGatewayUrl || result.aiStudioApiKey) && (
         <Paper elevation={1} sx={{ p: 3, mb: 4, backgroundColor: 'background.default' }}>
           <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <VideocamIcon />
-            Camera Configuration
+            Push Configuration to Cameras
+          </Typography>
+          
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Select a camera below and push the Vertex AI configuration directly to it. This will configure the camera
+            to use your newly deployed infrastructure.
           </Typography>
           
           <Box sx={{ mt: 2 }}>
@@ -407,21 +445,25 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
                   disabled={scanningCameras || cameras.length === 0}
                   label="Select Camera"
                 >
-                  {cameras.map((camera) => (
-                    <MenuItem key={camera.id} value={camera.id}>
-                      {camera.model} - {camera.ip} ({camera.name || 'No name'})
-                    </MenuItem>
-                  ))}
+                  {cameras.map((camera) => {
+                    const cameraId = camera.id || `${camera.ip}_${camera.model}`;
+                    return (
+                      <MenuItem key={cameraId} value={cameraId}>
+                        {camera.name || camera.model} - {camera.ip}
+                        {camera.hasSpeaker && ' (with speaker)'}
+                      </MenuItem>
+                    );
+                  })}
                 </Select>
               </FormControl>
               
               <Button
                 variant="outlined"
                 startIcon={scanningCameras ? <CircularProgress size={20} /> : <RefreshIcon />}
-                onClick={scanForCameras}
+                onClick={loadConfiguredCameras}
                 disabled={scanningCameras}
               >
-                {scanningCameras ? 'Scanning...' : 'Scan'}
+                {scanningCameras ? 'Loading...' : 'Refresh'}
               </Button>
               
               <Button
@@ -430,13 +472,13 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
                 onClick={handlePushSettings}
                 disabled={!selectedCamera || pushingSettings}
               >
-                {pushingSettings ? 'Pushing...' : 'Push Settings'}
+                {pushingSettings ? 'Pushing...' : 'Push to Camera'}
               </Button>
             </Stack>
             
             {cameras.length === 0 && !scanningCameras && (
               <Alert severity="info" sx={{ mt: 2 }}>
-                No authenticated cameras found. Please run Camera Setup first.
+                No cameras configured yet. Please set up cameras first using the Camera Setup page.
               </Alert>
             )}
             
