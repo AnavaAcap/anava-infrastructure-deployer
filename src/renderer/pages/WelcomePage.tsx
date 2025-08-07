@@ -60,8 +60,9 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
   };
 
   return (
-    <GradientPaper elevation={3} sx={{ p: 6, textAlign: 'center' }}>
-      <LogoSection>
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+      <GradientPaper elevation={3} sx={{ p: 6, maxWidth: 1200, width: '100%', mx: 'auto' }}>
+        <LogoSection>
         <img 
           src={anavaLogo} 
           alt="Anava Logo" 
@@ -69,11 +70,11 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
         />
       </LogoSection>
       
-      <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 700 }}>
+      <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 700, textAlign: 'center' }}>
         Anava Vision
       </Typography>
       
-      <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
+      <Typography variant="h6" color="text.secondary" sx={{ mb: 3, textAlign: 'center' }}>
         AI-Powered Camera Analytics Made Simple
       </Typography>
       
@@ -106,9 +107,10 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
         </Card>
       )}
       
-      <Grid container spacing={3} sx={{ mb: 4, maxWidth: 800, mx: 'auto' }}>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: '100%', cursor: 'pointer', transition: 'all 0.3s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}
+      <Box sx={{ maxWidth: 800, mx: 'auto', mb: 4 }}>
+        <Grid container spacing={3} justifyContent="center">
+          <Grid item xs={12} md={6}>
+            <Card sx={{ height: '100%', cursor: 'pointer', transition: 'all 0.3s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}
                 onClick={async () => {
                   // Check if we already have an API key
                   const storedApiKey = await window.electronAPI?.getConfigValue('geminiApiKey');
@@ -144,10 +146,10 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
               </Button>
             </CardContent>
           </Card>
-        </Grid>
-        
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: '100%', cursor: 'pointer', transition: 'all 0.3s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Card sx={{ height: '100%', cursor: 'pointer', transition: 'all 0.3s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}
                 onClick={onNewDeployment}>
             <CardContent sx={{ textAlign: 'center', py: 4 }}>
               <Cloud sx={{ fontSize: 48, color: 'grey.600', mb: 2 }} />
@@ -162,12 +164,13 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
               </Button>
             </CardContent>
           </Card>
+          </Grid>
         </Grid>
-      </Grid>
+      </Box>
 
-      <Divider sx={{ mb: 3 }} />
+      <Divider sx={{ mb: 3, maxWidth: 800, mx: 'auto' }} />
       
-      <Box sx={{ mt: 3 }}>
+      <Box sx={{ mt: 3, maxWidth: 800, mx: 'auto', textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary" paragraph>
           New to Anava Vision? Start with <strong>Camera Setup</strong> to see AI analytics in action immediately.
         </Typography>
@@ -183,6 +186,7 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
         </Button>
       </Box>
     </GradientPaper>
+    </Box>
   );
 };
 

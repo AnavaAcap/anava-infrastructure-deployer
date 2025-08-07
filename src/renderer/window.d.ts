@@ -3,7 +3,7 @@ declare global {
     electronAPI?: {
       auth: {
         check: () => Promise<{ authenticated: boolean; user?: string; error?: string }>;
-        login: () => Promise<boolean>;
+        login: () => Promise<{ success: boolean; user?: { email: string }; error?: string }>;
         logout: () => Promise<{ success: boolean }>;
         getProjects: () => Promise<any[]>;
         // Unified authentication
@@ -35,6 +35,19 @@ declare global {
       };
       app: {
         getVersion: () => Promise<string>;
+      };
+      billing: {
+        checkProject: (projectId: string) => Promise<{
+          enabled: boolean;
+          billingAccountName?: string;
+          error?: string;
+        }>;
+        listAccounts: () => Promise<Array<{
+          name: string;
+          displayName: string;
+          open: boolean;
+        }>>;
+        linkAccount: (projectId: string, billingAccountName: string) => Promise<boolean>;
       };
       createFirebaseUser: (params: {
         projectId: string;

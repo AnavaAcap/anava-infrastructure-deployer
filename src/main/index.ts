@@ -342,6 +342,22 @@ ipcMain.handle('auth:get-projects', async () => {
   return gcpOAuthService.listProjects();
 });
 
+// Billing check handlers
+ipcMain.handle('billing:check-project', async (_, projectId: string) => {
+  const { billingService } = await import('./services/billingService');
+  return billingService.checkProjectBilling(projectId);
+});
+
+ipcMain.handle('billing:list-accounts', async () => {
+  const { billingService } = await import('./services/billingService');
+  return billingService.listBillingAccounts();
+});
+
+ipcMain.handle('billing:link-account', async (_, projectId: string, billingAccountName: string) => {
+  const { billingService } = await import('./services/billingService');
+  return billingService.linkBillingAccount(projectId, billingAccountName);
+});
+
 ipcMain.handle('state:get', async () => {
   return stateManager.getState();
 });

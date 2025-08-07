@@ -148,7 +148,12 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
               <ListItemButton
                 onClick={() => {
                   const url = `http://${latestCameraIp}/local/BatonAnalytic/local-events.html`;
-                  window.open(url, '_blank');
+                  // Use Electron API to open in default browser
+                  if (window.electronAPI?.openExternal) {
+                    window.electronAPI.openExternal(url);
+                  } else {
+                    window.open(url, '_blank');
+                  }
                 }}
                 sx={{
                   borderRadius: 1,

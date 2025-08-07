@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Button,
   Checkbox,
   FormControlLabel,
   Typography,
   Box,
   Paper,
+  Modal,
 } from '@mui/material';
 
 interface EULADialogProps {
@@ -20,6 +17,22 @@ interface EULADialogProps {
 const EULADialog: React.FC<EULADialogProps> = ({ open, onAccept }) => {
   const [agreed, setAgreed] = useState(false);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
+
+  useEffect(() => {
+    // Debug logging for production
+    console.log('EULA Dialog mounted, open state:', open);
+    
+    // Force focus to modal when opened
+    if (open) {
+      setTimeout(() => {
+        const modalElement = document.getElementById('eula-modal-container');
+        if (modalElement) {
+          console.log('Modal element found, focusing...');
+          modalElement.focus();
+        }
+      }, 100);
+    }
+  }, [open]);
 
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
     const element = event.currentTarget;
@@ -38,34 +51,57 @@ const EULADialog: React.FC<EULADialogProps> = ({ open, onAccept }) => {
     }
   };
 
+  // If not open, don't render anything
+  if (!open) return null;
+
+  // Use a simple fullscreen overlay approach for better Electron compatibility
   return (
-    <Dialog
-      open={open}
-      maxWidth="md"
-      fullWidth
-      disableEscapeKeyDown
-      onClose={(_, reason) => {
-        // Prevent closing by clicking backdrop
-        if (reason === 'backdropClick') return;
+    <Box
+      id="eula-modal-container"
+      sx={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 999999, // Very high z-index to ensure it's on top
       }}
+      tabIndex={-1}
     >
-      <DialogTitle>
-        <Typography variant="h5" fontWeight={600}>
-          End User License Agreement
-        </Typography>
-        <Typography variant="body2" color="text.secondary" mt={1}>
-          Please read and accept the terms to continue
-        </Typography>
-      </DialogTitle>
-      
-      <DialogContent dividers>
-        <Paper
-          elevation={0}
+      <Paper
+        elevation={24}
+        sx={{
+          width: '90%',
+          maxWidth: 800,
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: 'white',
+          borderRadius: 2,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="h5" fontWeight={600}>
+            End User License Agreement
+          </Typography>
+          <Typography variant="body2" color="text.secondary" mt={1}>
+            Please read and accept the terms to continue
+          </Typography>
+        </Box>
+
+        {/* Content */}
+        <Box
           sx={{
+            flex: 1,
             p: 3,
-            backgroundColor: 'grey.50',
-            maxHeight: 400,
             overflowY: 'auto',
+            backgroundColor: 'grey.50',
             '&::-webkit-scrollbar': {
               width: 8,
             },
@@ -177,42 +213,43 @@ const EULADialog: React.FC<EULADialogProps> = ({ open, onAccept }) => {
           <Typography variant="body2" sx={{ mt: 4, fontStyle: 'italic' }}>
             For questions about this Agreement, please contact legal@anava.com
           </Typography>
-        </Paper>
-      </DialogContent>
-
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Box sx={{ flex: 1 }}>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={agreed}
-                onChange={(e) => setAgreed(e.target.checked)}
-                disabled={!scrolledToBottom}
-              />
-            }
-            label={
-              <Typography variant="body2">
-                I have read and accept the terms of this agreement
-              </Typography>
-            }
-          />
-          {!scrolledToBottom && (
-            <Typography variant="caption" color="text.secondary" sx={{ ml: 4 }}>
-              Please scroll to the bottom to enable acceptance
-            </Typography>
-          )}
         </Box>
-        
-        <Button
-          variant="contained"
-          onClick={handleAccept}
-          disabled={!agreed || !scrolledToBottom}
-          sx={{ minWidth: 120 }}
-        >
-          I Accept
-        </Button>
-      </DialogActions>
-    </Dialog>
+
+        {/* Actions */}
+        <Box sx={{ p: 3, borderTop: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ flex: 1 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  disabled={!scrolledToBottom}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  I have read and accept the terms of this agreement
+                </Typography>
+              }
+            />
+            {!scrolledToBottom && (
+              <Typography variant="caption" color="text.secondary" sx={{ ml: 4, display: 'block' }}>
+                Please scroll to the bottom to enable acceptance
+              </Typography>
+            )}
+          </Box>
+          
+          <Button
+            variant="contained"
+            onClick={handleAccept}
+            disabled={!agreed || !scrolledToBottom}
+            sx={{ minWidth: 120 }}
+          >
+            I Accept
+          </Button>
+        </Box>
+      </Paper>
+    </Box>
   );
 };
 
