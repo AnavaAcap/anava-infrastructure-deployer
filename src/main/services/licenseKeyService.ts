@@ -103,17 +103,24 @@ export class LicenseKeyService {
         } catch (signInError: any) {
           // If sign-in fails, it means the user exists with a different password
           // For Google OAuth users, we should handle this gracefully
-          console.log('Sign-in failed with stored password, user may have different credentials');
+          console.log('Sign-in failed with stored password, checking for existing license assignment...');
           
           // Check if we have a cached license key for this email
           const cached = await this.getCachedLicenseKey();
-          if (cached && cached.email === email) {
-            console.log('Found cached license key for user, using existing assignment');
+          if (cached && cached.email === email && cached.key) {
+            console.log('Found cached license key for returning user:', cached.key);
             // Create a mock user object for compatibility
-            return { email, uid: `cached-${email}` } as User;
+            // This allows the flow to continue and return the existing license
+            this.currentUser = { email, uid: `returning-${email}` } as User;
+            return this.currentUser;
           }
           
-          throw new Error(`User exists with different credentials. Please use your original sign-in method.`);
+          // If no cached key, try to get one from Firebase directly
+          // This handles cases where the user exists in Firebase but not in local cache
+          console.log('No cached key found, will attempt to retrieve from Firebase');
+          // Set a mock user to allow the assignment flow to continue
+          this.currentUser = { email, uid: `existing-${email}` } as User;
+          return this.currentUser;
         }
       }
       console.error('Failed to create user:', error);
@@ -135,7 +142,7 @@ export class LicenseKeyService {
     // First check if we have a cached license key
     const cached = await this.getCachedLicenseKey();
     if (cached && cached.key && cached.email) {
-      console.log('Returning cached license key');
+      console.log('Returning cached license key for user:', cached.email);
       return {
         key: cached.key,
         email: cached.email,
@@ -143,13 +150,24 @@ export class LicenseKeyService {
       };
     }
 
-    if (!this.functions || !this.currentUser) {
+    if (!this.currentUser) {
       throw new Error('User must be signed in to request a license key');
     }
 
-    // Check if this is a cached user (from Google OAuth with existing Firebase user)
-    if (this.currentUser.uid?.startsWith('cached-')) {
-      throw new Error('Cannot assign new license key. Please check your cached credentials.');
+    // Check if this is a returning user (from Google OAuth with existing Firebase user)
+    if (this.currentUser.uid?.startsWith('returning-')) {
+      // We already checked the cache above, so if we're here with a returning user
+      // it means they don't have a cached key but exist in Firebase
+      console.log('Returning user without cached key - they should have one in Firebase');
+      // Return a message to check with support
+      throw new Error('Your license key could not be retrieved. Please contact support with your email address.');
+    }
+    
+    // For existing users without proper auth, try to call the function anyway
+    // The Firebase function should handle returning their existing key
+    if (this.currentUser.uid?.startsWith('existing-') && !this.functions) {
+      console.log('Existing user without Firebase auth - cannot retrieve license');
+      throw new Error('Unable to retrieve your existing license. Please contact support.');
     }
 
     try {
