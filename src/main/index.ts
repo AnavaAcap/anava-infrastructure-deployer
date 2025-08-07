@@ -68,7 +68,7 @@ function createWindow() {
           "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://*.firebaseapp.com https://*.googleapis.com; " +
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
           "font-src 'self' https://fonts.gstatic.com; " +
-          "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com; " +
+          "connect-src 'self' http://192.168.*.* http://10.*.*.* http://172.16.*.* http://172.17.*.* http://172.18.*.* http://172.19.*.* http://172.20.*.* http://172.21.*.* http://172.22.*.* http://172.23.*.* http://172.24.*.* http://172.25.*.* http://172.26.*.* http://172.27.*.* http://172.28.*.* http://172.29.*.* http://172.30.*.* http://172.31.*.* https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com; " +
           "img-src 'self' data: https:; " +
           "media-src 'self' blob:; " +
           "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com;"

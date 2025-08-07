@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Button,
   Typography,
@@ -13,8 +13,10 @@ import {
   IconButton,
   InputAdornment,
   Box,
+  CircularProgress,
+  Divider,
 } from '@mui/material';
-import { ArrowBack, RocketLaunch, Visibility, VisibilityOff } from '@mui/icons-material';
+import { ArrowBack, RocketLaunch, Visibility, VisibilityOff, Send as SendIcon } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig } from '../../types';
 import TopBar from '../components/TopBar';
 
@@ -32,6 +34,92 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
   const [showPassword, setShowPassword] = useState(false);
   const [anavaKey, setAnavaKey] = useState('');
   const [customerId, setCustomerId] = useState('');
+  const [checkingExisting, setCheckingExisting] = useState(true);
+  const [existingDeployment, setExistingDeployment] = useState<any>(null);
+  const [cameras, setCameras] = useState<any[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<string>('');
+  const [pushingConfig, setPushingConfig] = useState(false);
+  const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    checkForExistingDeployment();
+    loadConfiguredCameras();
+  }, []);
+
+  const checkForExistingDeployment = async () => {
+    try {
+      // Check if we have a saved deployment for this project
+      const savedDeployments = await (window.electronAPI as any).getConfigValue?.('deployments') || {};
+      const deployment = savedDeployments[project.projectId];
+      
+      if (deployment && deployment.apiGatewayUrl && deployment.firebaseConfig) {
+        setExistingDeployment(deployment);
+      }
+    } catch (error) {
+      console.error('Failed to check for existing deployment:', error);
+    } finally {
+      setCheckingExisting(false);
+    }
+  };
+
+  const loadConfiguredCameras = async () => {
+    try {
+      const configuredCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras') || [];
+      setCameras(configuredCameras);
+      if (configuredCameras.length > 0) {
+        setSelectedCamera(configuredCameras[0].id || `${configuredCameras[0].ip}_${configuredCameras[0].model}`);
+      }
+    } catch (error) {
+      console.error('Failed to load configured cameras:', error);
+    }
+  };
+
+  const handlePushConfig = async () => {
+    if (!selectedCamera || !existingDeployment) return;
+    
+    setPushingConfig(true);
+    setPushResult(null);
+    
+    try {
+      const camera = cameras.find(c => (c.id || `${c.ip}_${c.model}`) === selectedCamera);
+      if (!camera) throw new Error('Camera not found');
+      
+      // Get the GCS bucket name from the deployment
+      const bucketName = existingDeployment.gcsBucketName || `${project.projectId}-anava-analytics`;
+      
+      // Push the Vertex AI configuration to the camera
+      const systemConfig = {
+        firebase: existingDeployment.firebaseConfig,
+        gemini: {
+          apiKey: '', // Not used in Vertex mode
+          vertexApiGatewayUrl: existingDeployment.apiGatewayUrl,
+          vertexApiGatewayKey: existingDeployment.apiKey,
+          vertexGcpProjectId: project.projectId,
+          vertexGcpRegion: existingDeployment.region || 'us-central1',
+          vertexGcsBucketName: bucketName
+        },
+        anavaKey: anavaKey || existingDeployment.anavaKey || '',
+        customerId: customerId || existingDeployment.customerId || ''
+      };
+      
+      const result = await (window.electronAPI as any).pushSystemConfig({
+        cameraIp: camera.ip,
+        username: camera.username || 'anava',
+        password: camera.password || 'baton',
+        systemConfig
+      });
+      
+      if (result.success) {
+        setPushResult({ success: true, message: 'Configuration pushed successfully!' });
+      } else {
+        setPushResult({ success: false, message: result.error || 'Failed to push configuration' });
+      }
+    } catch (error: any) {
+      setPushResult({ success: false, message: error.message || 'Failed to push configuration' });
+    } finally {
+      setPushingConfig(false);
+    }
+  };
 
   const handleDeploy = () => {
     // Automatically configure CORS for Anava cameras
@@ -55,6 +143,155 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
 
     onComplete(config);
   };
+
+  if (checkingExisting) {
+    return (
+      <Paper elevation={3} sx={{ p: 6 }}>
+        <TopBar 
+          title="Vertex AI Infrastructure Setup" 
+          showLogout={!!onLogout}
+          onLogout={onLogout}
+        />
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 8 }}>
+          <CircularProgress />
+          <Typography sx={{ ml: 2 }}>Checking for existing deployment...</Typography>
+        </Box>
+      </Paper>
+    );
+  }
+
+  if (existingDeployment) {
+    return (
+      <Paper elevation={3} sx={{ p: 6 }}>
+        <TopBar 
+          title="Vertex AI Infrastructure" 
+          showLogout={!!onLogout}
+          onLogout={onLogout}
+        />
+        
+        <Alert severity="success" sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            <strong>Production Infrastructure Already Deployed!</strong>
+          </Typography>
+          <Typography variant="body2">
+            Your Vertex AI infrastructure is already set up and running in project {project.projectId}.
+          </Typography>
+        </Alert>
+        
+        <Paper elevation={0} sx={{ p: 3, mb: 3, bgcolor: 'background.default' }}>
+          <Typography variant="h6" gutterBottom>
+            Deployment Details
+          </Typography>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">API Gateway URL</Typography>
+              <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                {existingDeployment.apiGatewayUrl}
+              </Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">Project ID</Typography>
+              <Typography variant="body2">{project.projectId}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">Region</Typography>
+              <Typography variant="body2">{existingDeployment.region || 'us-central1'}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">AI Mode</Typography>
+              <Typography variant="body2">Vertex AI (Production)</Typography>
+            </Box>
+          </Stack>
+        </Paper>
+        
+        <Divider sx={{ my: 3 }} />
+        
+        <Typography variant="h6" gutterBottom>
+          Push Configuration to Cameras
+        </Typography>
+        <Typography variant="body2" color="text.secondary" paragraph>
+          Select a camera to push the Vertex AI configuration to it.
+        </Typography>
+        
+        {cameras.length > 0 ? (
+          <Stack spacing={2}>
+            <FormControl fullWidth>
+              <InputLabel>Select Camera</InputLabel>
+              <Select
+                value={selectedCamera}
+                onChange={(e) => setSelectedCamera(e.target.value)}
+                label="Select Camera"
+              >
+                {cameras.map((camera) => {
+                  const cameraId = camera.id || `${camera.ip}_${camera.model}`;
+                  return (
+                    <MenuItem key={cameraId} value={cameraId}>
+                      {camera.name || camera.model} - {camera.ip}
+                      {camera.hasSpeaker && ' (with speaker)'}
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+            
+            <TextField
+              label="Anava Key"
+              value={anavaKey}
+              onChange={(e) => setAnavaKey(e.target.value)}
+              fullWidth
+              placeholder={existingDeployment.anavaKey ? `Current: ${existingDeployment.anavaKey}` : "Enter your Anava license key"}
+              helperText={existingDeployment.anavaKey ? "Leave blank to use existing key" : "Optional: Your Anava license key"}
+            />
+            
+            <TextField
+              label="Customer ID"
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              fullWidth
+              placeholder={existingDeployment.customerId ? `Current: ${existingDeployment.customerId}` : "Enter your customer ID"}
+              helperText={existingDeployment.customerId ? "Leave blank to use existing ID" : "Optional: Your customer ID"}
+            />
+            
+            <Button
+              variant="contained"
+              size="large"
+              onClick={handlePushConfig}
+              disabled={!selectedCamera || pushingConfig}
+              startIcon={pushingConfig ? <CircularProgress size={20} /> : <SendIcon />}
+            >
+              {pushingConfig ? 'Pushing Configuration...' : 'Push Configuration to Camera'}
+            </Button>
+            
+            {pushResult && (
+              <Alert severity={pushResult.success ? 'success' : 'error'}>
+                {pushResult.message}
+              </Alert>
+            )}
+          </Stack>
+        ) : (
+          <Alert severity="info">
+            No cameras configured yet. Please set up cameras first using the Camera Setup page.
+          </Alert>
+        )}
+        
+        <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
+          <Button variant="outlined" onClick={onBack} sx={{ flex: 1 }}>
+            Back to Home
+          </Button>
+          <Button 
+            variant="outlined" 
+            onClick={() => {
+              setExistingDeployment(null);
+              setCheckingExisting(false);
+            }}
+            sx={{ flex: 1 }}
+          >
+            Deploy New Infrastructure
+          </Button>
+        </Box>
+      </Paper>
+    );
+  }
 
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
@@ -249,27 +486,6 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
           sx={{ mt: 2 }}
         />
         
-        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold', mt: 3 }}>
-          Anava Configuration
-        </Typography>
-        
-        <TextField
-          fullWidth
-          label="Anava Key"
-          value={anavaKey}
-          onChange={(e) => setAnavaKey(e.target.value)}
-          helperText="Your Anava license key (optional)"
-          placeholder="Enter your Anava key"
-        />
-        
-        <TextField
-          fullWidth
-          label="Customer ID"
-          value={customerId}
-          onChange={(e) => setCustomerId(e.target.value)}
-          helperText="Your customer identifier (optional)"
-          placeholder="Enter your customer ID"
-        />
       </Stack>
       
       <Stack direction="row" spacing={2} justifyContent="space-between" sx={{ mt: 4 }}>

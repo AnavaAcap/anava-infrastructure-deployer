@@ -1,103 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   Box,
   Button,
   Card,
   CardContent,
-  CircularProgress,
-  Grid,
   Typography,
   Alert,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Chip,
-  IconButton,
+  Paper,
+  Grid,
 } from '@mui/material';
 import {
+  OpenInNew as OpenInNewIcon,
   Download as DownloadIcon,
-  CheckCircle as CheckCircleIcon,
-  CloudDownload as CloudDownloadIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 
-interface ACAPRelease {
-  name: string;
-  architecture: string;
-  size: number;
-  downloadUrl: string;
-  filename: string;
-  isDownloaded: boolean;
-}
-
 export const ACAPManager: React.FC = () => {
-  const [releases, setReleases] = useState<ACAPRelease[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadReleases();
-  }, []);
-
-  const loadReleases = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const availableReleases = await window.electronAPI.acap.getReleases();
-      setReleases(availableReleases);
-    } catch (err: any) {
-      setError(`Failed to load releases: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const downloadRelease = async (release: ACAPRelease) => {
-    setDownloading(release.filename);
-    setError(null);
-    
-    try {
-      // Download directly to user's Downloads folder
-      const result = await window.electronAPI.acap.downloadToUser(release);
-      
-      if (result.success) {
-        // Update the release to show it's downloaded
-        setReleases(prev => prev.map(r => 
-          r.filename === release.filename 
-            ? { ...r, isDownloaded: true }
-            : r
-        ));
-        
-        // Show success message with download location
-        if (result.path) {
-          setSuccess(`Downloaded ${release.filename} to your Downloads folder`);
-          setTimeout(() => setSuccess(null), 5000);
-        }
-      } else {
-        setError(`Failed to download ${release.filename}: ${result.error}`);
-      }
-    } catch (err: any) {
-      setError(`Download error: ${err.message}`);
-    } finally {
-      setDownloading(null);
-    }
-  };
-
-  const formatFileSize = (bytes: number): string => {
-    const mb = bytes / (1024 * 1024);
-    return `${mb.toFixed(1)} MB`;
-  };
-
-  const getArchitectureColor = (arch: string): any => {
-    switch (arch) {
-      case 'aarch64': return 'primary';
-      case 'armv7hf': return 'secondary';
-      case 'x86_64': return 'success';
-      default: return 'default';
-    }
+  const handleOpenDownloadSite = () => {
+    window.open('https://downloads.anava.ai', '_blank');
   };
 
   return (
@@ -107,102 +27,79 @@ export const ACAPManager: React.FC = () => {
       </Typography>
       
       <Typography variant="body2" color="text.secondary" paragraph>
-        Download ACAP packages from the official repository to deploy to your cameras.
+        Download ACAP packages from the official Anava repository to deploy to your cameras.
       </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-      
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
-
-      <Card>
+      <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">
-              Available Releases
+          <Box sx={{ textAlign: 'center', py: 3 }}>
+            <DownloadIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+            
+            <Typography variant="h6" gutterBottom>
+              Download ACAP Packages
             </Typography>
+            
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Visit the Anava downloads portal to get the latest ACAP packages for your camera architecture.
+            </Typography>
+            
             <Button
-              startIcon={loading ? <CircularProgress size={20} /> : <CloudDownloadIcon />}
-              onClick={loadReleases}
-              disabled={loading}
+              variant="contained"
+              size="large"
+              startIcon={<OpenInNewIcon />}
+              onClick={handleOpenDownloadSite}
+              sx={{ mt: 2 }}
             >
-              Refresh
+              Open Downloads Portal
             </Button>
-          </Box>
-
-          {loading && releases.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <CircularProgress />
-              <Typography variant="body2" sx={{ mt: 2 }}>
-                Loading releases...
-              </Typography>
-            </Box>
-          ) : (
-            <List>
-              {releases.map((release) => (
-                <ListItem key={release.filename} divider>
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {release.name}
-                        {release.isDownloaded && (
-                          <CheckCircleIcon color="success" fontSize="small" />
-                        )}
-                      </Box>
-                    }
-                    secondary={
-                      <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-                        <Chip 
-                          label={release.architecture} 
-                          size="small"
-                          color={getArchitectureColor(release.architecture)}
-                        />
-                        <Chip 
-                          label={formatFileSize(release.size)} 
-                          size="small"
-                          variant="outlined"
-                        />
-                      </Box>
-                    }
-                  />
-                  <ListItemSecondaryAction>
-                    {release.isDownloaded ? (
-                      <Typography variant="body2" color="success.main">
-                        Downloaded
-                      </Typography>
-                    ) : (
-                      <IconButton
-                        edge="end"
-                        onClick={() => downloadRelease(release)}
-                        disabled={downloading === release.filename}
-                      >
-                        {downloading === release.filename ? (
-                          <CircularProgress size={24} />
-                        ) : (
-                          <DownloadIcon />
-                        )}
-                      </IconButton>
-                    )}
-                  </ListItemSecondaryAction>
-                </ListItem>
-              ))}
-            </List>
-          )}
-
-          {releases.length === 0 && !loading && (
-            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-              No releases found. Click Refresh to check for updates.
+            
+            <Typography variant="caption" display="block" sx={{ mt: 2 }} color="text.secondary">
+              downloads.anava.ai
             </Typography>
-          )}
+          </Box>
         </CardContent>
       </Card>
+
+      <Alert severity="info" icon={<InfoIcon />}>
+        <Typography variant="body2">
+          <strong>Available Architectures:</strong>
+        </Typography>
+        <Box sx={{ mt: 1 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <Paper variant="outlined" sx={{ p: 1.5 }}>
+                <Typography variant="subtitle2" color="primary">aarch64</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  64-bit ARM (ARTPEC-8, newer cameras)
+                </Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Paper variant="outlined" sx={{ p: 1.5 }}>
+                <Typography variant="subtitle2" color="secondary.main">armv7hf</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  32-bit ARM (ARTPEC-6/7, older cameras)
+                </Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Paper variant="outlined" sx={{ p: 1.5 }}>
+                <Typography variant="subtitle2" color="success.main">x86_64</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Intel/AMD 64-bit (specialized models)
+                </Typography>
+              </Paper>
+            </Grid>
+          </Grid>
+        </Box>
+      </Alert>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography variant="body2" color="text.secondary">
+          <strong>Note:</strong> The Camera Setup wizard automatically downloads and installs the correct ACAP version 
+          for your camera during the deployment process. Manual downloads are only needed for advanced use cases.
+        </Typography>
+      </Box>
     </Box>
   );
 };
