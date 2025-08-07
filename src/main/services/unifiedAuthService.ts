@@ -10,6 +10,7 @@ interface AuthResult {
     name: string;
     picture: string;
     idToken: string;
+    accessToken: string;
   };
   error?: string;
 }
@@ -139,7 +140,8 @@ export class UnifiedAuthService {
                   email: payload.email!,
                   name: payload.name || '',
                   picture: payload.picture || '',
-                  idToken: tokens.id_token!
+                  idToken: tokens.id_token!,
+                  accessToken: tokens.access_token!
                 }
               });
             } catch (error) {
@@ -197,7 +199,8 @@ export class UnifiedAuthService {
                 email: payload.email!,
                 name: payload.name || '',
                 picture: payload.picture || '',
-                idToken: credentials.id_token!
+                idToken: credentials.id_token!,
+                accessToken: credentials.access_token!
               }
             };
           }
@@ -224,7 +227,8 @@ export class UnifiedAuthService {
             email: payload.email!,
             name: payload.name || '',
             picture: payload.picture || '',
-            idToken: stored.id_token
+            idToken: stored.id_token,
+            accessToken: stored.access_token
           }
         };
       }

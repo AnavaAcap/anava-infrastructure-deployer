@@ -14,6 +14,7 @@ declare global {
             name: string;
             picture: string;
             idToken: string;
+            accessToken: string;
           };
           error?: string;
         }>;
@@ -187,6 +188,17 @@ declare global {
         }>;
         assignWithGoogle: (params: {
           idToken: string;
+          firebaseConfig: any;
+        }) => Promise<{
+          success: boolean;
+          key?: string;
+          email?: string;
+          alreadyAssigned?: boolean;
+          error?: string;
+        }>;
+        assignWithFirebaseGoogle: (params: {
+          googleIdToken: string;
+          googleAccessToken: string;
           firebaseConfig: any;
         }) => Promise<{
           success: boolean;

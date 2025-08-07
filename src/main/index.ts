@@ -706,6 +706,47 @@ ipcMain.handle('license:get-assigned-key', async () => {
   }
 });
 
+// NEW: Proper Firebase Google Auth handler
+ipcMain.handle('license:assign-with-firebase-google', async (_, params: {
+  googleIdToken: string;
+  googleAccessToken: string;
+  firebaseConfig: any;
+}) => {
+  try {
+    // Log tokens for testing
+    console.log('\n=== TOKENS FOR TESTING ===');
+    console.log('Copy and run this command:');
+    console.log(`node test-firebase-auth.js "${params.googleIdToken}" "${params.googleAccessToken}"`);
+    console.log('===========================\n');
+    
+    const { FirebaseAuthService } = await import('./services/firebaseAuthService');
+    const authService = new FirebaseAuthService();
+    
+    // Initialize Firebase
+    await authService.initialize(params.firebaseConfig);
+    
+    // Sign in with Google tokens (both ID and access token)
+    await authService.signInWithGoogleTokens(params.googleIdToken, params.googleAccessToken);
+    
+    // Request license key (will return existing or assign new)
+    const result = await authService.requestLicenseKey();
+    
+    // Clean up
+    authService.dispose();
+    
+    return {
+      success: true,
+      key: result.key,
+      email: result.email,
+      alreadyAssigned: result.alreadyAssigned
+    };
+  } catch (error: any) {
+    logger.error('Failed to assign license with Firebase Google Auth:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// DEPRECATED: Old email/password handler (kept for backwards compatibility)
 ipcMain.handle('license:assign-key', async (_, params: { 
   firebaseConfig: any;
   email: string;
