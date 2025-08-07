@@ -48,6 +48,7 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
   const [sceneDescription, setSceneDescription] = useState<string>('');
   const [sceneImage, setSceneImage] = useState<string>('');
   const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioData, setAudioData] = useState<{data: string, format: string} | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [apiKey, setApiKey] = useState<string>('');
   const [alternativeCamera, setAlternativeCamera] = useState<any>(null);
@@ -75,19 +76,24 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
     setError(null);
     
     try {
-      // First check if we have pre-fetched data
-      const preFetchedData = await (window.electronAPI as any).getConfigValue?.('prefetchedSceneData');
+      // First check if we have pre-fetched data (note: key is 'preFetchedScene' not 'prefetchedSceneData')
+      const preFetchedData = await (window.electronAPI as any).getConfigValue?.('preFetchedScene');
       
-      if (preFetchedData && preFetchedData.cameraIp === camera?.ip && 
-          (Date.now() - preFetchedData.timestamp < 60000)) { // Less than 1 minute old
-        console.log('Using pre-fetched scene data');
+      if (preFetchedData && preFetchedData.cameraId === camera?.id && 
+          (Date.now() - preFetchedData.timestamp < 300000)) { // Less than 5 minutes old
+        console.log('Using pre-fetched scene data from background capture');
         setSceneDescription(cleanDescription(preFetchedData.description || ''));
         setSceneImage(preFetchedData.imageBase64 || '');
         
-        // Auto-play audio if available
-        if (preFetchedData.audioMP3Base64 || preFetchedData.audioBase64) {
-          playAudio(preFetchedData.audioMP3Base64 || preFetchedData.audioBase64, 
-                   preFetchedData.audioMP3Base64 ? 'mp3' : preFetchedData.audioFormat);
+        // Store audio data and auto-play when showing cached results
+        if (preFetchedData.audioBase64) {
+          const format = preFetchedData.audioFormat || 'pcm_l16_24000';
+          setAudioData({
+            data: preFetchedData.audioBase64,
+            format: format
+          });
+          // Auto-play the cached audio
+          playAudio(preFetchedData.audioBase64, format);
         }
         
         setLoading(false);
@@ -118,10 +124,22 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
         setSceneDescription(cleanDescription(result.description || ''));
         setSceneImage(result.imageBase64 || '');
         
-        // Auto-play audio if available
-        if (result.audioMP3Base64 || result.audioBase64) {
-          playAudio(result.audioMP3Base64 || result.audioBase64,
-                   result.audioMP3Base64 ? 'mp3' : result.audioFormat);
+        // Store audio data and auto-play
+        if (result.audioBase64) {
+          const format = result.audioFormat || 'pcm_l16_24000';
+          setAudioData({
+            data: result.audioBase64,
+            format: format
+          });
+          // Auto-play the audio
+          playAudio(result.audioBase64, format);
+        } else if (result.audioMP3Base64) {
+          setAudioData({
+            data: result.audioMP3Base64,
+            format: 'mp3'
+          });
+          // Auto-play the audio
+          playAudio(result.audioMP3Base64, 'mp3');
         }
       } else {
         setError(result.error || 'Failed to analyze scene');
@@ -135,14 +153,31 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
   };
 
   const cleanDescription = (text: string): string => {
-    // Remove quotes and escape characters
+    if (!text) return '';
+    
+    // Remove quotes and escape characters more aggressively
     let cleaned = text
-      .replace(/^["']|["']$/g, '') // Remove leading/trailing quotes
-      .replace(/\\"/g, '"') // Replace escaped quotes
-      .replace(/\\'/g, "'") // Replace escaped single quotes
+      .trim() // Remove whitespace first
+      .replace(/^["'`]+|["'`]+$/g, '') // Remove any combination of quotes at start/end
+      .replace(/\\(.)/g, '$1') // Replace any escaped character with the character itself
       .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold markdown
       .replace(/\*(.*?)\*/g, '$1') // Remove italic markdown
-      .replace(/`(.*?)`/g, '$1'); // Remove code markdown
+      .replace(/`(.*?)`/g, '$1') // Remove code markdown
+      .replace(/\\+$/g, '') // Remove trailing backslashes
+      .trim(); // Trim again after replacements
+    
+    // If it still starts with a quote, remove it
+    if (cleaned.startsWith('"') || cleaned.startsWith("'")) {
+      cleaned = cleaned.substring(1);
+    }
+    if (cleaned.endsWith('"') || cleaned.endsWith("'")) {
+      cleaned = cleaned.substring(0, cleaned.length - 1);
+    }
+    
+    // Remove trailing backslash one more time after all processing
+    if (cleaned.endsWith('\\')) {
+      cleaned = cleaned.substring(0, cleaned.length - 1).trim();
+    }
     
     return cleaned;
   };
@@ -151,18 +186,132 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
     if (!audioData) return;
     
     setAudioPlaying(true);
-    const audio = new Audio(`data:audio/${format};base64,${audioData}`);
     
-    audio.onended = () => setAudioPlaying(false);
+    let audioSrc: string;
+    
+    if (format === 'pcm_l16_24000') {
+      // Convert PCM to WAV format for browser playback
+      try {
+        const pcmData = atob(audioData);
+        const pcmArray = new Uint8Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          pcmArray[i] = pcmData.charCodeAt(i);
+        }
+        
+        // Create WAV header for 16-bit PCM at 24kHz
+        const wavHeader = new ArrayBuffer(44);
+        const view = new DataView(wavHeader);
+        
+        // "RIFF" chunk descriptor
+        view.setUint32(0, 0x52494646, false); // "RIFF"
+        view.setUint32(4, 36 + pcmArray.length, true); // file size - 8
+        view.setUint32(8, 0x57415645, false); // "WAVE"
+        
+        // "fmt " sub-chunk
+        view.setUint32(12, 0x666d7420, false); // "fmt "
+        view.setUint32(16, 16, true); // subchunk size
+        view.setUint16(20, 1, true); // audio format (1 = PCM)
+        view.setUint16(22, 1, true); // number of channels
+        view.setUint32(24, 24000, true); // sample rate
+        view.setUint32(28, 24000 * 2, true); // byte rate
+        view.setUint16(32, 2, true); // block align
+        view.setUint16(34, 16, true); // bits per sample
+        
+        // "data" sub-chunk
+        view.setUint32(36, 0x64617461, false); // "data"
+        view.setUint32(40, pcmArray.length, true); // subchunk2 size
+        
+        // Combine header and PCM data
+        const wavBuffer = new Uint8Array(44 + pcmArray.length);
+        wavBuffer.set(new Uint8Array(wavHeader), 0);
+        wavBuffer.set(pcmArray, 44);
+        
+        // Create blob and URL
+        const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+        audioSrc = URL.createObjectURL(blob);
+      } catch (err) {
+        console.error('Failed to convert PCM to WAV:', err);
+        setAudioPlaying(false);
+        return;
+      }
+    } else {
+      // Handle MP3 or other formats
+      audioSrc = `data:audio/${format === 'mp3' ? 'mp3' : 'wav'};base64,${audioData}`;
+    }
+    
+    const audio = new Audio(audioSrc);
+    
+    audio.onended = () => {
+      setAudioPlaying(false);
+      if (format === 'pcm_l16_24000') {
+        URL.revokeObjectURL(audioSrc);
+      }
+    };
+    
     audio.onerror = () => {
       console.error('Failed to play audio');
       setAudioPlaying(false);
+      if (format === 'pcm_l16_24000') {
+        URL.revokeObjectURL(audioSrc);
+      }
     };
     
     audio.play().catch(err => {
       console.error('Audio playback error:', err);
       setAudioPlaying(false);
+      if (format === 'pcm_l16_24000') {
+        URL.revokeObjectURL(audioSrc);
+      }
     });
+  };
+
+  const runFreshTest = async () => {
+    setLoading(true);
+    setError(null);
+    setSceneDescription('');
+    setSceneImage('');
+    setAudioData(null);
+    
+    try {
+      // Get API key
+      const deploymentConfig = await (window.electronAPI as any).getConfigValue?.('deploymentConfig');
+      const storedApiKey = deploymentConfig?.vertexApiGatewayKey || 
+                          await (window.electronAPI as any).getConfigValue?.('geminiApiKey');
+      
+      if (!storedApiKey) {
+        setError('No API key found. Please configure an API key.');
+        setLoading(false);
+        return;
+      }
+      
+      // Force a fresh API call (bypassing cache)
+      const result = await (window.electronAPI as any).getSceneDescription?.(
+        camera,
+        storedApiKey,
+        camera.hasSpeaker || !!speakerConfig
+      );
+      
+      if (result.success) {
+        setSceneDescription(cleanDescription(result.description || ''));
+        setSceneImage(result.imageBase64 || '');
+        
+        // Store and play audio
+        if (result.audioBase64) {
+          const format = result.audioFormat || 'pcm_l16_24000';
+          setAudioData({ data: result.audioBase64, format });
+          playAudio(result.audioBase64, format);
+        } else if (result.audioMP3Base64) {
+          setAudioData({ data: result.audioMP3Base64, format: 'mp3' });
+          playAudio(result.audioMP3Base64, 'mp3');
+        }
+      } else {
+        setError(result.error || 'Failed to analyze scene');
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to perform detection test');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleTestAgain = async () => {
@@ -188,9 +337,21 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
         setSceneDescription(cleanDescription(result.description || ''));
         setSceneImage(result.imageBase64 || '');
         
-        if (result.audioMP3Base64 || result.audioBase64) {
-          playAudio(result.audioMP3Base64 || result.audioBase64,
-                   result.audioMP3Base64 ? 'mp3' : result.audioFormat);
+        // Store audio and auto-play since user clicked "Test Again"
+        if (result.audioBase64) {
+          setAudioData({
+            data: result.audioBase64,
+            format: result.audioFormat || 'pcm_l16_24000'
+          });
+          // Auto-play for manual test
+          playAudio(result.audioBase64, result.audioFormat || 'pcm_l16_24000');
+        } else if (result.audioMP3Base64) {
+          setAudioData({
+            data: result.audioMP3Base64,
+            format: 'mp3'
+          });
+          // Auto-play for manual test
+          playAudio(result.audioMP3Base64, 'mp3');
         }
       } else {
         setError(result.error || 'Failed to analyze scene');
@@ -294,11 +455,34 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
                 <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
                   {sceneDescription || 'No description available'}
                 </Typography>
+                
+                {/* Audio Replay Button */}
+                {audioData && !audioPlaying && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<VolumeUpIcon />}
+                    onClick={() => playAudio(audioData.data, audioData.format)}
+                    sx={{ mt: 2 }}
+                    fullWidth
+                  >
+                    Replay Audio Response
+                  </Button>
+                )}
               </CardContent>
             </Card>
             
             {/* Test Again Section */}
-            <Box sx={{ mt: 3 }}>
+            <Box sx={{ mt: 3, display: 'flex', gap: 2, flexDirection: 'column' }}>
+              <Button
+                variant="contained"
+                onClick={runFreshTest}
+                startIcon={<RefreshIcon />}
+                fullWidth
+                disabled={loading}
+              >
+                Run New Test
+              </Button>
+              
               <Button
                 variant="outlined"
                 onClick={() => setShowAdvanced(!showAdvanced)}

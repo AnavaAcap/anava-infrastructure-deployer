@@ -16,6 +16,7 @@ export interface DeploymentResult {
   error?: string;
   firmwareVersion?: string;
   osVersion?: 'OS11' | 'OS12';
+  selectedFile?: string;
 }
 
 export class ACAPDeploymentService {
@@ -167,7 +168,16 @@ export class ACAPDeploymentService {
       
       // Get the local path and deploy
       const acapPath = path.join(os.tmpdir(), 'anava-acaps', matchingAcap.filename);
-      return this.deployACAP(camera, acapPath);
+      const deployResult = await this.deployACAP(camera, acapPath);
+      
+      // Add the selected filename to the result
+      if (deployResult.success) {
+        return {
+          ...deployResult,
+          selectedFile: matchingAcap.filename
+        };
+      }
+      return deployResult;
       
     } catch (error: any) {
       console.error(`[deployACAPAuto] ========== AUTO DEPLOYMENT FAILED ==========`);

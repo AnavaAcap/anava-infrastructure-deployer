@@ -88,7 +88,7 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
       const bucketName = existingDeployment.gcsBucketName || `${project.projectId}-anava-analytics`;
       
       // Push the Vertex AI configuration to the camera
-      const systemConfig = {
+      const systemConfig: any = {
         firebase: existingDeployment.firebaseConfig,
         gemini: {
           apiKey: '', // Not used in Vertex mode
@@ -102,10 +102,20 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
         customerId: customerId || existingDeployment.customerId || ''
       };
       
+      // Add axis section if camera has speaker configuration
+      if (camera.hasSpeaker && camera.speaker) {
+        systemConfig.axis = {
+          speakerIp: camera.speaker.ip,
+          speakerUser: camera.speaker.username,
+          speakerPass: camera.speaker.password
+        };
+        console.log('Including speaker configuration in push:', systemConfig.axis);
+      }
+      
       const result = await (window.electronAPI as any).pushSystemConfig({
         cameraIp: camera.ip,
-        username: camera.username || 'anava',
-        password: camera.password || 'baton',
+        username: camera.credentials?.username || camera.username || 'anava',
+        password: camera.credentials?.password || camera.password || 'baton',
         systemConfig
       });
       
@@ -233,24 +243,6 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
                 })}
               </Select>
             </FormControl>
-            
-            <TextField
-              label="Anava Key"
-              value={anavaKey}
-              onChange={(e) => setAnavaKey(e.target.value)}
-              fullWidth
-              placeholder={existingDeployment.anavaKey ? `Current: ${existingDeployment.anavaKey}` : "Enter your Anava license key"}
-              helperText={existingDeployment.anavaKey ? "Leave blank to use existing key" : "Optional: Your Anava license key"}
-            />
-            
-            <TextField
-              label="Customer ID"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              fullWidth
-              placeholder={existingDeployment.customerId ? `Current: ${existingDeployment.customerId}` : "Enter your customer ID"}
-              helperText={existingDeployment.customerId ? "Leave blank to use existing ID" : "Optional: Your customer ID"}
-            />
             
             <Button
               variant="contained"
