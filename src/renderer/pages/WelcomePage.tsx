@@ -109,7 +109,28 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
       <Grid container spacing={3} sx={{ mb: 4, maxWidth: 800, mx: 'auto' }}>
         <Grid item xs={12} md={6}>
           <Card sx={{ height: '100%', cursor: 'pointer', transition: 'all 0.3s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}
-                onClick={() => onNavigate?.('camera-setup')}>
+                onClick={async () => {
+                  // Check if we already have an API key
+                  const storedApiKey = await window.electronAPI?.getConfigValue('geminiApiKey');
+                  if (!storedApiKey) {
+                    console.log('Generating AI Studio API key for Quick Start...');
+                    try {
+                      const apiKeyResult = await window.electronAPI.magical.generateApiKey();
+                      if (apiKeyResult.success && apiKeyResult.apiKey) {
+                        console.log('AI Studio API key generated successfully');
+                        await window.electronAPI.setConfigValue('geminiApiKey', apiKeyResult.apiKey);
+                        await window.electronAPI.setConfigValue('aiStudioProjectId', apiKeyResult.projectId);
+                      } else if (apiKeyResult.needsManual) {
+                        console.log('Manual API key creation needed - will handle in camera setup');
+                      } else {
+                        console.warn('AI Studio API key generation failed:', apiKeyResult.error);
+                      }
+                    } catch (apiError) {
+                      console.warn('Failed to generate API key:', apiError);
+                    }
+                  }
+                  onNavigate?.('camera-setup');
+                }}>
             <CardContent sx={{ textAlign: 'center', py: 4 }}>
               <Videocam sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
               <Typography variant="h5" gutterBottom>

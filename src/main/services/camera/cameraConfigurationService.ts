@@ -23,7 +23,8 @@ export class CameraConfigurationService {
       
       const requestData: any = {
         viewArea: 1,  // Default camera channel
-        GeminiApiKey: apiKey
+        GeminiApiKey: apiKey,
+        replyMP3: true  // Request audio response
       };
       
       // Include speaker credentials if requested and available
@@ -36,6 +37,7 @@ export class CameraConfigurationService {
       
       console.log('[getSceneDescription] Request payload:', JSON.stringify(requestData, null, 2));
       
+      // Use the correct endpoint
       const response = await this.simpleDigestAuth(
         camera.ip,
         camera.credentials?.username || 'root',
@@ -49,13 +51,24 @@ export class CameraConfigurationService {
         throw new Error('Failed to get scene description from ACAP');
       }
 
-      const data = response.data;
+      // Parse response - it might be a string that needs JSON parsing
+      let data = response.data;
+      if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data);
+        } catch (e) {
+          console.log('[getSceneDescription] Response is not JSON:', data);
+        }
+      }
       
       console.log('[getSceneDescription] Response:', {
         status: data.status,
         hasDescription: !!data.description,
         hasImage: !!data.imageBase64,
-        hasAudio: !!data.audioMP3Base64
+        hasAudio: !!data.audioMP3Base64 || !!data.audioBase64,
+        audioFormat: data.audioFormat,
+        ttsStatus: data.ttsStatus,
+        audioLength: data.audioLength
       });
       
       if (data.status === 'success') {
@@ -63,7 +76,11 @@ export class CameraConfigurationService {
           success: true,
           description: data.description,
           imageBase64: data.imageBase64,
-          audioMP3Base64: data.audioMP3Base64
+          audioMP3Base64: data.audioMP3Base64, // Keep for backward compatibility
+          audioBase64: data.audioBase64 || data.audioMP3Base64, // New field
+          audioFormat: data.audioFormat || (data.audioBase64 ? 'pcm_l16_24000' : 'mp3'), // Default to pcm if audioBase64 is present
+          timestamp: data.timestamp,
+          ttsSuccess: data.ttsSuccess
         };
       } else {
         throw new Error(data.message || 'Scene analysis failed');
@@ -110,7 +127,7 @@ export class CameraConfigurationService {
         url,
         data,
         validateStatus: () => true,
-        timeout: 10000,
+        timeout: 20000,
       });
 
       if (response1.status === 401) {
@@ -189,7 +206,7 @@ export class CameraConfigurationService {
             url,
             data,
             headers,
-            timeout: 10000,
+            timeout: 20000,
             // Important: Handle chunked responses that close early
             validateStatus: () => true,
             maxRedirects: 0,

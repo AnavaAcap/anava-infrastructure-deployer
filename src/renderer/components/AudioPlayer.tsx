@@ -19,6 +19,7 @@ import {
 
 interface AudioPlayerProps {
   audioBase64: string;
+  audioFormat?: string; // 'mp3' or 'pcm_l16_24000'
   title?: string;
   onPlay?: () => void;
   onComplete?: () => void;
@@ -28,6 +29,7 @@ interface AudioPlayerProps {
 
 const AudioPlayer: React.FC<AudioPlayerProps> = ({
   audioBase64,
+  audioFormat = 'mp3',
   title,
   onPlay,
   onComplete,
@@ -56,14 +58,59 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     const audio = audioRef.current;
     if (!audio) return;
 
+    let audioSrc: string;
+    let objectUrl: string | null = null;
+
     // Set audio source
     try {
-      // Handle different base64 formats
-      const base64Data = audioBase64.startsWith('data:audio')
-        ? audioBase64
-        : `data:audio/mp3;base64,${audioBase64}`;
+      if (audioFormat === 'pcm_l16_24000') {
+        // Convert PCM to WAV format for browser playback
+        const pcmData = atob(audioBase64);
+        const pcmArray = new Uint8Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          pcmArray[i] = pcmData.charCodeAt(i);
+        }
+        
+        // Create WAV header for 16-bit PCM at 24kHz
+        const wavHeader = new ArrayBuffer(44);
+        const view = new DataView(wavHeader);
+        
+        // "RIFF" chunk descriptor
+        view.setUint32(0, 0x52494646, false); // "RIFF"
+        view.setUint32(4, 36 + pcmArray.length, true); // file size - 8
+        view.setUint32(8, 0x57415645, false); // "WAVE"
+        
+        // "fmt " sub-chunk
+        view.setUint32(12, 0x666d7420, false); // "fmt "
+        view.setUint32(16, 16, true); // subchunk size
+        view.setUint16(20, 1, true); // audio format (1 = PCM)
+        view.setUint16(22, 1, true); // number of channels
+        view.setUint32(24, 24000, true); // sample rate
+        view.setUint32(28, 24000 * 2, true); // byte rate
+        view.setUint16(32, 2, true); // block align
+        view.setUint16(34, 16, true); // bits per sample
+        
+        // "data" sub-chunk
+        view.setUint32(36, 0x64617461, false); // "data"
+        view.setUint32(40, pcmArray.length, true); // subchunk2 size
+        
+        // Combine header and PCM data
+        const wavBuffer = new Uint8Array(44 + pcmArray.length);
+        wavBuffer.set(new Uint8Array(wavHeader), 0);
+        wavBuffer.set(pcmArray, 44);
+        
+        // Create blob and URL
+        const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+        objectUrl = URL.createObjectURL(blob);
+        audioSrc = objectUrl;
+      } else {
+        // Handle MP3 format
+        audioSrc = audioBase64.startsWith('data:audio')
+          ? audioBase64
+          : `data:audio/mp3;base64,${audioBase64}`;
+      }
       
-      audio.src = base64Data;
+      audio.src = audioSrc;
       
       // Audio event listeners
       const handleLoadedMetadata = () => {
@@ -96,12 +143,15 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         if (progressIntervalRef.current) {
           clearInterval(progressIntervalRef.current);
         }
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
       };
     } catch (err) {
       setError('Invalid audio data');
       setLoading(false);
     }
-  }, [audioBase64, autoPlay, onComplete]);
+  }, [audioBase64, audioFormat, autoPlay, onComplete]);
 
   const handlePlay = () => {
     const audio = audioRef.current;
@@ -173,10 +223,53 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const handleDownload = () => {
     try {
       const link = document.createElement('a');
-      link.href = audioBase64.startsWith('data:audio')
-        ? audioBase64
-        : `data:audio/mp3;base64,${audioBase64}`;
-      link.download = title ? `${title}.mp3` : 'audio-response.mp3';
+      
+      if (audioFormat === 'pcm_l16_24000') {
+        // Convert PCM to WAV for download
+        const pcmData = atob(audioBase64);
+        const pcmArray = new Uint8Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          pcmArray[i] = pcmData.charCodeAt(i);
+        }
+        
+        // Create WAV header
+        const wavHeader = new ArrayBuffer(44);
+        const view = new DataView(wavHeader);
+        
+        view.setUint32(0, 0x52494646, false);
+        view.setUint32(4, 36 + pcmArray.length, true);
+        view.setUint32(8, 0x57415645, false);
+        view.setUint32(12, 0x666d7420, false);
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, 24000, true);
+        view.setUint32(28, 24000 * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        view.setUint32(36, 0x64617461, false);
+        view.setUint32(40, pcmArray.length, true);
+        
+        const wavBuffer = new Uint8Array(44 + pcmArray.length);
+        wavBuffer.set(new Uint8Array(wavHeader), 0);
+        wavBuffer.set(pcmArray, 44);
+        
+        const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+        link.href = URL.createObjectURL(blob);
+        link.download = title ? `${title}.wav` : 'audio-response.wav';
+        
+        // Clean up after download
+        link.addEventListener('click', () => {
+          setTimeout(() => URL.revokeObjectURL(link.href), 100);
+        });
+      } else {
+        // MP3 format
+        link.href = audioBase64.startsWith('data:audio')
+          ? audioBase64
+          : `data:audio/mp3;base64,${audioBase64}`;
+        link.download = title ? `${title}.mp3` : 'audio-response.mp3';
+      }
+      
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

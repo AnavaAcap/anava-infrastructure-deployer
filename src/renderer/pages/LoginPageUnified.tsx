@@ -34,6 +34,7 @@ interface LoginPageProps {
 
 const LoginPageUnified: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
   const handleGoogleSignIn = async () => {

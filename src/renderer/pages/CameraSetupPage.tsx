@@ -113,8 +113,9 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const checkPreDiscoveredCameras = async () => {
     try {
       const result = await window.electronAPI.camera.getPreDiscoveredCameras();
-      if (result.success && result.cameras.length > 0) {
+      if (result && result.cameras && result.cameras.length > 0) {
         setHasPreDiscoveredCameras(true);
+        console.log('Pre-discovered cameras available:', result.cameras.length);
       }
     } catch (error) {
       console.error('Failed to check pre-discovered cameras:', error);
@@ -231,16 +232,14 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const handleNetworkScan = async () => {
     setScanning(true);
     setCameras([]);
-
+    
     try {
       // First, check if we have pre-discovered cameras from startup
       const preDiscovered = await window.electronAPI.camera.getPreDiscoveredCameras();
+      console.log('Pre-discovered cameras response:', preDiscovered);
       
-      if (preDiscovered.success && preDiscovered.cameras.length > 0) {
+      if (preDiscovered && preDiscovered.cameras && preDiscovered.cameras.length > 0) {
         console.log('Using pre-discovered cameras:', preDiscovered.cameras.length);
-        
-        // Show cameras immediately without scanning animation
-        setScanning(false);
         
         const formattedCameras: CameraInfo[] = preDiscovered.cameras.map((cam: any) => ({
           id: cam.id || `camera-${cam.ip}`,
@@ -255,6 +254,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         }));
 
         setCameras(formattedCameras);
+        setScanning(false); // Stop scanning animation
         
         // Auto-select first accessible camera
         const firstAccessible = formattedCameras.find(cam => cam.accessible);
@@ -268,6 +268,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       
       // If no pre-discovered cameras, do a fresh scan
       console.log('No pre-discovered cameras, performing fresh scan...');
+      
       const results = await window.electronAPI.enhancedScanNetwork({
         credentials: [{
           username: credentials.username,

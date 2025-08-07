@@ -1,6 +1,6 @@
 {
   "name": "anava-vision",
-  "version": "0.9.111",
+  "version": "0.9.119",
   "description": "Anava Vision - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
