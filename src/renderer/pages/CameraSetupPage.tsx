@@ -79,6 +79,8 @@ interface CameraSetupPageProps {
 
 const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [activeStep, setActiveStep] = useState(0);
+  const [completed, setCompleted] = useState<{ [key: number]: boolean }>({});
+  const [previouslyConfiguredCameras, setPreviouslyConfiguredCameras] = useState<any[]>([]);
   const [mode, setMode] = useState<'manual' | 'scan'>('manual');
   const [credentials, setCredentials] = useState({
     username: 'root',
@@ -93,6 +95,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [selectedCamera, setSelectedCamera] = useState<CameraInfo | null>(null);
   const [deploymentProgress, setDeploymentProgress] = useState(0);
   const [deploymentStatus, setDeploymentStatus] = useState('');
+  const [selectedACAPFile, setSelectedACAPFile] = useState<string | null>(null);
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showLicensePrompt, setShowLicensePrompt] = useState(false);
@@ -115,11 +118,22 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [testingSpeaker, setTestingSpeaker] = useState(false);
   const [showDetectionModal, setShowDetectionModal] = useState(false);
 
-  // Load license key and check for pre-discovered cameras on mount
+  // Load license key, previously configured cameras, and check for pre-discovered cameras on mount
   useEffect(() => {
     loadLicenseKey();
+    loadPreviouslyConfiguredCameras();
     checkPreDiscoveredCameras();
   }, []);
+
+  const loadPreviouslyConfiguredCameras = async () => {
+    try {
+      const configuredCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras') || [];
+      setPreviouslyConfiguredCameras(configuredCameras);
+      console.log('Loaded previously configured cameras:', configuredCameras);
+    } catch (error) {
+      console.error('Failed to load configured cameras:', error);
+    }
+  };
 
   const loadLicenseKey = async () => {
     try {
@@ -253,6 +267,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           setCameras([updatedCamera]);
           setSelectedCamera(updatedCamera);
           setActiveStep(2);
+          setCompleted(prev => ({ ...prev, 0: true, 1: true }));
         } else {
           // Authentication failed
           const errorMsg = discoveredCamera.error || 'Authentication failed. Check username and password.';
@@ -331,6 +346,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         if (firstAccessible) {
           setSelectedCamera(firstAccessible);
           setActiveStep(2);
+          setCompleted(prev => ({ ...prev, 0: true, 1: true }));
         }
         
         return;
@@ -367,6 +383,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       if (firstAccessible) {
         setSelectedCamera(firstAccessible);
         setActiveStep(2);
+        setCompleted(prev => ({ ...prev, 0: true, 1: true }));
       }
     } catch (error) {
       console.error('Network scan failed:', error);
@@ -465,15 +482,21 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         }
       }, 1000); // Update every second
       
+      let deployResult;
       try {
         // Use automatic deployment which will detect firmware and select correct ACAP
-        const deployResult = await (window.electronAPI as any).deployACAPAuto?.(cameraForDeployment, downloadedReleases);
+        deployResult = await (window.electronAPI as any).deployACAPAuto?.(cameraForDeployment, downloadedReleases);
         
         // Stop the progress animation
         clearInterval(progressInterval);
         
         if (!deployResult.success) {
           throw new Error(deployResult.error || 'ACAP deployment failed');
+        }
+        
+        // Store the selected ACAP filename
+        if (deployResult.selectedFile) {
+          setSelectedACAPFile(deployResult.selectedFile);
         }
       } catch (deployError) {
         // Make sure to clear the interval on error
@@ -578,10 +601,18 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       
       clearInterval(finalInterval);
       
-      // Update camera with results
+      // Update camera with results temporarily for display
       updateCameraStatus(selectedCamera.id, 'complete', {
         sceneAnalysis: sceneResult,
       });
+      
+      // Clear scene analysis after a brief display
+      setTimeout(() => {
+        updateCameraStatus(selectedCamera.id, 'complete', {
+          sceneAnalysis: null,
+        });
+      }, 500);
+      
 
       // Smoothly complete to 100%
       setDeploymentProgress(97);
@@ -624,10 +655,17 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       // This runs in the background while user configures speaker
       startBackgroundSceneCapture(configuredCamera);
       
-      // Move to speaker configuration step
-      setTimeout(() => {
-        setActiveStep(3);
-      }, 1500);
+      // Force step progression - clear deployment state and advance
+      console.log('Deployment complete, advancing to step 3 (speaker config)');
+      setDeploying(false);
+      setDeploymentProgress(0);
+      setDeploymentStatus('');
+      
+      // Use a callback to ensure state updates properly
+      setActiveStep(prev => {
+        console.log('Previous step was:', prev, 'advancing to 3');
+        return 3;
+      });
 
     } catch (error: any) {
       console.error('Deployment failed:', error);
@@ -636,9 +674,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       });
       setDeploymentStatus(`Error: ${error.message}`);
       setError(error.message || 'Deployment failed. Please check the logs and try again.');
+      setDeploying(false); // Only set false on error
       // DO NOT advance to next step on error
-    } finally {
-      setDeploying(false);
     }
   };
 
@@ -720,6 +757,111 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       case 0:
         return (
           <Box>
+            {previouslyConfiguredCameras.length > 0 && (
+              <Box mb={3}>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <AlertTitle>Previously Configured Cameras</AlertTitle>
+                  You can select a camera below to edit its configuration or set up a new camera.
+                </Alert>
+                
+                <List>
+                  {previouslyConfiguredCameras.map((camera: any) => (
+                    <ListItem
+                      key={camera.id}
+                      component="div"
+                      onClick={() => {
+                        // Load the camera's credentials and data
+                        setSelectedCamera(camera);
+                        setCredentials({
+                          username: camera.credentials?.username || 'root',
+                          password: camera.credentials?.password || ''
+                        });
+                        if (camera.speaker) {
+                          setConfigureSpeaker(true);
+                          setSpeakerConfig({
+                            ip: camera.speaker.ip,
+                            username: camera.speaker.username || 'root',
+                            password: camera.speaker.password
+                          });
+                        }
+                        
+                        // Store the license key if available
+                        if (camera.licenseKey) {
+                          setLicenseKey(camera.licenseKey);
+                        }
+                        
+                        // Mark steps as completed based on camera state
+                        const newCompleted: { [key: number]: boolean } = {
+                          0: true, // Credentials are set
+                          1: true, // Camera is already found
+                        };
+                        
+                        // If camera has ACAP installed, mark deploy step as complete
+                        if (camera.hasACAP || camera.isLicensed) {
+                          newCompleted[2] = true;
+                        }
+                        
+                        // If camera has speaker configured, mark that step as complete
+                        if (camera.hasSpeaker) {
+                          newCompleted[3] = true;
+                        }
+                        
+                        setCompleted(newCompleted);
+                        
+                        // Determine which step to show based on what needs attention
+                        let targetStep = 2; // Default to deployment
+                        if (!newCompleted[2]) {
+                          targetStep = 2; // Need to deploy ACAP
+                        } else if (!newCompleted[3] && !camera.hasSpeaker) {
+                          targetStep = 3; // ACAP done, maybe configure speaker
+                        } else {
+                          targetStep = 4; // Everything done, go to complete
+                        }
+                        
+                        setActiveStep(targetStep);
+                      }}
+                      sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        mb: 1,
+                        cursor: 'pointer',
+                        '&:hover': {
+                          backgroundColor: 'action.hover'
+                        }
+                      }}
+                    >
+                      <ListItemIcon>
+                        <VideocamIcon />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={camera.name || camera.model || `Camera at ${camera.ip}`}
+                        secondary={
+                          <>
+                            IP: {camera.ip}
+                            {camera.hasSpeaker && ' • Has Speaker'}
+                            {camera.isLicensed && ' • Licensed'}
+                          </>
+                        }
+                      />
+                      <ListItemSecondaryAction>
+                        <IconButton edge="end">
+                          <PlayArrowIcon />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                  ))}
+                </List>
+                
+                <Divider sx={{ my: 3 }}>
+                  <Chip label="OR" />
+                </Divider>
+              </Box>
+            )}
+            
+            <Typography variant="h6" gutterBottom>
+              {previouslyConfiguredCameras.length > 0 ? 'Set Up New Camera' : 'Camera Credentials'}
+            </Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>
               Enter the username and password for your Axis cameras. These credentials will be used to connect and configure your devices.
             </Typography>
@@ -763,7 +905,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   disabled={!credentials.username || !credentials.password}
                   size="large"
                 >
-                  Continue
+                  {previouslyConfiguredCameras.length > 0 ? 'Next: Find New Camera' : 'Continue'}
                 </Button>
               </Grid>
             </Grid>
@@ -957,7 +1099,10 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   <Button
                     variant="contained"
                     fullWidth
-                    onClick={() => setActiveStep(2)}
+                    onClick={() => {
+                      setActiveStep(2);
+                      setCompleted(prev => ({ ...prev, 0: true, 1: true }));
+                    }}
                     sx={{ mt: 2 }}
                   >
                     Continue with Selected Camera
@@ -1148,13 +1293,26 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   >
                     Back
                   </Button>
+                  {(selectedCamera?.hasACAP || selectedCamera?.isLicensed) && (
+                    <Button
+                      variant="outlined"
+                      size="large"
+                      onClick={() => {
+                        setActiveStep(3);
+                        setCompleted(prev => ({ ...prev, 2: true }));
+                      }}
+                      startIcon={<SkipNextIcon />}
+                    >
+                      Skip to Speaker Config
+                    </Button>
+                  )}
                   <Button
                     variant="contained"
                     size="large"
                     onClick={handleDeploy}
                     startIcon={<PlayArrowIcon />}
                   >
-                    Deploy & Configure
+                    {(selectedCamera?.hasACAP || selectedCamera?.isLicensed) ? 'Re-deploy ACAP' : 'Deploy & Configure'}
                   </Button>
                 </Box>
               </Box>
@@ -1165,6 +1323,11 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                 <Typography variant="h6" gutterBottom textAlign="center">
                   {deploymentStatus}
                 </Typography>
+                {selectedACAPFile && (
+                  <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mb: 1 }}>
+                    Installing: {selectedACAPFile}
+                  </Typography>
+                )}
                 <LinearProgress
                   variant="determinate"
                   value={deploymentProgress}
@@ -1176,45 +1339,6 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               </Box>
             )}
 
-            {selectedCamera?.sceneAnalysis && (
-              <Box>
-                <Alert severity="success" sx={{ mb: 3 }}>
-                  <Typography variant="subtitle2">AI Vision Successfully Deployed!</Typography>
-                  <Typography variant="body2">
-                    Your camera is now analyzing scenes in real-time.
-                  </Typography>
-                </Alert>
-
-                {selectedCamera.sceneAnalysis.imageBase64 && (
-                  <Box sx={{ mb: 3, textAlign: 'center' }}>
-                    <img
-                      src={selectedCamera.sceneAnalysis.imageBase64}
-                      alt="Camera view"
-                      style={{ maxWidth: '100%', height: 'auto', borderRadius: 8 }}
-                    />
-                  </Box>
-                )}
-
-                <Paper sx={{ p: 2, mb: 2, backgroundColor: 'grey.50' }}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    AI Analysis:
-                  </Typography>
-                  <Typography variant="body2">
-                    {selectedCamera.sceneAnalysis.description}
-                  </Typography>
-                </Paper>
-
-                {selectedCamera.sceneAnalysis.audioMP3Base64 && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<VolumeUpIcon />}
-                    fullWidth
-                  >
-                    Play Audio Response
-                  </Button>
-                )}
-              </Box>
-            )}
           </Box>
         );
 
@@ -1333,7 +1457,10 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
             <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
               <Button
                 variant="outlined"
-                onClick={() => setActiveStep(4)}
+                onClick={() => {
+                  setActiveStep(4);
+                  setCompleted(prev => ({ ...prev, 3: true }));
+                }}
                 startIcon={<SkipNextIcon />}
               >
                 Skip This Step
@@ -1345,44 +1472,27 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                     setTestingSpeaker(true);
                     setError(null);
                     try {
-                      // Make the playclip API call to test the speaker
-                      const url = `http://${speakerConfig.ip}/axis-cgi/playclip.cgi?clip=0&audiodeviceid=0&audiooutputid=0`;
-                      const response = await fetch(url, {
-                        method: 'GET',
-                        headers: {
-                          'Authorization': 'Basic ' + btoa(`${speakerConfig.username}:${speakerConfig.password}`)
-                        }
-                      });
+                      // Use IPC to test speaker with proper digest authentication
+                      console.log('Testing speaker via IPC with digest auth...');
+                      const result = await (window.electronAPI as any).testSpeakerAudio?.(
+                        speakerConfig.ip,
+                        speakerConfig.username,
+                        speakerConfig.password
+                      );
                       
-                      if (response.ok) {
-                        // Success - speaker should be playing audio
-                        console.log('Speaker test successful');
-                      } else if (response.status === 401) {
-                        setError('Authentication failed. Please check the speaker credentials.');
+                      if (result?.success) {
+                        console.log('Speaker test successful:', result.message);
+                        setError(null); // Clear any previous errors
+                        // Show success feedback
+                        const tempMsg = 'Speaker test successful! Audio should be playing.';
+                        setDeploymentStatus(tempMsg);
+                        setTimeout(() => setDeploymentStatus(''), 3000);
                       } else {
-                        setError(`Speaker test failed: ${response.statusText}`);
+                        setError(result?.error || 'Failed to test speaker audio');
                       }
                     } catch (error: any) {
                       console.error('Speaker test error:', error);
-                      // Since we're in the renderer process, we need to use IPC
-                      // Let's create a proper IPC call instead
-                      try {
-                        const result = await (window.electronAPI as any).testSpeakerAudio?.(
-                          speakerConfig.ip,
-                          speakerConfig.username,
-                          speakerConfig.password
-                        );
-                        
-                        if (result?.success) {
-                          console.log('Speaker test successful via IPC');
-                          // Optionally show a success message
-                        } else {
-                          setError(result?.error || 'Failed to test speaker audio');
-                        }
-                      } catch (ipcError) {
-                        console.error('IPC speaker test error:', ipcError);
-                        setError('Cannot test speaker from browser. CORS restrictions apply.');
-                      }
+                      setError('Failed to test speaker. Please check the connection and credentials.');
                     } finally {
                       setTestingSpeaker(false);
                     }
@@ -1395,11 +1505,103 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               )}
               <Button
                 variant="contained"
-                onClick={() => {
+                onClick={async () => {
                   // Save speaker config if configured
                   if (configureSpeaker && speakerConfig.ip) {
-                    // This will be passed along with test detection
                     console.log('Speaker configured:', speakerConfig);
+                    
+                    // Push the speaker configuration to the camera
+                    try {
+                      console.log('Pushing speaker configuration to camera...');
+                      
+                      // Get the current deployment info if available
+                      const savedDeployments = await (window.electronAPI as any).getConfigValue?.('deployments') || {};
+                      const projectIds = Object.keys(savedDeployments);
+                      let deployment = null;
+                      
+                      // Find any deployment that we can use for config
+                      if (projectIds.length > 0) {
+                        deployment = savedDeployments[projectIds[0]];
+                      }
+                      
+                      // Build the system config with speaker info
+                      const systemConfig: any = {
+                        firebase: deployment?.firebaseConfig || {
+                          apiKey: "AIzaSyCJbWAa-zQir1v8kmlye8Kv3kmhPb9r18s",
+                          authDomain: "anava-ai.firebaseapp.com",
+                          projectId: "anava-ai",
+                          storageBucket: "anava-ai.appspot.com",
+                          messagingSenderId: "392865621461",
+                          appId: "1:392865621461:web:15db206ae4e9c72f7dc95c",
+                          databaseId: "(default)"
+                        },
+                        gemini: deployment ? {
+                          apiKey: '',
+                          vertexApiGatewayUrl: deployment.apiGatewayUrl || '',
+                          vertexApiGatewayKey: deployment.apiKey || '',
+                          vertexGcpProjectId: deployment.projectId || '',
+                          vertexGcpRegion: deployment.region || 'us-central1',
+                          vertexGcsBucketName: deployment.gcsBucketName || ''
+                        } : {
+                          apiKey: '',
+                          vertexApiGatewayUrl: '',
+                          vertexApiGatewayKey: '',
+                          vertexGcpProjectId: '',
+                          vertexGcpRegion: 'us-central1',
+                          vertexGcsBucketName: ''
+                        },
+                        anavaKey: licenseKey || '',
+                        customerId: deployment?.customerId || 'trial-user',
+                        axis: {
+                          speakerIp: speakerConfig.ip,
+                          speakerUser: speakerConfig.username,
+                          speakerPass: speakerConfig.password
+                        }
+                      };
+                      
+                      console.log('Pushing speaker config to camera:', systemConfig.axis);
+                      
+                      const result = await (window.electronAPI as any).pushSystemConfig({
+                        cameraIp: selectedCamera?.ip,
+                        username: credentials.username,
+                        password: credentials.password,
+                        systemConfig
+                      });
+                      
+                      if (result.success) {
+                        console.log('Speaker configuration pushed successfully');
+                        
+                        // Update the camera object with speaker info
+                        if (selectedCamera) {
+                          const updatedCamera = {
+                            ...selectedCamera,
+                            hasSpeaker: true,
+                            speaker: {
+                              ip: speakerConfig.ip,
+                              username: speakerConfig.username,
+                              password: speakerConfig.password
+                            }
+                          };
+                          setSelectedCamera(updatedCamera);
+                          
+                          // Update saved cameras
+                          const configuredCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras') || [];
+                          const cameraIndex = configuredCameras.findIndex((c: any) => c.id === selectedCamera.id);
+                          if (cameraIndex >= 0) {
+                            configuredCameras[cameraIndex] = updatedCamera;
+                          } else {
+                            configuredCameras.push(updatedCamera);
+                          }
+                          await (window.electronAPI as any).setConfigValue?.('configuredCameras', configuredCameras);
+                        }
+                      } else {
+                        console.error('Failed to push speaker configuration:', result.error);
+                        // Still continue even if push fails
+                      }
+                    } catch (error) {
+                      console.error('Error pushing speaker configuration:', error);
+                      // Still continue even if push fails
+                    }
                   }
                   setActiveStep(4);
                 }}
@@ -1510,31 +1712,89 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         </Alert>
       )}
 
-      <Stepper activeStep={activeStep} orientation="vertical">
-        <Step>
-          <StepLabel>Enter Camera Credentials</StepLabel>
+      <Stepper activeStep={activeStep} orientation="vertical" nonLinear>
+        <Step completed={completed[0]}>
+          <StepLabel 
+            onClick={() => setActiveStep(0)}
+            sx={{ cursor: 'pointer' }}
+          >
+            Enter Camera Credentials
+          </StepLabel>
           <StepContent>{getStepContent(0)}</StepContent>
         </Step>
         
-        <Step>
-          <StepLabel>Find Your Camera</StepLabel>
+        <Step completed={completed[1]}>
+          <StepLabel 
+            onClick={() => {
+              if (completed[0] || selectedCamera) {
+                setActiveStep(1);
+              }
+            }}
+            sx={{ cursor: (completed[0] || selectedCamera) ? 'pointer' : 'default' }}
+          >
+            Find Your Camera
+          </StepLabel>
           <StepContent>{getStepContent(1)}</StepContent>
         </Step>
         
-        <Step>
-          <StepLabel>Deploy Anava</StepLabel>
+        <Step completed={completed[2]}>
+          <StepLabel 
+            onClick={() => {
+              if (selectedCamera) {
+                setActiveStep(2);
+              }
+            }}
+            sx={{ cursor: selectedCamera ? 'pointer' : 'default' }}
+          >
+            Deploy Anava
+            {selectedACAPFile && (activeStep > 2 || completed[2]) && (
+              <Typography 
+                component="span" 
+                variant="caption" 
+                sx={{ 
+                  ml: 1, 
+                  fontStyle: 'italic', 
+                  color: 'text.secondary' 
+                }}
+              >
+                Deployed {selectedACAPFile}
+              </Typography>
+            )}
+          </StepLabel>
           <StepContent>{getStepContent(2)}</StepContent>
         </Step>
         
-        <Step>
-          <StepLabel optional={<Typography variant="caption">Optional</Typography>}>
+        <Step completed={completed[3]}>
+          <StepLabel 
+            optional={<Typography variant="caption">Optional</Typography>}
+            onClick={() => {
+              // Allow jumping to speaker config if camera is selected and either:
+              // - Step 2 is completed, or
+              // - Camera has ACAP installed, or  
+              // - Camera was loaded from previously configured (has credentials)
+              if (selectedCamera && (completed[2] || selectedCamera?.hasACAP || selectedCamera?.isLicensed || completed[1])) {
+                setActiveStep(3);
+              }
+            }}
+            sx={{ cursor: (selectedCamera && (completed[2] || selectedCamera?.hasACAP || selectedCamera?.isLicensed || completed[1])) ? 'pointer' : 'default' }}
+          >
             Configure Audio Speaker
           </StepLabel>
           <StepContent>{getStepContent(3)}</StepContent>
         </Step>
         
-        <Step>
-          <StepLabel>Complete</StepLabel>
+        <Step completed={completed[4]}>
+          <StepLabel 
+            onClick={() => {
+              // Allow jumping to complete if deployment is done or speaker is configured
+              if (selectedCamera && (completed[2] || completed[3] || selectedCamera?.hasACAP)) {
+                setActiveStep(4);
+              }
+            }}
+            sx={{ cursor: (selectedCamera && (completed[2] || completed[3] || selectedCamera?.hasACAP)) ? 'pointer' : 'default' }}
+          >
+            Complete
+          </StepLabel>
           <StepContent>{getStepContent(4)}</StepContent>
         </Step>
       </Stepper>

@@ -18,6 +18,7 @@ import AppFooter from './components/AppFooter';
 import RetroEasterEgg from './components/RetroEasterEgg';
 import EULADialog from './components/EULADialog';
 import { DeploymentConfig, GCPProject, CameraInfo } from '../types';
+import { CameraProvider } from './contexts/CameraContext';
 
 function App() {
   const [currentView, setCurrentView] = useState<NavigationView>('welcome');
@@ -339,14 +340,15 @@ function App() {
   }
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <EULADialog 
-        open={!eulaAccepted} 
-        onAccept={() => setEulaAccepted(true)} 
-      />
-      <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
-        <TopBar title="Anava Vision Installer" onLogout={handleLogout} />
+    <CameraProvider>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <EULADialog 
+          open={!eulaAccepted} 
+          onAccept={() => setEulaAccepted(true)} 
+        />
+        <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
+          <TopBar title="Anava Vision Installer" onLogout={handleLogout} />
         
         <Box sx={{ display: 'flex', flex: 1 }}>
           <NavigationSidebar
@@ -377,6 +379,7 @@ function App() {
       </Box>
       <RetroEasterEgg trigger="konami" />
     </ThemeProvider>
+    </CameraProvider>
   );
 }
 

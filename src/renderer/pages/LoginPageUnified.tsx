@@ -135,14 +135,6 @@ const LoginPageUnified: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             onClick={handleGoogleSignIn}
             loading={loading}
           />
-          
-          <Button 
-            variant="outlined" 
-            onClick={() => console.log('Test button clicked!')}
-            sx={{ mt: 2 }}
-          >
-            Test Button (Check Console)
-          </Button>
 
           <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
             By signing in, you agree to our Terms of Service and Privacy Policy
