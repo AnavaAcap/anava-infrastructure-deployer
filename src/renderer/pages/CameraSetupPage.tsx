@@ -437,11 +437,44 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         }
       };
       
-      // Use automatic deployment which will detect firmware and select correct ACAP
-      const deployResult = await (window.electronAPI as any).deployACAPAuto?.(cameraForDeployment, downloadedReleases);
+      // Start a progress animation for better UX during the 10-15 second deployment
+      let progressCounter = 0;
+      const progressInterval = setInterval(() => {
+        progressCounter++;
+        setDeploymentProgress((prev) => {
+          // Smoothly increment from 30 to 48 over ~12 seconds
+          if (prev < 48) {
+            return prev + 1.5;
+          }
+          return prev;
+        });
+        
+        // Update status message periodically for better UX
+        if (progressCounter === 3) {
+          setDeploymentStatus('Connecting to camera and checking firmware version...');
+        } else if (progressCounter === 6) {
+          setDeploymentStatus('Uploading ACAP package to camera...');
+        } else if (progressCounter === 9) {
+          setDeploymentStatus('Installing and verifying ACAP...');
+        } else if (progressCounter === 11) {
+          setDeploymentStatus('Finalizing ACAP installation...');
+        }
+      }, 1000); // Update every second
       
-      if (!deployResult.success) {
-        throw new Error(deployResult.error || 'ACAP deployment failed');
+      try {
+        // Use automatic deployment which will detect firmware and select correct ACAP
+        const deployResult = await (window.electronAPI as any).deployACAPAuto?.(cameraForDeployment, downloadedReleases);
+        
+        // Stop the progress animation
+        clearInterval(progressInterval);
+        
+        if (!deployResult.success) {
+          throw new Error(deployResult.error || 'ACAP deployment failed');
+        }
+      } catch (deployError) {
+        // Make sure to clear the interval on error
+        clearInterval(progressInterval);
+        throw deployError;
       }
       
       console.log('ACAP deployment successful:', deployResult.message);
@@ -455,6 +488,16 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         setDeploymentProgress(50);
         setDeploymentStatus('Applying license key...');
         updateCameraStatus(selectedCamera.id, 'licensing');
+        
+        // Animate progress during license activation
+        const licenseInterval = setInterval(() => {
+          setDeploymentProgress((prev) => {
+            if (prev < 65) {
+              return prev + 2;
+            }
+            return prev;
+          });
+        }, 500);
 
         await (window.electronAPI as any).activateLicenseKey?.(
           selectedCamera.ip,
@@ -463,14 +506,27 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           licenseKey,
           'BatonAnalytic'
         );
+        
+        clearInterval(licenseInterval);
+        setDeploymentProgress(68);
       } else if (selectedCamera.isLicensed) {
-        setDeploymentProgress(50);
+        setDeploymentProgress(68);
         setDeploymentStatus('Camera already licensed, updating configuration...');
       }
 
       // Step 4: Configure camera
       setDeploymentProgress(70);
       setDeploymentStatus('Configuring AI settings...');
+      
+      // Animate progress during configuration
+      const configInterval = setInterval(() => {
+        setDeploymentProgress((prev) => {
+          if (prev < 85) {
+            return prev + 2.5;
+          }
+          return prev;
+        });
+      }, 500);
       
       // Get Firebase config (we'll need to implement this)
       const firebaseConfig = await getFirebaseConfig();
@@ -489,6 +545,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         customerId: 'trial-user',
       };
 
+      clearInterval(configInterval);
+      
       await (window.electronAPI as any).pushCameraSettings?.(
         selectedCamera.ip,
         credentials.username,
@@ -497,18 +555,33 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       );
 
       // Step 5: Capture and analyze scene
-      setDeploymentProgress(90);
+      setDeploymentProgress(88);
       setDeploymentStatus('AI is learning to see...');
       updateCameraStatus(selectedCamera.id, 'analyzing');
+      
+      // Animate final progress
+      const finalInterval = setInterval(() => {
+        setDeploymentProgress((prev) => {
+          if (prev < 95) {
+            return prev + 1;
+          }
+          return prev;
+        });
+      }, 200);
 
       // Get scene description with audio
       const sceneResult = await captureAndAnalyzeScene(selectedCamera);
+      
+      clearInterval(finalInterval);
       
       // Update camera with results
       updateCameraStatus(selectedCamera.id, 'complete', {
         sceneAnalysis: sceneResult,
       });
 
+      // Smoothly complete to 100%
+      setDeploymentProgress(97);
+      await new Promise(resolve => setTimeout(resolve, 300));
       setDeploymentProgress(100);
       setDeploymentStatus('Setup complete!');
       
