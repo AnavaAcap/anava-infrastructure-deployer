@@ -96,6 +96,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('get-scene-description', camera, apiKey, includeSpeaker),
   activateLicenseKey: (ip: string, username: string, password: string, licenseKey: string, applicationName: string) =>
     ipcRenderer.invoke('activate-license-key', ip, username, password, licenseKey, applicationName),
+  testSpeakerAudio: (speakerIp: string, username: string, password: string) =>
+    ipcRenderer.invoke('testSpeakerAudio', speakerIp, username, password),
   getNetworkInterfaces: () => ipcRenderer.invoke('get-network-interfaces'),
   // ACAP download APIs
   acap: {

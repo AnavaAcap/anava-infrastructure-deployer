@@ -109,6 +109,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   });
   const [showSpeakerPassword, setShowSpeakerPassword] = useState(false);
   const [availableSpeakers, setAvailableSpeakers] = useState<Array<{ ip: string; model?: string }>>([]);
+  const [testingSpeaker, setTestingSpeaker] = useState(false);
 
   // Load license key and check for pre-discovered cameras on mount
   useEffect(() => {
@@ -1260,6 +1261,61 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               >
                 Skip This Step
               </Button>
+              {configureSpeaker && speakerConfig.ip && speakerConfig.password && (
+                <Button
+                  variant="outlined"
+                  onClick={async () => {
+                    setTestingSpeaker(true);
+                    setError(null);
+                    try {
+                      // Make the playclip API call to test the speaker
+                      const url = `http://${speakerConfig.ip}/axis-cgi/playclip.cgi?clip=0&audiodeviceid=0&audiooutputid=0`;
+                      const response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                          'Authorization': 'Basic ' + btoa(`${speakerConfig.username}:${speakerConfig.password}`)
+                        }
+                      });
+                      
+                      if (response.ok) {
+                        // Success - speaker should be playing audio
+                        console.log('Speaker test successful');
+                      } else if (response.status === 401) {
+                        setError('Authentication failed. Please check the speaker credentials.');
+                      } else {
+                        setError(`Speaker test failed: ${response.statusText}`);
+                      }
+                    } catch (error: any) {
+                      console.error('Speaker test error:', error);
+                      // Since we're in the renderer process, we need to use IPC
+                      // Let's create a proper IPC call instead
+                      try {
+                        const result = await (window.electronAPI as any).testSpeakerAudio?.(
+                          speakerConfig.ip,
+                          speakerConfig.username,
+                          speakerConfig.password
+                        );
+                        
+                        if (result?.success) {
+                          console.log('Speaker test successful via IPC');
+                          // Optionally show a success message
+                        } else {
+                          setError(result?.error || 'Failed to test speaker audio');
+                        }
+                      } catch (ipcError) {
+                        console.error('IPC speaker test error:', ipcError);
+                        setError('Cannot test speaker from browser. CORS restrictions apply.');
+                      }
+                    } finally {
+                      setTestingSpeaker(false);
+                    }
+                  }}
+                  disabled={testingSpeaker}
+                  startIcon={testingSpeaker ? <CircularProgress size={20} /> : <VolumeUpIcon />}
+                >
+                  {testingSpeaker ? 'Testing...' : 'Test Speaker Config'}
+                </Button>
+              )}
               <Button
                 variant="contained"
                 onClick={() => {
