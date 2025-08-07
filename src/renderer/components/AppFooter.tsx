@@ -3,12 +3,12 @@ import { Box, Typography, Link, Divider } from '@mui/material';
 import { styled } from '@mui/material/styles';
 
 const FooterContainer = styled(Box)(({ theme }) => ({
-  marginTop: 'auto',
   padding: theme.spacing(3),
   textAlign: 'center',
   color: theme.palette.text.secondary,
   backgroundColor: theme.palette.background.paper,
   borderTop: `1px solid ${theme.palette.divider}`,
+  flexShrink: 0, // Prevent the footer from shrinking
 }));
 
 const FooterLinks = styled(Box)(({ theme }) => ({

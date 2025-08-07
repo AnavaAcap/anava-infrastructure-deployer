@@ -3,7 +3,6 @@ import { Box, Container, ThemeProvider, CssBaseline, Typography, Button, Circula
 import WelcomePage from './pages/WelcomePage';
 import LoginPageUnified from './pages/LoginPageUnified';
 import AuthenticationPage from './pages/AuthenticationPage';
-import AIModeSelectionPage from './pages/AIModeSelectionPage';
 import ConfigurationPage from './pages/ConfigurationPage';
 import DeploymentPage from './pages/DeploymentPage';
 import CompletionPage from './pages/CompletionPage';
@@ -11,7 +10,6 @@ import { EnhancedCameraDiscoveryPage } from './pages/camera/EnhancedCameraDiscov
 import { ACAPDeploymentPage } from './pages/camera/ACAPDeploymentPage';
 import { ACAPManager } from './pages/camera/ACAPManager';
 import CameraSetupPage from './pages/CameraSetupPage';
-import SpeakerConfigPage from './pages/SpeakerConfigPage';
 import DetectionTestPage from './pages/DetectionTestPage';
 import NavigationSidebar, { NavigationView } from './components/NavigationSidebar';
 import TopBar from './components/TopBar';
@@ -204,15 +202,10 @@ function App() {
           );
         }
         
+        // Always use Vertex AI for production deployments
         if (!selectedAIMode) {
-          return (
-            <AIModeSelectionPage
-              onSelectMode={(mode) => {
-                setSelectedAIMode(mode);
-              }}
-              onLogout={handleLogout}
-            />
-          );
+          setSelectedAIMode('vertex');
+          return null; // Will re-render with selectedAIMode set
         }
         
         if (!selectedProject) {
@@ -309,21 +302,10 @@ function App() {
           />
         );
 
-      case 'status':
-        return (
-          <Box sx={{ p: 3 }}>
-            <Typography variant="h4">Status & Logs</Typography>
-            <Typography variant="body1" sx={{ mt: 2 }}>
-              Coming soon: View deployment status, logs, and diagnostics.
-            </Typography>
-          </Box>
-        );
 
       case 'camera-setup':
         return <CameraSetupPage onNavigate={(view) => setCurrentView(view as NavigationView)} />;
 
-      case 'speaker-config':
-        return <SpeakerConfigPage />;
 
       case 'detection-test':
         return <DetectionTestPage />;
@@ -381,9 +363,12 @@ function App() {
               bgcolor: 'background.default',
               marginTop: '48px', // Account for TopBar height
               position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              height: 'calc(100vh - 48px)',
             }}
           >
-            <Box sx={{ height: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ flex: 1, overflow: 'auto' }}>
               {renderContent()}
             </Box>
             <AppFooter />

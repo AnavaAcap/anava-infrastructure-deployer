@@ -67,8 +67,7 @@
     "databaseId": "(default)"
   },
   "gemini": {
-    "apiKey": "", // AI Studio mode
-    "vertexApiGatewayUrl": "...", // Vertex AI mode
+    "vertexApiGatewayUrl": "...", // Vertex AI endpoint
     "vertexApiGatewayKey": "...",
     "vertexGcpProjectId": "...",
     "vertexGcpRegion": "us-central1",
@@ -78,6 +77,10 @@
   "customerId": "..."
 }
 ```
+
+**Speaker Configuration** (v0.9.123+):
+- Passed to `getSceneDescription` API when camera has speaker configured
+- Fields: `speakerIp`, `speakerUser`, `speakerPass`
 
 ## Legacy Notes (v0.9.63)
 
@@ -126,48 +129,49 @@ const result = await page.evaluate(() =>
 - 3-second initial delay after ACAP deployment
 - Comprehensive logging throughout the process
 
-## Current State (v0.9.105)
+## Current State (v0.9.123+)
 
 ### Camera Setup Architecture
 
-#### Manual IP Connection Flow (`/src/renderer/pages/CameraSetupPage.tsx`)
-1. User enters IP and credentials → `handleManualConnect()` (line 110)
-2. Calls IPC `quickScanCamera` → returns camera array with auth status
-3. **Key Logic**: Check `discoveredCamera.status === 'accessible' || discoveredCamera.authenticated === true`
-4. **Common Issues**: 
-   - Auth succeeds but UI doesn't update (check console logs)
-   - Camera object missing `accessible` property
-   - Error messages not visible in current step
+#### Camera Setup Flow (`/src/renderer/pages/CameraSetupPage.tsx`)
+1. **Step 0**: Camera Discovery - Network scan or manual IP entry
+2. **Step 1**: Camera Authentication - Verify credentials
+3. **Step 2**: Deploy AI Analytics - Push ACAP and configuration
+4. **Step 3**: Configure Speaker (Optional) - Add speaker IP/credentials for audio output
+5. **Step 4**: Complete - Summary and navigation options
 
-#### Camera Discovery Service (`/src/main/services/camera/optimizedCameraDiscoveryService.ts`)
-- `quickScanSpecificCamera()` (line 434): Returns camera array with error details
-- `checkAxisCameraWithError()` (line 499): Returns `{camera, error}` for better debugging
-- `digestAuthWithError()` (line 565): Returns auth errors with specific messages
-- **Auth Flow**: 401 challenge → Digest auth → 200 success (normal pattern)
+#### Speaker Configuration
+- **Integrated into Camera Setup**: No longer a separate page (v0.9.123+)
+- **Optional Step**: Users can skip if no speaker attached
+- **Data Structure**: Speaker config saved with camera as:
+  ```javascript
+  {
+    hasSpeaker: boolean,
+    speaker: {
+      ip: string,
+      username: string,
+      password: string
+    }
+  }
+  ```
 
 #### License Key Handling
 1. **Trial License**: Auto-generates email, uses Firebase function
 2. **Manual License**: Direct entry, stored via `setManualLicenseKey()`
-3. **UI Flow**: No license → Prompt appears → User selects mode → Key applied
-
-### Known UI/UX Issues (v0.9.83)
-- ❌ Manual connection success not clearly shown in UI
-- ❌ Error alerts may appear outside visible step area
-- ❌ "Connecting..." state doesn't always clear on error
-- ❌ Need better logging for IPC responses
+3. **Automatic Activation**: Uses Axis SDK to convert keys to signed XML
 
 ### Recent Changes
+#### v0.9.123+
+- **Speaker Configuration Integrated**: Moved from separate page to optional step in Camera Setup
+- **GCP Infrastructure Focused on Vertex AI**: Removed AI Studio selection from deployment flow
+- **Enhanced Text Cleaning**: Detection Test page now removes quotes and markdown formatting
+- **Improved UX**: Test Auth Flow dialog auto-starts when opened
+
 #### v0.9.105
 - **Automatic license activation**: Using Axis public SDK to convert keys to XML
 - **Fixed stream abort errors**: Replaced failing digest auth library
 - **Added retry logic**: Handles ThreadPool errors when app is starting
 - **Comprehensive logging**: Every step of license activation is logged
-
-#### v0.9.83
-- **Removed hardcoded credentials**: No more fallback `root:pass` 
-- **Added manual license key entry**: Users can enter existing licenses
-- **Improved error handling**: Auth errors now return specific messages
-- **Fixed Stack import**: Added missing MUI import in SpeakerConfigPage
 
 ### What's Automated
 - GCP project setup and API enablement
@@ -187,9 +191,10 @@ const result = await page.evaluate(() =>
 - Domain verification for custom domains
 
 ### Key Features
-- **Two AI Modes**: Vertex AI (full infrastructure) or AI Studio (simplified)
+- **Production-Ready Vertex AI**: Full infrastructure deployment with enterprise security
 - **Non-linear Navigation**: Jump between sections via sidebar
 - **Camera Discovery**: Network scanning with VAPIX authentication
+- **Integrated Speaker Config**: Optional audio output configuration in camera setup
 - **Configuration Caching**: Auto-saves deployments by user email
 - **Windows/Mac Support**: Cross-platform builds with GitHub Actions
 
@@ -280,6 +285,12 @@ curl -v --digest -u anava:baton \
 - **Network issue**: Connection timeout or refused
 
 ### Key Files for Debugging
-- **UI Logic**: `/src/renderer/pages/CameraSetupPage.tsx:110-210`
+- **Camera Setup UI**: `/src/renderer/pages/CameraSetupPage.tsx` - Integrated speaker config
+- **Detection Test**: `/src/renderer/pages/DetectionTestPage.tsx` - Text cleaning, speaker support
 - **IPC Handlers**: `/src/main/services/camera/optimizedCameraDiscoveryService.ts:110-115`
 - **Auth Logic**: `/src/main/services/camera/optimizedCameraDiscoveryService.ts:565-625`
+
+### Detection Test Page (v0.9.123+)
+- **Text Cleaning**: Automatically removes quotes, escaped quotes, and markdown formatting
+- **Speaker Support**: Passes `selectedCamera.hasSpeaker` to enable audio output on speakers
+- **Clean Description Function**: Handles `\"text\"` → `text`, removes `**bold**`, `*italic*`, etc.

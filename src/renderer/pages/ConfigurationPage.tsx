@@ -9,12 +9,10 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   Alert,
   IconButton,
   InputAdornment,
+  Box,
 } from '@mui/material';
 import { ArrowBack, RocketLaunch, Visibility, VisibilityOff } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig } from '../../types';
@@ -30,8 +28,6 @@ interface ConfigurationPageProps {
 const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComplete, onBack, onLogout }) => {
   const [namePrefix, setNamePrefix] = useState('anava-iot');
   const [region, setRegion] = useState('us-central1');
-  const [aiMode, setAiMode] = useState<'vertex' | 'ai-studio'>('vertex');
-  const [aiStudioApiKey, setAiStudioApiKey] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [anavaKey, setAnavaKey] = useState('');
@@ -51,8 +47,7 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
       namePrefix,
       corsOrigins: defaultCorsOrigins,
       apiKeyRestrictions: defaultCorsOrigins,
-      aiMode,
-      aiStudioApiKey: aiMode === 'ai-studio' ? aiStudioApiKey : undefined,
+      aiMode: 'vertex', // Always use Vertex AI for production
       adminPassword,
       anavaKey,
       customerId,
@@ -64,13 +59,82 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
       <TopBar 
-        title="Deployment Configuration" 
+        title="Vertex AI Infrastructure Setup" 
         showLogout={!!onLogout}
         onLogout={onLogout}
       />
       
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-        Project: <strong>{project.displayName}</strong> ({project.projectId})
+      <Typography variant="h5" gutterBottom sx={{ mb: 2 }}>
+        Upgrade to Production-Ready Infrastructure
+      </Typography>
+      
+      <Alert severity="info" sx={{ mb: 3 }}>
+        <Typography variant="subtitle2" gutterBottom>
+          <strong>You've been using AI Studio for testing - now it's time for production!</strong>
+        </Typography>
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          During camera setup, you used Google AI Studio's simple API key for quick testing and validation. 
+          That was perfect for getting started, but now we'll deploy enterprise-grade infrastructure with 
+          Google Vertex AI for secure, scalable production use.
+        </Typography>
+      </Alert>
+      
+      <Paper elevation={0} sx={{ p: 3, mb: 4, bgcolor: 'background.default' }}>
+        <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+          What You're Upgrading From AI Studio to Vertex AI:
+        </Typography>
+        <Stack spacing={2}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+            <Typography sx={{ mr: 1 }}>🔐</Typography>
+            <Box>
+              <Typography variant="subtitle2">Enterprise Security</Typography>
+              <Typography variant="body2" color="text.secondary">
+                <strong>AI Studio:</strong> Single API key that can be leaked<br/>
+                <strong>Vertex AI:</strong> IAM-based access control, VPC Service Controls, encrypted endpoints
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+            <Typography sx={{ mr: 1 }}>📈</Typography>
+            <Box>
+              <Typography variant="subtitle2">Unlimited Scale</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Auto-scaling endpoints handle 10 to 10,000 cameras seamlessly vs. rate-limited public API
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+            <Typography sx={{ mr: 1 }}>🔄</Typography>
+            <Box>
+              <Typography variant="subtitle2">MLOps & Governance</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Model versioning, A/B testing, and audit trails vs. no deployment management
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+            <Typography sx={{ mr: 1 }}>🔌</Typography>
+            <Box>
+              <Typography variant="subtitle2">Full GCP Integration</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Native connection to Cloud Storage, BigQuery, Pub/Sub for complete workflows
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+            <Typography sx={{ mr: 1 }}>💰</Typography>
+            <Box>
+              <Typography variant="subtitle2">Cost Control</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Granular billing per project/team with resource labeling vs. single API key billing
+              </Typography>
+            </Box>
+          </Box>
+        </Stack>
+      </Paper>
+      
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+        Deploying to project: <strong>{project.displayName}</strong> ({project.projectId})
       </Typography>
       
       <Stack spacing={3}>
@@ -142,55 +206,19 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
           </Typography>
         </FormControl>
         
-        <FormControl component="fieldset" sx={{ mt: 2 }}>
-          <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-            AI Processing Mode
+        <Paper elevation={0} sx={{ p: 2, mt: 3, mb: 2, bgcolor: 'primary.main', color: 'primary.contrastText' }}>
+          <Typography variant="subtitle2" gutterBottom>
+            What will be deployed:
           </Typography>
-          <RadioGroup value={aiMode} onChange={(e) => setAiMode(e.target.value as 'vertex' | 'ai-studio')}>
-            <FormControlLabel 
-              value="vertex" 
-              control={<Radio />} 
-              label={
-                <Stack>
-                  <Typography variant="body1">Vertex AI (via API Gateway)</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Production-ready infrastructure with full GCP integration
-                  </Typography>
-                </Stack>
-              } 
-            />
-            <FormControlLabel 
-              value="ai-studio" 
-              control={<Radio />} 
-              label={
-                <Stack>
-                  <Typography variant="body1">Google AI Studio</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Simple API key-based access to Gemini models
-                  </Typography>
-                </Stack>
-              }
-            />
-          </RadioGroup>
-        </FormControl>
-
-        {aiMode === 'ai-studio' && (
-          <>
-            <Alert severity="info" sx={{ mt: 2 }}>
-              We'll help you create a Google AI Studio API key during deployment. This provides direct access to Gemini models without complex infrastructure.
-            </Alert>
-            <TextField
-              fullWidth
-              label="Google AI Studio API Key (Optional)"
-              variant="outlined"
-              value={aiStudioApiKey}
-              onChange={(e) => setAiStudioApiKey(e.target.value)}
-              sx={{ mt: 2 }}
-              helperText="Leave empty to create one during deployment"
-              placeholder="Enter existing key or leave empty"
-            />
-          </>
-        )}
+          <Stack spacing={1} sx={{ mt: 1 }}>
+            <Typography variant="body2">• API Gateway for secure, scalable access</Typography>
+            <Typography variant="body2">• Cloud Functions for device authentication</Typography>
+            <Typography variant="body2">• Workload Identity Federation for camera security</Typography>
+            <Typography variant="body2">• Firebase Auth & Firestore for user management</Typography>
+            <Typography variant="body2">• Cloud Storage for analytics data</Typography>
+            <Typography variant="body2">• Vertex AI endpoints with auto-scaling</Typography>
+          </Stack>
+        </Paper>
         
         <TextField
           fullWidth

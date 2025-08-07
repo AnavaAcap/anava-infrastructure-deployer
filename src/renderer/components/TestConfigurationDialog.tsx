@@ -47,6 +47,7 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
   const [testing, setTesting] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const isAiStudioMode = deploymentConfig?.aiMode === 'ai-studio';
+  const [hasAutoStarted, setHasAutoStarted] = useState(false);
   
   const [testSteps, setTestSteps] = useState<TestStep[]>(
     isAiStudioMode ? [
@@ -264,6 +265,21 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
 
   const allStepsComplete = testSteps.every(step => step.status === 'success');
 
+  // Auto-start test when dialog opens
+  React.useEffect(() => {
+    if (open && !hasAutoStarted && !testing) {
+      setHasAutoStarted(true);
+      runTest();
+    }
+  }, [open]);
+
+  // Reset auto-start flag when dialog closes
+  React.useEffect(() => {
+    if (!open) {
+      setHasAutoStarted(false);
+    }
+  }, [open]);
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>Test Authentication Configuration</DialogTitle>
@@ -391,7 +407,7 @@ export const TestConfigurationDialog: React.FC<TestConfigurationDialogProps> = (
           disabled={(!deploymentConfig?.apiGatewayUrl && deploymentConfig?.aiMode !== 'ai-studio') || testing}
           startIcon={testing ? <CircularProgress size={20} /> : null}
         >
-          {testing ? 'Testing...' : 'Run Test'}
+          {testing ? 'Testing...' : hasAutoStarted ? 'Retry Test' : 'Run Test'}
         </Button>
       </DialogActions>
     </Dialog>

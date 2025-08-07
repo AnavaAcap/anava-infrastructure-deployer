@@ -54,6 +54,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Camera-related APIs
   camera: {
     getPreDiscoveredCameras: () => ipcRenderer.invoke('get-pre-discovered-cameras'),
+    classifyAxisDevices: (credentials: { username: string; password: string }) => 
+      ipcRenderer.invoke('classify-axis-devices', credentials),
   },
   scanNetworkCameras: (options?: { networkRange?: string }) => 
     ipcRenderer.invoke('scan-network-cameras', options),
@@ -99,6 +101,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   acap: {
     getReleases: () => ipcRenderer.invoke('acap:get-releases'),
     download: (release: any) => ipcRenderer.invoke('acap:download', release),
+    downloadToUser: (release: any) => ipcRenderer.invoke('acap:download-to-user', release),
     getLocalPath: (filename: string) => ipcRenderer.invoke('acap:get-local-path', filename),
   },
   // Config cache APIs

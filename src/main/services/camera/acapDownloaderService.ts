@@ -43,6 +43,10 @@ export class ACAPDownloaderService {
     ipcMain.handle('acap:download', async (_event, release: ACAPRelease) => {
       return this.downloadACAP(release);
     });
+    
+    ipcMain.handle('acap:download-to-user', async (_event, release: ACAPRelease) => {
+      return this.downloadACAPToUserFolder(release);
+    });
 
     ipcMain.handle('acap:get-local-path', async (_event, filename: string) => {
       return path.join(this.acapDir, filename);
@@ -130,6 +134,45 @@ export class ACAPDownloaderService {
 
     } catch (error: any) {
       console.error('Failed to download ACAP:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async downloadACAPToUserFolder(release: ACAPRelease): Promise<{ success: boolean; path?: string; error?: string }> {
+    try {
+      // Get user's Downloads folder
+      const app = require('electron').app;
+      const downloadsPath = app.getPath('downloads');
+      const localPath = path.join(downloadsPath, release.filename);
+      
+      // Download the file
+      const response = await axios.get(release.downloadUrl, {
+        responseType: 'stream',
+        headers: {
+          'Accept': 'application/octet-stream'
+        }
+      });
+
+      // Save to file
+      const writer = fs.createWriteStream(localPath);
+      response.data.pipe(writer);
+
+      return new Promise((resolve, reject) => {
+        writer.on('finish', () => {
+          console.log(`Downloaded ${release.filename} to ${localPath}`);
+          resolve({ success: true, path: localPath });
+        });
+        
+        writer.on('error', (error) => {
+          if (fs.existsSync(localPath)) {
+            fs.unlinkSync(localPath);
+          }
+          reject({ success: false, error: error.message });
+        });
+      });
+
+    } catch (error: any) {
+      console.error('Failed to download ACAP to user folder:', error);
       return { success: false, error: error.message };
     }
   }

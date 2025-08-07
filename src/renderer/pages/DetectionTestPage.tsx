@@ -74,10 +74,12 @@ const DetectionTestPage: React.FC = () => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [sceneAnalysis, setSceneAnalysis] = useState<SceneAnalysis | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+  const [hasPreFetchedData, setHasPreFetchedData] = useState(false);
 
   useEffect(() => {
     loadConfiguredCameras();
     loadApiKey();
+    checkPreFetchedData();
     
     return () => {
       // Cleanup audio on unmount
@@ -97,6 +99,17 @@ const DetectionTestPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load API key:', error);
+    }
+  };
+
+  const checkPreFetchedData = async () => {
+    try {
+      const preFetched = await window.electronAPI?.getConfigValue('preFetchedScene');
+      if (preFetched && preFetched.timestamp && (Date.now() - preFetched.timestamp) < 60000) {
+        setHasPreFetchedData(true);
+      }
+    } catch (error) {
+      console.error('Failed to check pre-fetched data:', error);
     }
   };
 
@@ -143,34 +156,72 @@ const DetectionTestPage: React.FC = () => {
     try {
       console.log('Starting scene analysis for camera:', selectedCamera.ip);
       
-      const result = await window.electronAPI?.getSceneDescription(
-        selectedCamera,
-        apiKey,
-        false // Don't include speaker for test
-      );
-
-      if (result.success) {
+      // Check for pre-fetched scene data first
+      const preFetched = await window.electronAPI?.getConfigValue('preFetchedScene');
+      
+      if (preFetched && 
+          preFetched.cameraIp === selectedCamera.ip && 
+          preFetched.timestamp && 
+          (Date.now() - preFetched.timestamp) < 60000) { // Less than 1 minute old
+        
+        console.log('Using pre-fetched scene data');
+        setHasPreFetchedData(false); // Clear the indicator
+        
         const analysis: SceneAnalysis = {
-          description: result.description || 'No description available',
-          imageBase64: result.imageBase64,
-          audioMP3Base64: result.audioMP3Base64,
-          audioBase64: result.audioBase64,
-          audioFormat: result.audioFormat,
+          description: cleanDescription(preFetched.description || 'No description available'),
+          imageBase64: preFetched.imageBase64,
+          audioMP3Base64: preFetched.audioMP3Base64,
+          audioBase64: preFetched.audioBase64,
+          audioFormat: preFetched.audioFormat,
           timestamp: new Date().toLocaleTimeString(),
         };
         
         setSceneAnalysis(analysis);
         
         // Play audio if available - use new format if available
-        if (result.audioBase64) {
-          playAudio(result.audioBase64, result.audioFormat);
-        } else if (result.audioMP3Base64) {
-          playAudio(result.audioMP3Base64, 'mp3');
+        if (preFetched.audioBase64) {
+          playAudio(preFetched.audioBase64, preFetched.audioFormat);
+        } else if (preFetched.audioMP3Base64) {
+          playAudio(preFetched.audioMP3Base64, 'mp3');
         }
+        
+        // Clear the pre-fetched data after using it
+        await window.electronAPI?.setConfigValue('preFetchedScene', null);
         
         setActiveStep(2);
       } else {
-        throw new Error(result.error || 'Failed to analyze scene');
+        // No pre-fetched data or it's stale, fetch fresh
+        console.log('Fetching fresh scene data');
+        
+        const result = await window.electronAPI?.getSceneDescription(
+          selectedCamera,
+          apiKey,
+          selectedCamera.hasSpeaker // Pass speaker config if available
+        );
+
+        if (result.success) {
+          const analysis: SceneAnalysis = {
+            description: cleanDescription(result.description || 'No description available'),
+            imageBase64: result.imageBase64,
+            audioMP3Base64: result.audioMP3Base64,
+            audioBase64: result.audioBase64,
+            audioFormat: result.audioFormat,
+            timestamp: new Date().toLocaleTimeString(),
+          };
+          
+          setSceneAnalysis(analysis);
+          
+          // Play audio if available - use new format if available
+          if (result.audioBase64) {
+            playAudio(result.audioBase64, result.audioFormat);
+          } else if (result.audioMP3Base64) {
+            playAudio(result.audioMP3Base64, 'mp3');
+          }
+          
+          setActiveStep(2);
+        } else {
+          throw new Error(result.error || 'Failed to analyze scene');
+        }
       }
     } catch (error: any) {
       console.error('Scene analysis failed:', error);
@@ -178,6 +229,26 @@ const DetectionTestPage: React.FC = () => {
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const cleanDescription = (text: string): string => {
+    // Remove escaped quotes
+    let cleaned = text.replace(/\\"/g, '');
+    
+    // Remove surrounding quotes if present
+    cleaned = cleaned.replace(/^["']|["']$/g, '');
+    
+    // Clean up common markdown formatting
+    cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, '$1'); // Bold
+    cleaned = cleaned.replace(/\*(.*?)\*/g, '$1'); // Italic
+    cleaned = cleaned.replace(/__(.*?)__/g, '$1'); // Bold
+    cleaned = cleaned.replace(/_(.*?)_/g, '$1'); // Italic
+    cleaned = cleaned.replace(/`(.*?)`/g, '$1'); // Code
+    
+    // Clean up extra whitespace
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    
+    return cleaned;
   };
 
   const playAudio = (base64Audio: string, format?: string) => {
@@ -404,6 +475,16 @@ const DetectionTestPage: React.FC = () => {
                           <Chip label="ACAP Installed" color="success" size="small" />
                         </Grid>
                       )}
+                      {hasPreFetchedData && (
+                        <Grid item>
+                          <Chip 
+                            label="Ready to Test" 
+                            color="info" 
+                            size="small" 
+                            icon={<CheckCircleIcon />}
+                          />
+                        </Grid>
+                      )}
                     </Grid>
                   </CardContent>
                 </Card>
@@ -460,7 +541,7 @@ const DetectionTestPage: React.FC = () => {
                       <Typography variant="h6">AI Analysis</Typography>
                     </Box>
                     <Typography variant="body1" paragraph>
-                      {sceneAnalysis.description}
+                      {cleanDescription(sceneAnalysis.description)}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       Analyzed at {sceneAnalysis.timestamp}
