@@ -265,6 +265,10 @@ export class CameraConfigurationService {
       return this.testSpeaker(speakerIp, username, password);
     });
     
+    ipcMain.handle('testSpeakerAudio', async (_event, speakerIp: string, username: string, password: string) => {
+      return this.testSpeakerAudio(speakerIp, username, password);
+    });
+    
     ipcMain.handle('configure-speaker', async (_event, cameraIp: string, speakerIp: string, username: string, password: string) => {
       return this.configureSpeaker(cameraIp, speakerIp, username, password);
     });
@@ -1107,6 +1111,44 @@ export class CameraConfigurationService {
       
     } catch (error: any) {
       throw new Error(`Failed to upload license XML: ${error.message}`);
+    }
+  }
+  
+  async testSpeakerAudio(speakerIp: string, username: string, password: string): Promise<any> {
+    try {
+      console.log('[testSpeakerAudio] Testing speaker at:', speakerIp);
+      
+      // Use the playclip endpoint to test audio
+      // clip=0 plays the first pre-recorded clip
+      // audiodeviceid=0 and audiooutputid=0 are default values
+      const response = await this.simpleDigestAuth(
+        speakerIp,
+        username,
+        password,
+        'GET',
+        '/axis-cgi/playclip.cgi?clip=0&audiodeviceid=0&audiooutputid=0'
+      );
+      
+      if (response && response.status === 200) {
+        console.log('[testSpeakerAudio] Speaker test successful');
+        return { success: true, message: 'Speaker test successful - audio should be playing' };
+      } else {
+        console.log('[testSpeakerAudio] Speaker test failed:', response?.status);
+        return { success: false, error: `Speaker test failed with status: ${response?.status}` };
+      }
+    } catch (error: any) {
+      console.error('[testSpeakerAudio] Error testing speaker:', error.message);
+      
+      // Check if it's an authentication error
+      if (error.response?.status === 401) {
+        return { success: false, error: 'Authentication failed. Please check speaker credentials.' };
+      } else if (error.code === 'ECONNREFUSED') {
+        return { success: false, error: 'Cannot connect to speaker. Please check the IP address.' };
+      } else if (error.message?.includes('404')) {
+        return { success: false, error: 'Speaker does not support audio playback or no clips available.' };
+      }
+      
+      return { success: false, error: error.message || 'Failed to test speaker audio' };
     }
   }
 }
