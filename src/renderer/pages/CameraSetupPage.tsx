@@ -36,6 +36,7 @@ import {
   InputLabel,
   Select,
 } from '@mui/material';
+import DetectionTestModal from '../components/DetectionTestModal';
 import {
   Visibility,
   VisibilityOff,
@@ -50,6 +51,7 @@ import {
   CloudDownload as CloudDownloadIcon,
   Speaker as SpeakerIcon,
   SkipNext as SkipNextIcon,
+  SmartToy as SmartToyIcon,
 } from '@mui/icons-material';
 
 interface CameraInfo {
@@ -110,6 +112,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [showSpeakerPassword, setShowSpeakerPassword] = useState(false);
   const [availableSpeakers, setAvailableSpeakers] = useState<Array<{ ip: string; model?: string }>>([]);
   const [testingSpeaker, setTestingSpeaker] = useState(false);
+  const [showDetectionModal, setShowDetectionModal] = useState(false);
 
   // Load license key and check for pre-discovered cameras on mount
   useEffect(() => {
@@ -1419,39 +1422,44 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
             </Typography>
             
             <Box sx={{ mt: 4 }}>
-              <Typography variant="subtitle2" gutterBottom>
-                What's Next?
-              </Typography>
-              <Grid container spacing={2} sx={{ mt: 1 }}>
-                <Grid item xs={12} sm={6}>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    onClick={() => onNavigate?.('detection-test')}
-                    startIcon={<VideocamIcon />}
-                  >
-                    Test Detection
-                  </Button>
-                </Grid>
-              </Grid>
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={() => setShowDetectionModal(true)}
+                startIcon={<SmartToyIcon />}
+                size="large"
+                color="primary"
+                sx={{ py: 2, fontSize: '1.1rem' }}
+              >
+                Test AI Vision Now
+              </Button>
               
-              <Box sx={{ mt: 3 }}>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  onClick={() => {
-                    // Reset to start and configure another camera
-                    setActiveStep(0);
-                    setSelectedCamera(null);
-                    setDeploymentProgress(0);
-                    setDeploymentStatus('');
-                    setError(null);
-                  }}
-                  startIcon={<VideocamIcon />}
-                >
-                  Set Up Another Camera
-                </Button>
-              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 3 }} align="center">
+                See what your AI-powered camera can detect
+              </Typography>
+              
+              <Divider sx={{ my: 3 }}>
+                <Typography variant="caption" color="text.secondary">OR</Typography>
+              </Divider>
+              
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={() => {
+                  // Reset to start and configure another camera
+                  setActiveStep(0);
+                  setSelectedCamera(null);
+                  setDeploymentProgress(0);
+                  setDeploymentStatus('');
+                  setError(null);
+                  setCredentials({ username: 'root', password: '' });
+                  setConfigureSpeaker(false);
+                  setSpeakerConfig({ ip: '', username: 'root', password: '' });
+                }}
+                startIcon={<VideocamIcon />}
+              >
+                Set Up Another Camera
+              </Button>
             </Box>
           </Box>
         );
@@ -1512,6 +1520,14 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           <StepContent>{getStepContent(4)}</StepContent>
         </Step>
       </Stepper>
+      
+      {/* Detection Test Modal */}
+      <DetectionTestModal
+        open={showDetectionModal}
+        onClose={() => setShowDetectionModal(false)}
+        camera={selectedCamera}
+        speakerConfig={configureSpeaker ? speakerConfig : undefined}
+      />
     </Box>
   );
 };
