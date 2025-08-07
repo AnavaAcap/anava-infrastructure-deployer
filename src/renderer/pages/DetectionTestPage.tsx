@@ -25,6 +25,7 @@ import {
   Select,
   MenuItem,
   TextField,
+  InputAdornment,
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
@@ -37,6 +38,8 @@ import {
   Refresh as RefreshIcon,
   Image as ImageIcon,
   Description as DescriptionIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon,
 } from '@mui/icons-material';
 
 interface CameraOption {
@@ -54,7 +57,9 @@ interface CameraOption {
 interface SceneAnalysis {
   description: string;
   imageBase64?: string;
-  audioMP3Base64?: string;
+  audioMP3Base64?: string; // Keep for backward compatibility
+  audioBase64?: string;
+  audioFormat?: string;
   timestamp: string;
 }
 
@@ -66,6 +71,7 @@ const DetectionTestPage: React.FC = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string>('');
+  const [showApiKey, setShowApiKey] = useState(false);
   const [sceneAnalysis, setSceneAnalysis] = useState<SceneAnalysis | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
@@ -121,7 +127,9 @@ const DetectionTestPage: React.FC = () => {
       setActiveStep(1);
       analyzeScene();
     } else if (!apiKey) {
-      setError('Please enter your Gemini API key');
+      setError('No API key available. Please ensure an API key was generated during setup.');
+    } else if (!selectedCamera) {
+      setError('Please select a camera first');
     }
   };
 
@@ -146,14 +154,18 @@ const DetectionTestPage: React.FC = () => {
           description: result.description || 'No description available',
           imageBase64: result.imageBase64,
           audioMP3Base64: result.audioMP3Base64,
+          audioBase64: result.audioBase64,
+          audioFormat: result.audioFormat,
           timestamp: new Date().toLocaleTimeString(),
         };
         
         setSceneAnalysis(analysis);
         
-        // Play audio if available
-        if (result.audioMP3Base64) {
-          playAudio(result.audioMP3Base64);
+        // Play audio if available - use new format if available
+        if (result.audioBase64) {
+          playAudio(result.audioBase64, result.audioFormat);
+        } else if (result.audioMP3Base64) {
+          playAudio(result.audioMP3Base64, 'mp3');
         }
         
         setActiveStep(2);
@@ -168,18 +180,71 @@ const DetectionTestPage: React.FC = () => {
     }
   };
 
-  const playAudio = (base64Audio: string) => {
+  const playAudio = (base64Audio: string, format?: string) => {
     try {
       // Stop any existing audio
       if (audioElement) {
         audioElement.pause();
       }
 
+      let audioUrl: string;
+      
+      if (format === 'pcm_l16_24000') {
+        // Convert PCM to WAV format for browser playback
+        const pcmData = atob(base64Audio);
+        const pcmArray = new Uint8Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          pcmArray[i] = pcmData.charCodeAt(i);
+        }
+        
+        // Create WAV header for 16-bit PCM at 24kHz
+        const wavHeader = new ArrayBuffer(44);
+        const view = new DataView(wavHeader);
+        
+        // "RIFF" chunk descriptor
+        view.setUint32(0, 0x52494646, false); // "RIFF"
+        view.setUint32(4, 36 + pcmArray.length, true); // file size - 8
+        view.setUint32(8, 0x57415645, false); // "WAVE"
+        
+        // "fmt " sub-chunk
+        view.setUint32(12, 0x666d7420, false); // "fmt "
+        view.setUint32(16, 16, true); // subchunk size
+        view.setUint16(20, 1, true); // audio format (1 = PCM)
+        view.setUint16(22, 1, true); // number of channels
+        view.setUint32(24, 24000, true); // sample rate
+        view.setUint32(28, 24000 * 2, true); // byte rate
+        view.setUint16(32, 2, true); // block align
+        view.setUint16(34, 16, true); // bits per sample
+        
+        // "data" sub-chunk
+        view.setUint32(36, 0x64617461, false); // "data"
+        view.setUint32(40, pcmArray.length, true); // subchunk2 size
+        
+        // Combine header and PCM data
+        const wavBuffer = new Uint8Array(44 + pcmArray.length);
+        wavBuffer.set(new Uint8Array(wavHeader), 0);
+        wavBuffer.set(pcmArray, 44);
+        
+        // Create blob and URL
+        const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+        audioUrl = URL.createObjectURL(blob);
+      } else {
+        // Default to MP3
+        audioUrl = `data:audio/mp3;base64,${base64Audio}`;
+      }
+
       // Create new audio element
-      const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+      const audio = new Audio(audioUrl);
       audio.play().catch(e => {
         console.error('Failed to play audio:', e);
       });
+      
+      // Clean up object URL when done
+      if (format === 'pcm_l16_24000') {
+        audio.addEventListener('ended', () => {
+          URL.revokeObjectURL(audioUrl);
+        });
+      }
       
       setAudioElement(audio);
     } catch (error) {
@@ -256,24 +321,67 @@ const DetectionTestPage: React.FC = () => {
                 <TextField
                   fullWidth
                   label="Gemini API Key"
-                  type="password"
+                  type={showApiKey ? "text" : "password"}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  helperText="Enter your Gemini API key for AI analysis"
+                  helperText={apiKey ? "API key configured automatically" : "No API key found - please generate one"}
                   sx={{ mb: 3 }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          edge="end"
+                          size="small"
+                        >
+                          {showApiKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
                 />
 
-                <Button
-                  variant="text"
-                  startIcon={<RefreshIcon />}
-                  onClick={() => {
-                    setLoading(true);
-                    loadConfiguredCameras().finally(() => setLoading(false));
-                  }}
-                  disabled={loading}
-                >
-                  Refresh List
-                </Button>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Button
+                    variant="text"
+                    startIcon={<RefreshIcon />}
+                    onClick={() => {
+                      setLoading(true);
+                      loadConfiguredCameras().finally(() => setLoading(false));
+                    }}
+                    disabled={loading}
+                  >
+                    Refresh List
+                  </Button>
+                  
+                  {!apiKey && (
+                    <Button
+                      variant="outlined"
+                      onClick={async () => {
+                        setLoading(true);
+                        try {
+                          const result = await window.electronAPI?.magical?.generateApiKey();
+                          if (result?.success && result.apiKey) {
+                            await window.electronAPI?.setConfigValue('geminiApiKey', result.apiKey);
+                            setApiKey(result.apiKey);
+                            setError(null);
+                          } else if (result?.needsManual) {
+                            setError('Please create an API key manually in AI Studio');
+                          } else {
+                            setError('Failed to generate API key');
+                          }
+                        } catch (err) {
+                          setError('Failed to generate API key');
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      disabled={loading}
+                    >
+                      Generate API Key
+                    </Button>
+                  )}
+                </Box>
               </Box>
             )}
             
