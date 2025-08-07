@@ -16,11 +16,21 @@ import {
   Tooltip,
   TextField,
   Divider,
+  FormHelperText,
 } from '@mui/material';
-import { CheckCircle, ArrowBack, ArrowForward, Refresh, Add } from '@mui/icons-material';
+import { 
+  CheckCircle, 
+  ArrowBack, 
+  ArrowForward, 
+  Refresh, 
+  Add,
+  Error as ErrorIcon,
+  Warning as WarningIcon 
+} from '@mui/icons-material';
 import { AuthStatus, GCPProject } from '../../types';
 import TopBar from '../components/TopBar';
 import { CreateProjectDialog } from '../components/CreateProjectDialog';
+import BillingGuidanceDialog from '../components/BillingGuidanceDialog';
 
 interface AuthenticationPageProps {
   onProjectSelected: (project: GCPProject) => void;
@@ -40,6 +50,14 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
   const [preparingProject, setPreparingProject] = useState(false);
   const [preparingProjectId, setPreparingProjectId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Billing check states
+  const [checkingBilling, setCheckingBilling] = useState(false);
+  const [billingStatus, setBillingStatus] = useState<{
+    enabled: boolean;
+    error?: string;
+  } | null>(null);
+  const [billingGuidanceOpen, setBillingGuidanceOpen] = useState(false);
 
   // Helper function to format project display name
   const formatProjectName = (project: GCPProject): string => {
@@ -97,7 +115,59 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
     }
   };
 
+  const checkProjectBilling = async (projectId: string) => {
+    if (projectId === 'no-project') {
+      // No billing check needed for AI Studio mode
+      setBillingStatus({ enabled: true });
+      return true;
+    }
+
+    setCheckingBilling(true);
+    setBillingStatus(null);
+    setError(null);
+
+    try {
+      const result = await window.electronAPI.billing.checkProject(projectId);
+      
+      setBillingStatus({
+        enabled: result.enabled,
+        error: result.error
+      });
+
+      if (!result.enabled && !result.error) {
+        // Billing is disabled but no specific error - show guidance
+        setBillingGuidanceOpen(true);
+      }
+
+      return result.enabled;
+    } catch (err) {
+      console.error('Failed to check billing:', err);
+      setBillingStatus({
+        enabled: false,
+        error: 'Failed to check billing status'
+      });
+      return false;
+    } finally {
+      setCheckingBilling(false);
+    }
+  };
+
+  const handleProjectChange = async (projectId: string) => {
+    setSelectedProject(projectId);
+    setBillingStatus(null);
+    
+    if (projectId) {
+      await checkProjectBilling(projectId);
+    }
+  };
+
   const handleNext = () => {
+    if (!billingStatus?.enabled) {
+      // Don't proceed if billing is not enabled
+      setBillingGuidanceOpen(true);
+      return;
+    }
+
     if (selectedProject === 'no-project') {
       // For AI Studio with no project, create a special project object
       const noProjectOption: GCPProject = {
@@ -357,9 +427,9 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
               <InputLabel>Project</InputLabel>
               <Select
                 value={selectedProject}
-                onChange={(e) => setSelectedProject(e.target.value)}
+                onChange={(e) => handleProjectChange(e.target.value)}
                 label="Project"
-                disabled={refreshing}
+                disabled={refreshing || checkingBilling}
                 renderValue={(value) => {
                   const project = projects.find(p => p.projectId === value);
                   return project ? formatProjectName(project) : value;
@@ -423,6 +493,35 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
                   })()
                 )}
               </Select>
+              {/* Billing status indicator */}
+              {checkingBilling && (
+                <FormHelperText>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CircularProgress size={16} />
+                    Verifying project settings...
+                  </Box>
+                </FormHelperText>
+              )}
+              {!checkingBilling && billingStatus && (
+                <FormHelperText>
+                  {billingStatus.enabled ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'success.main' }}>
+                      <CheckCircle fontSize="small" />
+                      ✓ Project is ready. Billing is enabled.
+                    </Box>
+                  ) : billingStatus.error ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'warning.main' }}>
+                      <WarningIcon fontSize="small" />
+                      {billingStatus.error}
+                    </Box>
+                  ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
+                      <ErrorIcon fontSize="small" />
+                      Billing not enabled
+                    </Box>
+                  )}
+                </FormHelperText>
+              )}
             </FormControl>
             <Tooltip title="Refresh project list">
               <IconButton 
@@ -434,6 +533,47 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
               </IconButton>
             </Tooltip>
           </Box>
+          
+          {/* Billing error alert */}
+          {billingStatus && !billingStatus.enabled && selectedProject && selectedProject !== 'no-project' && (
+            <Alert 
+              severity="error" 
+              sx={{ mb: 3 }}
+              action={
+                <Stack direction="row" spacing={1}>
+                  <Button 
+                    size="small" 
+                    variant="contained"
+                    onClick={() => setBillingGuidanceOpen(true)}
+                  >
+                    Guide Me: Enable Billing
+                  </Button>
+                  <Button 
+                    size="small" 
+                    variant="outlined"
+                    onClick={() => setSelectedProject('')}
+                  >
+                    Select Different Project
+                  </Button>
+                  <Button 
+                    size="small" 
+                    variant="text"
+                    onClick={() => checkProjectBilling(selectedProject)}
+                  >
+                    Re-check Status
+                  </Button>
+                </Stack>
+              }
+            >
+              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                Billing Not Enabled
+              </Typography>
+              <Typography variant="body2">
+                To create the necessary infrastructure, the selected project ({selectedProject}) must be linked to a billing account. 
+                This is required by Google Cloud even for resources that fall within the free tier.
+              </Typography>
+            </Alert>
+          )}
           
           <Box sx={{ mt: 2 }}>
             <Button
@@ -494,7 +634,7 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
           variant="contained"
           endIcon={<ArrowForward />}
           onClick={handleNext}
-          disabled={!selectedProject}
+          disabled={!selectedProject || checkingBilling || (billingStatus && !billingStatus.enabled && selectedProject !== 'no-project')}
         >
           Next
         </Button>
@@ -506,6 +646,14 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
         open={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
         onProjectCreated={handleProjectCreated}
+      />
+      
+      {/* Billing Guidance Dialog */}
+      <BillingGuidanceDialog
+        open={billingGuidanceOpen}
+        projectId={selectedProject}
+        onClose={() => setBillingGuidanceOpen(false)}
+        onRecheck={() => checkProjectBilling(selectedProject)}
       />
     </>
   );

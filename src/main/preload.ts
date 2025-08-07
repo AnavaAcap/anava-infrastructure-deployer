@@ -35,6 +35,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   app: {
     getVersion: () => ipcRenderer.invoke('app:get-version'),
   },
+  billing: {
+    checkProject: (projectId: string) => ipcRenderer.invoke('billing:check-project', projectId),
+    listAccounts: () => ipcRenderer.invoke('billing:list-accounts'),
+    linkAccount: (projectId: string, billingAccountName: string) => 
+      ipcRenderer.invoke('billing:link-account', projectId, billingAccountName),
+  },
   createFirebaseUser: (params: { projectId: string; email: string; password: string; apiKey: string }) => 
     ipcRenderer.invoke('firebase:create-user', params),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),

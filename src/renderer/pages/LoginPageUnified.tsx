@@ -60,7 +60,7 @@ const LoginPageUnified: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       const userEmail = gcpAuthResult.user.email;
       console.log('Using authenticated user email:', userEmail);
       
-      // Get Firebase config
+      // Get Firebase config for license assignment
       const firebaseConfig = {
         apiKey: "AIzaSyCJbWAa-zQir1v8kmlye8Kv3kmhPb9r18s",
         authDomain: "anava-ai.firebaseapp.com",
@@ -70,18 +70,36 @@ const LoginPageUnified: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         appId: "1:392865621461:web:15db206ae4e9c72f7dc95c"
       };
       
-      // Assign license using the real authenticated email
-      const licenseResult = await window.electronAPI.license.assignKey({
-        firebaseConfig,
-        email: userEmail,
-        password: 'TrialUser123!' // This will be used only if user doesn't exist in Firebase
-      });
+      // For Google sign-in users, create a Firebase user with a deterministic password
+      // This password is never shown to the user and is only used internally
+      const firebasePassword = `Anava${userEmail.replace(/[^a-zA-Z0-9]/g, '')}2025!`;
       
-      if (licenseResult.success) {
-        console.log('License assigned:', licenseResult.key);
-        onLoginSuccess();
-      } else {
-        throw new Error(licenseResult.error || 'Failed to assign license');
+      try {
+        // Try to assign a real license key from the Firebase pool
+        const licenseResult = await window.electronAPI.license.assignKey({
+          firebaseConfig,
+          email: userEmail,
+          password: firebasePassword
+        });
+        
+        if (licenseResult.success) {
+          console.log('License assigned from pool:', licenseResult.key);
+          onLoginSuccess();
+        } else {
+          throw new Error(licenseResult.error || 'Failed to assign license');
+        }
+      } catch (licenseError: any) {
+        console.error('License assignment error:', licenseError);
+        
+        // If Firebase auth fails but Google auth succeeded, check if we already have a cached key
+        const cachedKey = await window.electronAPI.license.getAssignedKey();
+        if (cachedKey.success && cachedKey.key) {
+          console.log('Using previously assigned license key');
+          onLoginSuccess();
+        } else {
+          // If no cached key and Firebase fails, we have a problem
+          throw new Error('Unable to assign license key. Please try again or contact support.');
+        }
       }
       
     } catch (error: any) {

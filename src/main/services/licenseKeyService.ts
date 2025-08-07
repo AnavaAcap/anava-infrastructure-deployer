@@ -98,7 +98,23 @@ export class LicenseKeyService {
     } catch (error: any) {
       if (error.code === 'auth/email-already-in-use') {
         console.log('User already exists, attempting sign in...');
-        return this.signIn(email, password);
+        try {
+          return await this.signIn(email, password);
+        } catch (signInError: any) {
+          // If sign-in fails, it means the user exists with a different password
+          // For Google OAuth users, we should handle this gracefully
+          console.log('Sign-in failed with stored password, user may have different credentials');
+          
+          // Check if we have a cached license key for this email
+          const cached = await this.getCachedLicenseKey();
+          if (cached && cached.email === email) {
+            console.log('Found cached license key for user, using existing assignment');
+            // Create a mock user object for compatibility
+            return { email, uid: `cached-${email}` } as User;
+          }
+          
+          throw new Error(`User exists with different credentials. Please use your original sign-in method.`);
+        }
       }
       console.error('Failed to create user:', error);
       throw new Error(`Failed to create user: ${error.message}`);
@@ -116,8 +132,24 @@ export class LicenseKeyService {
    * Request a license key assignment for the current user
    */
   async assignLicenseKey(): Promise<LicenseKeyResult> {
+    // First check if we have a cached license key
+    const cached = await this.getCachedLicenseKey();
+    if (cached && cached.key && cached.email) {
+      console.log('Returning cached license key');
+      return {
+        key: cached.key,
+        email: cached.email,
+        alreadyAssigned: true
+      };
+    }
+
     if (!this.functions || !this.currentUser) {
       throw new Error('User must be signed in to request a license key');
+    }
+
+    // Check if this is a cached user (from Google OAuth with existing Firebase user)
+    if (this.currentUser.uid?.startsWith('cached-')) {
+      throw new Error('Cannot assign new license key. Please check your cached credentials.');
     }
 
     try {

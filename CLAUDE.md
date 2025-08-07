@@ -129,20 +129,58 @@ const result = await page.evaluate(() =>
 - 3-second initial delay after ACAP deployment
 - Comprehensive logging throughout the process
 
-## Current State (v0.9.123+)
+## Current State (v0.9.145+)
 
 ### Camera Setup Architecture
 
+#### Global Camera State Management (v0.9.145+)
+**New**: Centralized camera tracking system using React Context
+- **CameraContext** (`/src/renderer/contexts/CameraContext.tsx`): Global state for all cameras
+- **CameraManagementPage** (`/src/renderer/pages/CameraManagementPage.tsx`): Dashboard view of all cameras
+- **CameraSetupWizard** (`/src/renderer/components/CameraSetupWizard.tsx`): Modal-based configuration
+- **Persistent State**: All camera configurations saved across sessions
+- **Non-linear Navigation**: Click any step to jump directly to it
+- **Smart Step Detection**: Automatically determines which steps are complete
+
 #### Camera Setup Flow (`/src/renderer/pages/CameraSetupPage.tsx`)
-1. **Step 0**: Camera Discovery - Network scan or manual IP entry
-2. **Step 1**: Camera Authentication - Verify credentials
-3. **Step 2**: Deploy AI Analytics - Push ACAP and configuration
+1. **Step 0**: Enter Camera Credentials
+   - Select from previously configured cameras OR
+   - Enter credentials for new camera setup
+   - Previously configured cameras jump directly to needed step
+2. **Step 1**: Find Your Camera - Network scan or manual IP entry
+3. **Step 2**: Deploy Anava - Push ACAP and configuration
+   - Shows installed ACAP filename after deployment
+   - "Skip to Speaker Config" button for cameras with ACAP already installed
 4. **Step 3**: Configure Speaker (Optional) - Add speaker IP/credentials for audio output
+   - Automatically pushes speaker config to camera via setInstallerConfig
 5. **Step 4**: Complete - Summary and navigation options
+
+#### Camera State Structure (v0.9.145+)
+Each camera tracked in global state includes:
+```typescript
+interface ManagedCamera {
+  id: string;              // Unique identifier
+  name: string;            // Display name
+  ip: string;              // Camera IP address
+  model?: string;          // Camera model
+  status: {
+    credentials: { completed: boolean, username?: string, password?: string },
+    discovery: { completed: boolean, ip?: string, model?: string, firmwareVersion?: string },
+    deployment: { completed: boolean, hasACAP?: boolean, isLicensed?: boolean, deployedFile?: string },
+    speaker: { completed: boolean, configured?: boolean, ip?: string, username?: string, password?: string },
+    verification: { completed: boolean, sceneAnalysis?: {...} }
+  },
+  lastUpdated: Date;
+  projectId?: string;      // Associated GCP project
+  customerId?: string;
+  anavaKey?: string;
+}
+```
 
 #### Speaker Configuration
 - **Integrated into Camera Setup**: No longer a separate page (v0.9.123+)
 - **Optional Step**: Users can skip if no speaker attached
+- **Auto-push to Camera**: Speaker config automatically pushed via setInstallerConfig
 - **Data Structure**: Speaker config saved with camera as:
   ```javascript
   {
@@ -161,6 +199,17 @@ const result = await page.evaluate(() =>
 3. **Automatic Activation**: Uses Axis SDK to convert keys to signed XML
 
 ### Recent Changes
+#### v0.9.145
+- **Global Camera State Management**: Complete rewrite using React Context for centralized tracking
+- **Camera Management Dashboard**: New page showing all cameras with progress indicators
+- **Non-linear Step Navigation**: Click any step to edit previous or skip to future steps
+- **Previously Configured Cameras**: Select and edit from step 0
+- **Smart Navigation**: Automatically jumps to most relevant step based on camera state
+- **Fixed Speaker Step Access**: Can now click to speaker config when camera has ACAP
+- **ACAP Filename Display**: Shows deployed file name after installation
+- **Skip Buttons**: Skip deployment for cameras with ACAP, skip to speaker config
+- **Persistent State**: All camera configurations saved and restored across sessions
+
 #### v0.9.123+
 - **Speaker Configuration Integrated**: Moved from separate page to optional step in Camera Setup
 - **GCP Infrastructure Focused on Vertex AI**: Removed AI Studio selection from deployment flow
@@ -285,10 +334,14 @@ curl -v --digest -u anava:baton \
 - **Network issue**: Connection timeout or refused
 
 ### Key Files for Debugging
-- **Camera Setup UI**: `/src/renderer/pages/CameraSetupPage.tsx` - Integrated speaker config
+- **Global Camera State**: `/src/renderer/contexts/CameraContext.tsx` - Central state management
+- **Camera Dashboard**: `/src/renderer/pages/CameraManagementPage.tsx` - Overview of all cameras
+- **Setup Wizard**: `/src/renderer/components/CameraSetupWizard.tsx` - Modal configuration
+- **Camera Setup UI**: `/src/renderer/pages/CameraSetupPage.tsx` - Non-linear stepper with integrated speaker config
 - **Detection Test**: `/src/renderer/pages/DetectionTestPage.tsx` - Text cleaning, speaker support
 - **IPC Handlers**: `/src/main/services/camera/optimizedCameraDiscoveryService.ts:110-115`
 - **Auth Logic**: `/src/main/services/camera/optimizedCameraDiscoveryService.ts:565-625`
+- **ACAP Deployment**: `/src/main/services/camera/acapDeploymentService.ts` - Auto-selection of correct ACAP file
 
 ### Detection Test Page (v0.9.123+)
 - **Text Cleaning**: Automatically removes quotes, escaped quotes, and markdown formatting

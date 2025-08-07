@@ -31,9 +31,7 @@ function App() {
   const [deploymentComplete, setDeploymentComplete] = useState(false);
   const [camerasConfigured, setCamerasConfigured] = useState(false);
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
-  // TEMPORARY: Set to true to bypass EULA during development
-  // Change back to false for production
-  const [eulaAccepted, setEulaAccepted] = useState(true); // TEMPORARILY BYPASSED
+  const [eulaAccepted, setEulaAccepted] = useState(false);
 
   useEffect(() => {
     // Subscribe to deployment events
