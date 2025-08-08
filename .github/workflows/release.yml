@@ -130,13 +130,29 @@ jobs:
         rm -rf node_modules/.cache/
         echo "Cleaned dist, release, and cache directories"
         
-    - name: Check versions before build
+    - name: Check versions before build (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        Write-Host "=== CHECKING VERSIONS ==="
+        Write-Host "package.json version:"
+        Get-Content package.json | Select-String '"version"' | Select-Object -First 1
+        Write-Host "package-lock.json version:"
+        Get-Content package-lock.json | Select-String '"version"' | Select-Object -First 2
+        Write-Host "Git HEAD:"
+        git rev-parse HEAD
+        Write-Host "Git status:"
+        git status
+        Write-Host "========================="
+        
+    - name: Check versions before build (macOS)
+      if: matrix.os == 'macos-latest'
       run: |
         echo "=== CHECKING VERSIONS ==="
         echo "package.json version:"
-        cat package.json | grep '"version"' | head -1
+        grep '"version"' package.json | head -1
         echo "package-lock.json version:"
-        cat package-lock.json | grep '"version"' | head -2
+        grep '"version"' package-lock.json | head -2
         echo "Git HEAD:"
         git rev-parse HEAD
         echo "Git status:"
