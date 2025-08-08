@@ -1,4 +1,4 @@
-import { ipcMain, WebContents } from 'electron';
+import { app, ipcMain, WebContents } from 'electron';
 import axios, { AxiosInstance } from 'axios';
 import { spawn } from 'child_process';
 import os from 'os';
@@ -567,17 +567,24 @@ export class OptimizedCameraDiscoveryService {
   async quickScanSpecificCamera(ip: string, username: string, password: string): Promise<Camera[]> {
     try {
       console.log(`=== Quick scanning camera at ${ip} ===`);
+      console.log(`Environment: ${app.isPackaged ? 'PACKAGED' : 'DEVELOPMENT'}`);
+      console.log(`NODE_TLS_REJECT_UNAUTHORIZED: ${process.env.NODE_TLS_REJECT_UNAUTHORIZED}`);
       
       // Try all common ports
       const ports = [...DEFAULT_CAMERA_PORTS.priority, ...DEFAULT_CAMERA_PORTS.common];
       let lastAuthError: string | null = null;
       let foundOpenPort = false;
+      let connectionErrors: string[] = [];
       
       for (const port of ports) {
         // First check if port is open
-        if (await this.checkTCPConnection(ip, port, 2000)) {
+        console.log(`  Checking port ${port}...`);
+        const isOpen = await this.checkTCPConnection(ip, port, 2000);
+        
+        if (isOpen) {
           foundOpenPort = true;
           const protocol = port === 443 || port === 8443 ? 'https' : 'http';
+          console.log(`  Port ${port} is open, trying ${protocol} protocol`);
           
           // Try to authenticate and get camera info
           const authResult = await this.checkAxisCameraWithError(ip, username, password, port, protocol);
@@ -589,6 +596,8 @@ export class OptimizedCameraDiscoveryService {
             lastAuthError = authResult.error;
             console.log(`✗ Authentication failed on port ${port}: ${authResult.error}`);
           }
+        } else {
+          connectionErrors.push(`Port ${port} closed/timeout`);
         }
       }
       
@@ -614,10 +623,12 @@ export class OptimizedCameraDiscoveryService {
         }];
       }
       
-      console.log(`✗ No camera found at ${ip} (no open ports)`);
+      console.log(`✗ No camera found at ${ip}`);
+      console.log(`  Connection errors: ${connectionErrors.join(', ')}`);
       return [];
     } catch (error: any) {
-      console.error(`Error scanning ${ip}:`, error);
+      console.error(`Error scanning ${ip}:`, error.message);
+      console.error(`  Stack: ${error.stack}`);
       return [{
         id: `camera-${ip.replace(/\./g, '-')}`,
         ip: ip,
