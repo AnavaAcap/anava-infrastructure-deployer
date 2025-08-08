@@ -131,10 +131,10 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     >
       <Box sx={{ p: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-          Anava Vision
+          Anava Installer
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          Unified Installer
+          Unified Deployment Tool
         </Typography>
       </Box>
       
