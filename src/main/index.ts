@@ -16,6 +16,13 @@ import { AIStudioService } from './services/aiStudioService';
 import { UnifiedAuthService } from './services/unifiedAuthService';
 import { google } from 'googleapis';
 
+// Critical: Allow self-signed certificates for camera connections
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+// Disable certificate errors in Chromium for packaged app
+app.commandLine.appendSwitch('ignore-certificate-errors', 'true');
+app.commandLine.appendSwitch('allow-insecure-localhost', 'true');
+
 const isDevelopment = process.env.NODE_ENV === 'development' && !app.isPackaged;
 const logger = getLogger();
 
