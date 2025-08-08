@@ -99,6 +99,9 @@ export function getLogger(): Logger {
 
 // Also override console methods to capture all logs
 const logger = getLogger();
+
+// Export the logger instance
+export { logger };
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
