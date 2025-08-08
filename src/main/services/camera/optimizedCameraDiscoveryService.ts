@@ -5,6 +5,7 @@ import os from 'os';
 import crypto from 'crypto';
 import net from 'net';
 import https from 'https';
+import { macOSNetworkPermission } from '../macOSNetworkPermission';
 const PQueue = require('p-queue').default || require('p-queue');
 const Bonjour = require('bonjour-service').Bonjour || require('bonjour-service');
 const { Client: SSDPClient } = require('node-ssdp');
@@ -63,6 +64,27 @@ export class OptimizedCameraDiscoveryService {
   private preDiscoveredAxisDevices: string[] = []; // Just store IPs of confirmed Axis devices
   private isPreDiscovering = false;
   private preDiscoveryComplete = false;
+  private hasShownNetworkPermissionDialog = false;
+  private networkPermissionDenied = false;
+
+  private async initializeDiscovery() {
+    // Check if we're on macOS 15+ and need permission
+    if (process.platform === 'darwin') {
+      const version = process.getSystemVersion?.() || '0.0.0';
+      const majorVersion = parseInt(version.split('.')[0]);
+      
+      if (majorVersion >= 15) {
+        // Wait a bit for permission to be granted
+        setTimeout(() => {
+          this.startPreDiscovery();
+        }, 3000);
+        return;
+      }
+    }
+    
+    // On other platforms or older macOS, start immediately
+    this.startPreDiscovery();
+  }
 
   constructor() {
     // Create axios instance that accepts self-signed certificates
@@ -74,8 +96,9 @@ export class OptimizedCameraDiscoveryService {
     
     this.setupIPC();
     
-    // Start pre-emptive discovery immediately
-    this.startPreDiscovery();
+    // Don't start discovery immediately on macOS 15+
+    // Wait for network permission to be granted
+    this.initializeDiscovery();
   }
 
   private setupIPC() {
@@ -250,6 +273,12 @@ export class OptimizedCameraDiscoveryService {
     const startTime = Date.now();
     console.log('=== Starting enhanced network scan ===');
     console.log('Options:', options);
+    
+    // Check if we've already detected network permission issues
+    if (this.networkPermissionDenied && process.platform === 'darwin') {
+      console.log('Network permission was denied - returning empty result');
+      return [];
+    }
     
     const cameras: Camera[] = [];
     const discoveredIPs = new Set<string>();
@@ -977,8 +1006,21 @@ export class OptimizedCameraDiscoveryService {
         resolve(true);
       });
 
-      socket.on('error', (err: any) => {
+      socket.on('error', async (err: any) => {
         console.log(`    TCP error on ${ip}:${port}: ${err.code || err.message}`);
+        
+        // Handle macOS 15 network permission issue
+        if (err.code === 'EHOSTUNREACH' && process.platform === 'darwin' && !this.hasShownNetworkPermissionDialog) {
+          console.log('EHOSTUNREACH detected - macOS 15 network permission may be needed');
+          this.hasShownNetworkPermissionDialog = true;
+          
+          // Trigger the permission dialog
+          await macOSNetworkPermission.showManualInstructions();
+          
+          // Mark that we need permission
+          this.networkPermissionDenied = true;
+        }
+        
         clearTimeout(timer);
         cleanup();
         resolve(false);

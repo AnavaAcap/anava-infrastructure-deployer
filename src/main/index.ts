@@ -1,6 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, Notification } from 'electron';
 import path from 'path';
-import net from 'net';
 import { DeploymentEngine } from './services/deploymentEngine';
 import { StateManager } from './services/stateManager';
 import { GCPOAuthService } from './services/gcpOAuthService';
@@ -135,22 +134,10 @@ app.whenReady().then(async () => {
     app.commandLine.appendSwitch('force-device-scale-factor', '1');
   }
   
-  // macOS: Trigger local network permission prompt early
-  if (process.platform === 'darwin') {
-    logger.info('Triggering local network permission check...');
-    // Try to create a simple TCP connection to trigger the permission prompt
-    const testSocket = new net.Socket();
-    testSocket.setTimeout(1000);
-    testSocket.on('error', () => { /* Expected to fail, just triggering permission */ });
-    testSocket.on('timeout', () => { testSocket.destroy(); });
-    try {
-      // Try connecting to a common router IP to trigger permission
-      testSocket.connect(80, '192.168.1.1');
-      setTimeout(() => testSocket.destroy(), 1000);
-    } catch (e) {
-      // Expected to fail
-    }
-  }
+  // macOS 15 Sequoia: Initialize network permission handling
+  // This is a production-ready solution that doesn't cause crashes
+  const { macOSNetworkPermission } = await import('./services/macOSNetworkPermission');
+  await macOSNetworkPermission.initialize();
   
   // Initialize services
   stateManager = new StateManager();
@@ -277,6 +264,51 @@ app.on('window-all-closed', () => {
 });
 
 // IPC Handlers
+
+// Network permission handler for macOS 15
+ipcMain.handle('network:request-permission', async () => {
+  const { macOSNetworkPermission } = await import('./services/macOSNetworkPermission');
+  
+  // Show the manual instructions dialog
+  await macOSNetworkPermission.showManualInstructions();
+  
+  return { success: true };
+});
+
+ipcMain.handle('network:check-permission', async () => {
+  // Check if we have network access
+  if (process.platform !== 'darwin') {
+    return { hasPermission: true };
+  }
+  
+  // Simple check - try to create a socket
+  const net = await import('net');
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(100);
+    
+    socket.on('error', () => {
+      resolve({ hasPermission: false });
+    });
+    
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve({ hasPermission: true });
+    });
+    
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve({ hasPermission: false });
+    });
+    
+    try {
+      socket.connect(80, '192.168.1.1');
+    } catch (e) {
+      resolve({ hasPermission: false });
+    }
+  });
+});
+
 ipcMain.handle('auth:check', async () => {
   const isAuthenticated = gcpOAuthService.isAuthenticated();
   const user = isAuthenticated ? await gcpOAuthService.getCurrentUser() : null;
