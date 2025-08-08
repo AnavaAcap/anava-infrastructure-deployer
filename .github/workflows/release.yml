@@ -17,11 +17,11 @@ jobs:
         include:
           - os: macos-latest
             platform: mac
-            artifact-name: Anava-Vision-Mac
+            artifact-name: Anava-Installer-Mac
             build-output: release/*.dmg
           - os: windows-latest
             platform: win
-            artifact-name: Anava-Vision-Windows
+            artifact-name: Anava-Installer-Windows
             build-output: release/*.exe
 
     runs-on: ${{ matrix.os }}
@@ -191,13 +191,13 @@ jobs:
     - name: Download Mac artifacts
       uses: actions/download-artifact@v4
       with:
-        name: Anava-Vision-Mac
+        name: Anava-Installer-Mac
         path: release-mac
 
     - name: Download Windows artifacts
       uses: actions/download-artifact@v4
       with:
-        name: Anava-Vision-Windows
+        name: Anava-Installer-Windows
         path: release-win
 
     - name: List downloaded artifacts
@@ -215,7 +215,7 @@ jobs:
         prerelease: false
         name: Release ${{ github.ref_name }}
         body: |
-          ## Anava Vision ${{ github.ref_name }}
+          ## Anava Installer ${{ github.ref_name }}
           
           ### Installation
           

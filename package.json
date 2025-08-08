@@ -1,7 +1,7 @@
 {
-  "name": "anava-vision",
+  "name": "anava-installer",
   "version": "0.9.169",
-  "description": "Anava Vision - Deploy camera authentication infrastructure to Google Cloud Platform",
+  "description": "Anava Installer - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "npm run build:main && NODE_ENV=development electron .",
@@ -33,7 +33,7 @@
   "license": "MIT",
   "build": {
     "appId": "com.anava.vision",
-    "productName": "Anava Vision",
+    "productName": "Anava Installer",
     "directories": {
       "output": "release"
     },
@@ -105,7 +105,7 @@
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
       "extendInfo": {
-        "NSLocalNetworkUsageDescription": "Anava Vision needs to access cameras on your local network for configuration and deployment.",
+        "NSLocalNetworkUsageDescription": "Anava Installer needs to access cameras on your local network for configuration and deployment.",
         "NSBonjourServices": [
           "_axis-video._tcp",
           "_http._tcp",

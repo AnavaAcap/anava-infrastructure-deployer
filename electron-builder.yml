@@ -1,5 +1,5 @@
 appId: com.anava.infrastructure-deployer
-productName: Anava Infrastructure Deployer
+productName: Anava Installer
 directories:
   output: release
 afterSign: scripts/notarize.js
@@ -42,7 +42,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Anava Vision
+  shortcutName: Anava Installer
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
   installerHeaderIcon: assets/icon.ico

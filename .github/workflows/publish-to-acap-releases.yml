@@ -1,0 +1,205 @@
+name: Publish Installers to ACAP Releases
+
+on:
+  release:
+    types: [published]
+  workflow_run:
+    workflows: ["Build and Release"]
+    types: [completed]
+    branches: [master]
+
+jobs:
+  publish-to-acap-releases:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'release' && github.event.action == 'published') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Get version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+      
+      - name: Wait for assets to be ready
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "Waiting for build artifacts to be uploaded to release..."
+          sleep 60  # Give time for the main workflow to upload assets
+      
+      - name: Download release assets from private repo
+        id: download
+        run: |
+          # Get the release ID for this version
+          RELEASE_ID=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/releases/tags/v${{ steps.version.outputs.VERSION }} \
+            --jq '.id' || echo "")
+          
+          if [ -z "$RELEASE_ID" ]; then
+            echo "No release found for v${{ steps.version.outputs.VERSION }}"
+            exit 1
+          fi
+          
+          echo "Found release ID: $RELEASE_ID"
+          
+          # Create temp directory for assets
+          mkdir -p ./installer-assets
+          
+          # Download all installer assets
+          echo "Downloading installer assets..."
+          
+          # Download Windows installer
+          gh api \
+            -H "Accept: application/octet-stream" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/releases/assets \
+            --jq '.[] | select(.name | endswith(".exe")) | .url' | \
+          while read -r url; do
+            if [ ! -z "$url" ]; then
+              asset_name=$(gh api "$url" --jq '.name')
+              echo "Downloading $asset_name..."
+              gh api -H "Accept: application/octet-stream" "$url" > "./installer-assets/$asset_name"
+            fi
+          done
+          
+          # Download macOS installers (both Intel and ARM)
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/releases/$RELEASE_ID/assets \
+            --jq '.[] | select(.name | endswith(".dmg")) | .url' | \
+          while read -r url; do
+            if [ ! -z "$url" ]; then
+              asset_name=$(gh api "$url" --jq '.name')
+              echo "Downloading $asset_name..."
+              gh api -H "Accept: application/octet-stream" "$url" > "./installer-assets/$asset_name"
+            fi
+          done
+          
+          # List downloaded files
+          echo "Downloaded assets:"
+          ls -la ./installer-assets/
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Get latest release from ACAP releases repo
+        id: acap_release
+        run: |
+          # Get the latest release from AnavaAcap/acap-releases
+          LATEST_RELEASE=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/AnavaAcap/acap-releases/releases/latest \
+            --jq '.id' || echo "")
+          
+          if [ -z "$LATEST_RELEASE" ]; then
+            echo "No latest release found in AnavaAcap/acap-releases"
+            exit 1
+          fi
+          
+          echo "RELEASE_ID=$LATEST_RELEASE" >> $GITHUB_OUTPUT
+          echo "Latest ACAP release ID: $LATEST_RELEASE"
+          
+          # Get release tag for reference
+          RELEASE_TAG=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/AnavaAcap/acap-releases/releases/$LATEST_RELEASE \
+            --jq '.tag_name')
+          echo "Latest ACAP release tag: $RELEASE_TAG"
+        env:
+          GH_TOKEN: ${{ secrets.ACAP_RELEASES_TOKEN }}
+      
+      - name: Upload installer assets to ACAP releases
+        run: |
+          RELEASE_ID=${{ steps.acap_release.outputs.RELEASE_ID }}
+          
+          # Upload each installer asset
+          for file in ./installer-assets/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "Uploading $filename to ACAP releases..."
+              
+              # Check if asset already exists and delete it if so
+              EXISTING_ASSET_ID=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                /repos/AnavaAcap/acap-releases/releases/$RELEASE_ID/assets \
+                --jq ".[] | select(.name == \"$filename\") | .id" || echo "")
+              
+              if [ ! -z "$EXISTING_ASSET_ID" ]; then
+                echo "Deleting existing asset: $filename"
+                gh api \
+                  -X DELETE \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  /repos/AnavaAcap/acap-releases/releases/assets/$EXISTING_ASSET_ID
+              fi
+              
+              # Upload the asset
+              gh api \
+                --method POST \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                -H "Content-Type: application/octet-stream" \
+                /repos/AnavaAcap/acap-releases/releases/$RELEASE_ID/assets?name=$filename \
+                --input "$file"
+              
+              echo "✅ Uploaded $filename"
+            fi
+          done
+          
+          echo "All installer assets uploaded successfully!"
+        env:
+          GH_TOKEN: ${{ secrets.ACAP_RELEASES_TOKEN }}
+      
+      - name: Update release notes
+        run: |
+          RELEASE_ID=${{ steps.acap_release.outputs.RELEASE_ID }}
+          
+          # Get current release body
+          CURRENT_BODY=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/AnavaAcap/acap-releases/releases/$RELEASE_ID \
+            --jq '.body')
+          
+          # Check if installer section already exists
+          if echo "$CURRENT_BODY" | grep -q "## Anava Installer"; then
+            echo "Installer section already exists in release notes"
+          else
+            # Append installer section to release notes
+            UPDATED_BODY="$CURRENT_BODY
+
+## Anava Installer
+
+The Anava Installer (v${{ steps.version.outputs.VERSION }}) is now available for download:
+- **Windows**: Anava.Installer.Setup.${{ steps.version.outputs.VERSION }}.exe
+- **macOS Intel**: Anava.Installer-${{ steps.version.outputs.VERSION }}.dmg
+- **macOS Apple Silicon**: Anava.Installer-${{ steps.version.outputs.VERSION }}-arm64.dmg
+
+The installer provides a unified experience for:
+- Camera discovery and ACAP deployment
+- Private cloud infrastructure setup
+- Detection testing and validation
+"
+            
+            # Update the release
+            gh api \
+              --method PATCH \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              /repos/AnavaAcap/acap-releases/releases/$RELEASE_ID \
+              -f body="$UPDATED_BODY"
+            
+            echo "✅ Updated release notes with installer information"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.ACAP_RELEASES_TOKEN }}
