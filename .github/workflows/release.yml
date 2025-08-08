@@ -111,7 +111,18 @@ jobs:
         fi
         echo "✅ All required secrets are configured"
 
-    - name: Clean build directories
+    - name: Clean build directories (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        Write-Host "=== CLEANING BUILD DIRECTORIES ==="
+        if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+        if (Test-Path release) { Remove-Item -Recurse -Force release }
+        if (Test-Path "node_modules/.cache") { Remove-Item -Recurse -Force "node_modules/.cache" }
+        Write-Host "Cleaned dist, release, and cache directories"
+        
+    - name: Clean build directories (macOS)
+      if: matrix.os == 'macos-latest'
       run: |
         echo "=== CLEANING BUILD DIRECTORIES ==="
         rm -rf dist/
