@@ -955,34 +955,49 @@ export class OptimizedCameraDiscoveryService {
   private async checkTCPConnection(ip: string, port: number, timeout: number = 3000): Promise<boolean> {
     return new Promise((resolve) => {
       const socket = new net.Socket();
+      let resolved = false;
+
+      const cleanup = () => {
+        if (!resolved) {
+          resolved = true;
+          socket.destroy();
+        }
+      };
 
       const timer = setTimeout(() => {
-        socket.destroy();
+        console.log(`    TCP timeout on ${ip}:${port} after ${timeout}ms`);
+        cleanup();
         resolve(false);
       }, timeout);
 
       socket.on('connect', () => {
+        console.log(`    TCP connected to ${ip}:${port}`);
         clearTimeout(timer);
-        socket.destroy();
+        cleanup();
         resolve(true);
       });
 
-      socket.on('error', () => {
+      socket.on('error', (err: any) => {
+        console.log(`    TCP error on ${ip}:${port}: ${err.code || err.message}`);
         clearTimeout(timer);
-        socket.destroy();
+        cleanup();
         resolve(false);
       });
 
       socket.on('timeout', () => {
+        console.log(`    TCP socket timeout on ${ip}:${port}`);
         clearTimeout(timer);
-        socket.destroy();
+        cleanup();
         resolve(false);
       });
 
       try {
+        console.log(`    Attempting TCP connection to ${ip}:${port}...`);
         socket.connect(port, ip);
-      } catch (e) {
+      } catch (e: any) {
+        console.log(`    TCP connect exception: ${e.message}`);
         clearTimeout(timer);
+        cleanup();
         resolve(false);
       }
     });
