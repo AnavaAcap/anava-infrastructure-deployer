@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, Notification } from 'electron';
 import path from 'path';
+import net from 'net';
 import { DeploymentEngine } from './services/deploymentEngine';
 import { StateManager } from './services/stateManager';
 import { GCPOAuthService } from './services/gcpOAuthService';
@@ -125,13 +126,30 @@ function checkWindowsDefender() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   logger.info('App ready, initializing services...');
   
   // Windows-specific DPI scaling
   if (process.platform === 'win32') {
     app.commandLine.appendSwitch('high-dpi-support', '1');
     app.commandLine.appendSwitch('force-device-scale-factor', '1');
+  }
+  
+  // macOS: Trigger local network permission prompt early
+  if (process.platform === 'darwin') {
+    logger.info('Triggering local network permission check...');
+    // Try to create a simple TCP connection to trigger the permission prompt
+    const testSocket = new net.Socket();
+    testSocket.setTimeout(1000);
+    testSocket.on('error', () => { /* Expected to fail, just triggering permission */ });
+    testSocket.on('timeout', () => { testSocket.destroy(); });
+    try {
+      // Try connecting to a common router IP to trigger permission
+      testSocket.connect(80, '192.168.1.1');
+      setTimeout(() => testSocket.destroy(), 1000);
+    } catch (e) {
+      // Expected to fail
+    }
   }
   
   // Initialize services
