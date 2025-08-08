@@ -22,10 +22,6 @@
     <key>com.apple.security.app-sandbox</key>
     <false/>
     
-    <!-- CRITICAL: This triggers the local network permission dialog -->
-    <key>com.apple.developer.networking.multicast</key>
-    <true/>
-    
     <!-- Network access -->
     <key>com.apple.security.network.client</key>
     <true/>

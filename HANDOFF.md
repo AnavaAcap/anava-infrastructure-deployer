@@ -1,83 +1,46 @@
-# Anava Vision Magical Installer - Handoff Document
+# Anava Vision - macOS Network Access Issue Handoff
 
-## Current State (v0.9.64)
+## Current Problem
+Electron app v0.9.165 cannot access local network (cameras) on macOS 15 Sequoia when launched from Finder. Gets EHOSTUNREACH errors trying to connect to local IPs.
 
-The magical installer is now working with the following features implemented:
+## Root Cause
+macOS 15 requires explicit user permission for local network access. The permission dialog NEVER appears for Developer ID signed apps without special provisioning.
 
-### ✅ What's Working
-1. **Pre-emptive Camera Discovery**
-   - Starts scanning immediately when app launches
-   - Tries service discovery (mDNS/SSDP) first for fastest results
-   - Prioritizes common camera IPs (.100-.200, .156, .88, .64)
-   - Stops scanning the instant it finds an Axis camera
-   - Camera at 192.168.50.156 is consistently found quickly
+## What Works
+- App works when launched from Terminal: `open /Applications/Anava\ Vision.app`
+- App works after adding to firewall: `sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add "/Applications/Anava Vision.app"`
 
-2. **Auto-Connect Magic**
-   - UI polls for discovered cameras every 500ms
-   - THE INSTANT a camera is found, it automatically:
-     - Hides the manual entry form
-     - Shows "Connecting to camera..." message
-     - Starts the connection process immediately
-   - No user interaction required if a camera exists on the network
+## What Doesn't Work
+- `com.apple.developer.networking.multicast` entitlement - requires Apple provisioning profile, app won't launch
+- Sandbox enabled - Electron app crashes on launch
+- All standard network entitlements - don't trigger permission dialog
 
-3. **Google Authentication + AI Studio**
-   - Google OAuth login works
-   - AI Studio API key is automatically generated/retrieved
-   - API key is passed to the magical discovery page
+## Files Involved
+- `/src/main/services/camera/optimizedCameraDiscoveryService.ts` - Camera discovery code
+- `/assets/entitlements.mac.plist` - macOS entitlements 
+- `/package.json` - Build configuration with NSLocalNetworkUsageDescription
 
-### ❌ Current Issue
-**ACAP Deployment Failing**
-- Camera discovery: ✓ Working
-- Camera configuration: ✓ Working  
-- ACAP deployment: ✗ Failing with empty error
+## Current State
+- Version 0.9.165 
+- Sandbox disabled
+- Has NSLocalNetworkUsageDescription and NSBonjourServices in Info.plist
+- Network entitlements present but not triggering dialog
 
-The logs show:
+## Possible Solutions
+1. Distribute with instructions to run firewall command
+2. Create privileged helper tool with SMJobBless
+3. Switch to Mac App Store distribution
+4. Use mDNS responder instead of direct TCP
+5. Wait for Apple to fix this in macOS update
+
+## Test Command
+```bash
+# After installing app, run:
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add "/Applications/Anava Vision.app"
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "/Applications/Anava Vision.app"
+# Then launch app normally
 ```
-[2025-08-04T16:21:16.497Z] [INFO] Checking if BatonAnalytic ACAP is installed...
-[2025-08-04T16:21:16.497Z] [ERROR] Failed to deploy ACAP: {}
-[2025-08-04T16:21:16.497Z] [ERROR] Manual connection failed: {}
-```
 
-### 🔧 Next Steps to Fix
-
-1. **Fix Error Logging**
-   - In `fastStartService.ts` around line 950-960, the error is being thrown but not properly logged
-   - Need to add proper error serialization: `logger.error('Failed to deploy ACAP:', error.message || error)`
-
-2. **Debug ACAP Deployment**
-   - The ACAP deployment service might be failing during:
-     - Checking installed ACAPs
-     - Downloading from GitHub
-     - Uploading to camera
-   - Need to add more detailed logging in `deployACAPQuickly()` method
-
-3. **Possible Root Causes**
-   - GitHub API rate limiting
-   - ACAP download failing
-   - Camera rejecting the ACAP upload
-   - Service instantiation issues
-
-### 📁 Key Files
-- `/src/renderer/pages/MagicalDiscoveryPage.tsx` - UI that auto-connects when camera found
-- `/src/main/services/camera/optimizedCameraDiscoveryService.ts` - Pre-discovery logic
-- `/src/main/services/fastStartService.ts` - Connection and ACAP deployment
-- `/src/main/services/camera/acapDeploymentService.ts` - ACAP upload logic
-- `/src/main/services/camera/acapDownloaderService.ts` - GitHub release downloads
-
-### 🚀 Testing Instructions
-1. Run `npm run dev`
-2. Click "Experience Magic"
-3. Login with Google
-4. Watch console - should see:
-   - Pre-discovery finding camera at .156
-   - Auto-connect starting
-   - ACAP deployment attempt (currently failing)
-
-### 💡 Architecture Notes
-- Pre-discovery runs in main process on app startup
-- UI polls for results via IPC
-- ACAP files are downloaded from `https://github.com/AnavaAcap/acap-releases`
-- Uses VAPIX digest auth for all camera communication
-- BatonAnalytic ACAP provides the AI scene analysis
-
-The magical experience is 90% complete - just needs the ACAP deployment fixed!
+## Last Working Version
+v0.9.163 - Works when launched from Terminal only
+EOF < /dev/null
