@@ -22,6 +22,10 @@
     <key>com.apple.security.network.client</key>
     <true/>
     
+    <!-- Local network access (for cameras on LAN) -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+    
     <!-- File access -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
