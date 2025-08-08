@@ -89,23 +89,22 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       id: 'camera-setup' as NavigationView, 
       label: 'Camera Setup', 
       icon: <VideocamIcon />,
-      alwaysEnabled: true,
-      badge: 'NEW' as const
+      alwaysEnabled: true
     },
+    { 
+      id: 'gcp-setup' as NavigationView, 
+      label: 'Private Cloud Setup', 
+      icon: <CloudIcon />,
+      alwaysEnabled: true,
+      status: deploymentComplete ? 'complete' : undefined,
+      tag: 'Advanced' as const
+    },
+    { type: 'divider' },
     { 
       id: 'detection-test' as NavigationView, 
       label: 'Test Detection', 
       icon: <PlayCircleIcon />,
       alwaysEnabled: true 
-    },
-    { type: 'divider' },
-    { 
-      id: 'gcp-setup' as NavigationView, 
-      label: 'GCP Infrastructure', 
-      icon: <CloudIcon />,
-      alwaysEnabled: true,
-      status: deploymentComplete ? 'complete' : undefined,
-      tag: 'Advanced' as const
     },
     { 
       id: 'acap-manager' as NavigationView, 
