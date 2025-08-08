@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import net from 'net';
 import https from 'https';
 import { macOSNetworkPermission } from '../macOSNetworkPermission';
+import { safeConsole } from '../../utils/safeConsole';
 const PQueue = require('p-queue').default || require('p-queue');
 const Bonjour = require('bonjour-service').Bonjour || require('bonjour-service');
 const { Client: SSDPClient } = require('node-ssdp');
@@ -460,7 +461,7 @@ export class OptimizedCameraDiscoveryService {
       const client = new SSDPClient();
       
       client.on('response', async (headers: any, _statusCode: number, rinfo: any) => {
-        console.log(`SSDP: Found device at ${rinfo.address} - ${headers.ST}`);
+        safeConsole.log(`SSDP: Found device at ${rinfo.address} - ${headers.ST}`);
         
         // Check if it might be a camera
         if (headers.ST?.includes('upnp:rootdevice') || 
@@ -468,7 +469,7 @@ export class OptimizedCameraDiscoveryService {
             headers.SERVER?.toLowerCase().includes('camera')) {
           
           // Skip SSDP discovered devices without credentials
-          console.log(`  Found SSDP device but skipping - no credentials provided`);
+          safeConsole.log(`  Found SSDP device but skipping - no credentials provided`);
         }
       });
       
