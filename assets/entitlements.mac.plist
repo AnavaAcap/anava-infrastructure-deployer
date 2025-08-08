@@ -18,7 +18,7 @@
     <key>com.apple.security.cs.allow-dyld-environment-variables</key>
     <true/>
     
-    <!-- Disable app sandbox for unrestricted network access -->
+    <!-- Disable app sandbox (required for local network access on macOS 15) -->
     <key>com.apple.security.app-sandbox</key>
     <false/>
     
