@@ -111,6 +111,27 @@ jobs:
         fi
         echo "✅ All required secrets are configured"
 
+    - name: Clean build directories
+      run: |
+        echo "=== CLEANING BUILD DIRECTORIES ==="
+        rm -rf dist/
+        rm -rf release/
+        rm -rf node_modules/.cache/
+        echo "Cleaned dist, release, and cache directories"
+        
+    - name: Check versions before build
+      run: |
+        echo "=== CHECKING VERSIONS ==="
+        echo "package.json version:"
+        cat package.json | grep '"version"' | head -1
+        echo "package-lock.json version:"
+        cat package-lock.json | grep '"version"' | head -2
+        echo "Git HEAD:"
+        git rev-parse HEAD
+        echo "Git status:"
+        git status
+        echo "========================="
+    
     - name: Build Electron app
       run: npm run dist:${{ matrix.platform }}
       env:
