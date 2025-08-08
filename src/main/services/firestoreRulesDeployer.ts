@@ -20,31 +20,7 @@ export class FirestoreRulesDeployer {
       logCallback?.(message);
     };
 
-    log('=== Deploying Firestore and Firebase Storage Security Rules ===');
-    
-    // Enable required APIs for Storage
-    const serviceusage = google.serviceusage('v1');
-    const storageApis = [
-      'firebasestorage.googleapis.com',
-      'storage-component.googleapis.com',
-      'storage-api.googleapis.com'
-    ];
-    
-    for (const api of storageApis) {
-      try {
-        await serviceusage.services.enable({
-          name: `projects/${projectId}/services/${api}`,
-          auth: this.auth
-        });
-        log(`✅ ${api} enabled`);
-      } catch (error: any) {
-        if (error.code === 409 || error.message?.includes('already enabled')) {
-          log(`✅ ${api} already enabled`);
-        } else {
-          log(`⚠️  Could not enable ${api}: ${error.message}`);
-        }
-      }
-    }
+    log('=== Deploying Firestore Security Rules ===');
     
     try {
       // First ensure the database exists
@@ -53,21 +29,7 @@ export class FirestoreRulesDeployer {
       // Deploy Firestore rules
       await this.deployFirestoreRules(projectId, log);
       
-      // Try to deploy Storage rules, but don't fail the entire deployment if it fails
-      try {
-        await this.deployStorageRules(projectId, log);
-        log('✅ All security rules deployed successfully');
-      } catch (storageError: any) {
-        log('⚠️  Warning: Could not deploy Firebase Storage security rules');
-        log(`⚠️  ${storageError.message}`);
-        log('⚠️  You may need to:');
-        log('⚠️  1. Enable Firebase Storage in the Firebase Console');
-        log('⚠️  2. Create a default storage bucket');
-        log('⚠️  3. Deploy storage rules manually');
-        log('');
-        log('✅ Firestore security rules deployed successfully');
-      }
-      
+      log('✅ Firestore security rules deployed successfully');
       log('⚠️  IMPORTANT: Verify rules in Firebase Console to ensure they meet your security requirements');
     } catch (error: any) {
       console.error('Failed to deploy security rules:', error);

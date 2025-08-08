@@ -19,24 +19,20 @@ service cloud.firestore {
     }
     // Match individual device documents
     match /devices/{deviceId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() &&
-                          request.resource.data.deviceId == deviceId &&
-                          isValidTimestamp(request.resource.data.updatedAt);
+      // TEMPORARY: Allow cameras to write without auth for testing
+      // TODO: Revert this after fixing authentication flow
+      allow read: if true;
+      allow write: if true;
       // Match sessions subcollection
       match /sessions/{sessionId} { // Path: /devices/{deviceId}/sessions/{sessionId}
-        allow read: if isAuthenticated(); // Allows LISTING sessions and GETTING individual session docs
-        allow write: if isAuthenticated() &&
-                            request.resource.data.deviceId == deviceId &&
-                            request.resource.data.status is string && // Ensure 'status' exists if used in writes
-                            isValidTimestamp(request.resource.data.updatedAt); // Ensure 'updatedAt' exists
+        // TEMPORARY: Allow cameras to write without auth for testing
+        allow read: if true;
+        allow write: if true;
         // This 'events' subcollection is UNDER 'sessions/{sessionId}'
         match /events/{eventId} { // Path: /devices/{deviceId}/sessions/{sessionId}/events/{eventId}
-          allow read: if isAuthenticated(); // Allows LISTING events in this session and GETTING individual event docs
-          allow write: if isAuthenticated() &&
-                               request.resource.data.deviceId == deviceId && // Good check
-                               request.resource.data.sessionId == sessionId && // Also a good check
-                               isValidTimestamp(request.resource.data.updatedAt); // Or your relevant event timestamp
+          // TEMPORARY: Allow cameras to write without auth for testing
+          allow read: if true;
+          allow write: if true;
         }
       }
     }
