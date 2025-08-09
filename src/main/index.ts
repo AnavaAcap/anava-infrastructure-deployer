@@ -142,7 +142,14 @@ app.whenReady().then(async () => {
   // Initialize services
   stateManager = new StateManager();
   gcpOAuthService = new GCPOAuthService();
+  
+  // Clear Google auth cache on startup to prevent race conditions
+  // This ensures users must authenticate fresh each time
+  logger.info('Clearing Google auth cache on startup...');
+  await gcpOAuthService.logout();
+  
   unifiedAuthService = new UnifiedAuthService();
+  await unifiedAuthService.clearAuthCache();
   deploymentEngine = new DeploymentEngine(stateManager, gcpOAuthService);
   
   // Initialize camera services
@@ -575,13 +582,34 @@ ipcMain.handle('deployment:validate', async (_, params: {
 // Magical Experience IPC Handlers
 ipcMain.handle('magical:generate-api-key', async () => {
   try {
-    if (!gcpOAuthService.oauth2Client) {
-      throw new Error('Not authenticated');
+    // Check if authenticated first before trying to get user
+    if (!gcpOAuthService.oauth2Client || !gcpOAuthService.isAuthenticated()) {
+      logger.info('[Magical] User not authenticated with Google, will need manual API key creation');
+      return { 
+        success: false, 
+        needsManual: true,
+        message: 'Google authentication required for automatic API key generation'
+      };
     }
 
-    const user = await gcpOAuthService.getCurrentUser();
+    let user;
+    try {
+      user = await gcpOAuthService.getCurrentUser();
+    } catch (error) {
+      logger.warn('[Magical] Could not get current user, likely not authenticated');
+      return { 
+        success: false, 
+        needsManual: true,
+        message: 'Please sign in with Google or create an API key manually'
+      };
+    }
+    
     if (!user) {
-      throw new Error('No user authenticated');
+      return { 
+        success: false, 
+        needsManual: true,
+        message: 'No user authenticated'
+      };
     }
 
     // Check for existing project or use AI Studio without project

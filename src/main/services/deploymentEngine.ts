@@ -681,6 +681,10 @@ export class DeploymentEngine extends EventEmitter {
     
     console.log('Service accounts for functions:', accounts);
     
+    if (!accounts) {
+      throw new Error('Service accounts not found. The createServiceAccounts step may have failed or been skipped.');
+    }
+    
     if (!this.cloudFunctionsAPIDeployer) {
       throw new Error('Cloud Functions API deployer not initialized');
     }
@@ -931,6 +935,14 @@ export class DeploymentEngine extends EventEmitter {
     console.log('Starting API Gateway deployment step...');
     console.log('Service accounts:', accounts);
     console.log('Cloud Functions URLs:', functions);
+    
+    if (!accounts) {
+      throw new Error('Service accounts not found. The createServiceAccounts step may have failed or been skipped.');
+    }
+    
+    if (!functions || !functions['device-auth'] || !functions['token-vending-machine']) {
+      throw new Error('Cloud Functions not found. The deployCloudFunctions step may have failed or been skipped. Functions: ' + JSON.stringify(functions));
+    }
     
     if (!this.apiGatewayDeployer) {
       throw new Error('API Gateway deployer not initialized');
