@@ -197,13 +197,22 @@ export class ProjectCreatorService {
       auth
     });
 
+    // Ensure billing account ID is in the correct format
+    const billingAccountName = billingAccountId.startsWith('billingAccounts/') 
+      ? billingAccountId 
+      : `billingAccounts/${billingAccountId}`;
+    
+    console.log(`Linking billing account ${billingAccountName} to project ${projectId}`);
+    
     // Link the billing account to the project
     await cloudBilling.projects.updateBillingInfo({
       name: `projects/${projectId}`,
       requestBody: {
-        billingAccountName: billingAccountId
+        billingAccountName: billingAccountName
       }
     });
+    
+    console.log(`Billing enabled successfully for project ${projectId}`);
   }
 
   private async waitForProjectReady(projectId: string): Promise<void> {

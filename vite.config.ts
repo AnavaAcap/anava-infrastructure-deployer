@@ -12,6 +12,17 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, './dist/renderer'),
     emptyOutDir: true,
+    // Use esbuild for faster builds (default in Vite)
+    minify: 'esbuild',
+    // Remove manual chunking that's causing issues
+    // Increase chunk size warning limit since we're bundling for Electron
+    chunkSizeWarningLimit: 2000,
+  },
+  optimizeDeps: {
+    // Pre-bundle heavy dependencies
+    include: ['react', 'react-dom', '@mui/material', 'firebase'],
+    // Exclude electron-specific modules
+    exclude: ['electron'],
   },
   resolve: {
     alias: {

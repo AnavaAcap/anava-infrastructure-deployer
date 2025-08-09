@@ -225,7 +225,7 @@ export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({
 
             {/* Billing Account Selection */}
             <FormControl fullWidth>
-              <InputLabel>Billing Account</InputLabel>
+              <InputLabel>Billing Account *</InputLabel>
               <Select
                 value={selectedBillingAccount || ''}
                 onChange={(e) => setSelectedBillingAccount(e.target.value || null)}
@@ -246,8 +246,20 @@ export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({
               </FormHelperText>
             </FormControl>
 
-            {billingError && (
+            {!selectedBillingAccount && !loadingBilling && (
               <Alert severity="warning" sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  ⚠️ Billing Account Required
+                </Typography>
+                <Typography variant="body2">
+                  A billing account is required for deploying Cloud Functions and API Gateway. 
+                  Without billing, the deployment will fail at later steps.
+                </Typography>
+              </Alert>
+            )}
+            
+            {billingError && (
+              <Alert severity="error" sx={{ mt: 2 }}>
                 <Typography variant="subtitle2" gutterBottom>
                   Billing Account Access Issue
                 </Typography>
@@ -255,7 +267,7 @@ export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({
                   {billingError}
                 </Typography>
                 <Typography variant="body2">
-                  You can still create the project without billing. To enable billing later:
+                  To fix this issue:
                 </Typography>
                 <ol style={{ margin: '8px 0', paddingLeft: '20px' }}>
                   <li>Go to Google Cloud Console → Billing</li>  

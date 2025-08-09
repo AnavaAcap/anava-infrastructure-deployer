@@ -81,11 +81,24 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     cam.status.credentials.completed && 
     cam.status.discovery.completed
   );
+  
+  // Track if we've already auto-pushed
+  const [hasAutoPushed, setHasAutoPushed] = useState(false);
+  const [autoPushStatus, setAutoPushStatus] = useState<{ pushing: boolean; camera?: any } | null>(null);
 
   useEffect(() => {
     // Save the deployment for future reference
     saveDeployment();
-  }, []);
+    
+    // Auto-push configuration to the most recently configured camera
+    if (cameras.length > 0 && result.success && !hasAutoPushed) {
+      const latestCamera = cameras[cameras.length - 1];
+      if (latestCamera && latestCamera.status?.credentials?.username) {
+        // Auto-push configuration
+        handleAutoPushToLatestCamera(latestCamera);
+      }
+    }
+  }, [cameras.length, result.success]);
 
   const saveDeployment = async () => {
     if (result.success && result.apiGatewayUrl && result.firebaseConfig) {
@@ -210,7 +223,19 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     await pushConfigurationToCamera(camera);
   };
 
-  const pushConfigurationToCamera = async (camera: any) => {
+  const handleAutoPushToLatestCamera = async (camera: any) => {
+    setHasAutoPushed(true);
+    setAutoPushStatus({ pushing: true, camera });
+    setSelectedCamera(camera.id);
+    
+    try {
+      await pushConfigurationToCamera(camera, true);
+    } finally {
+      setAutoPushStatus({ pushing: false, camera });
+    }
+  };
+  
+  const pushConfigurationToCamera = async (camera: any, isAutoPush = false) => {
     setPushingSettings(true);
     setPushResult(null);
 
@@ -262,7 +287,10 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
       });
 
       if (response.success) {
-        setPushResult({ success: true, message: 'Configuration pushed successfully to camera!' });
+        const message = isAutoPush 
+          ? `Configuration automatically pushed to ${camera.name || camera.ip}!`
+          : 'Configuration pushed successfully to camera!';
+        setPushResult({ success: true, message });
       } else {
         setPushResult({ success: false, message: response.error || 'Failed to push configuration' });
       }
@@ -492,9 +520,25 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             Push Configuration to Cameras
           </Typography>
           
+          {autoPushStatus?.pushing && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={16} />
+                Automatically pushing configuration to {autoPushStatus.camera?.name || autoPushStatus.camera?.ip}...
+              </Box>
+            </Alert>
+          )}
+          
+          {hasAutoPushed && !autoPushStatus?.pushing && pushResult?.success && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Configuration was automatically pushed to your recently configured camera. You can push to additional cameras below.
+            </Alert>
+          )}
+          
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Select a camera below and push the Vertex AI configuration directly to it. This will configure the camera
-            to use your newly deployed infrastructure.
+            {hasAutoPushed 
+              ? 'Select additional cameras to push the configuration to them.'
+              : 'Select a camera below and push the Vertex AI configuration directly to it.'}
           </Typography>
           
           <Box sx={{ mt: 2 }}>
