@@ -41,6 +41,7 @@ import {
 import { DeploymentResult } from '../../types';
 import TopBar from '../components/TopBar';
 import { TestConfigurationDialog } from '../components/TestConfigurationDialog';
+import { useCameraContext } from '../contexts/CameraContext';
 
 interface CompletionPageProps {
   result: DeploymentResult;
@@ -60,12 +61,26 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   const [error, setError] = useState<string | null>(null);
   const [userCreated, setUserCreated] = useState(false);
   
+  // Use camera context for global camera state
+  const { cameras: managedCameras, updateCamera } = useCameraContext();
+  
   // Camera-related state
-  const [cameras, setCameras] = useState<any[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   const [scanningCameras, setScanningCameras] = useState(false);
   const [pushingSettings, setPushingSettings] = useState(false);
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // Camera credentials dialog state
+  const [credentialsDialogOpen, setCredentialsDialogOpen] = useState(false);
+  const [cameraUsername, setCameraUsername] = useState('');
+  const [cameraPassword, setCameraPassword] = useState('');
+  const [pendingCamera, setPendingCamera] = useState<any>(null);
+  
+  // Get cameras that have been configured (have credentials)
+  const cameras = managedCameras.filter(cam => 
+    cam.status.credentials.completed && 
+    cam.status.discovery.completed
+  );
 
   useEffect(() => {
     // Save the deployment for future reference
@@ -165,11 +180,10 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     setScanningCameras(true);
     setPushResult(null);
     try {
-      // Load cameras that have been configured previously
-      const configuredCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras') || [];
-      setCameras(configuredCameras);
-      if (configuredCameras.length > 0 && !selectedCamera) {
-        setSelectedCamera(configuredCameras[0].id || `${configuredCameras[0].ip}_${configuredCameras[0].model}`);
+      // Cameras are already loaded from context
+      // Just set the first one as selected if none selected yet
+      if (cameras.length > 0 && !selectedCamera) {
+        setSelectedCamera(cameras[0].id);
       }
     } catch (err: any) {
       console.error('Failed to load configured cameras:', err);
@@ -181,9 +195,22 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   const handlePushSettings = async () => {
     if (!selectedCamera) return;
 
-    const camera = cameras.find(c => (c.id || `${c.ip}_${c.model}`) === selectedCamera);
+    const camera = cameras.find(c => c.id === selectedCamera);
     if (!camera) return;
 
+    // Check if camera has credentials, if not prompt for them
+    if (!camera.status.credentials.username || !camera.status.credentials.password) {
+      setPendingCamera(camera);
+      setCameraUsername('anava'); // Set default username
+      setCameraPassword(''); // Leave password empty for user to fill
+      setCredentialsDialogOpen(true);
+      return;
+    }
+
+    await pushConfigurationToCamera(camera);
+  };
+
+  const pushConfigurationToCamera = async (camera: any) => {
     setPushingSettings(true);
     setPushResult(null);
 
@@ -217,10 +244,10 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
           vertexGcpRegion: 'us-central1',
           vertexGcsBucketName: bucketName
         },
-        axis: camera.hasSpeaker && camera.speaker ? {
-          speakerIp: camera.speaker.ip || '',
-          speakerUser: camera.speaker.username || '',
-          speakerPass: camera.speaker.password || ''
+        axis: camera.status.speaker?.configured && camera.status.speaker ? {
+          speakerIp: camera.status.speaker.ip || '',
+          speakerUser: camera.status.speaker.username || '',
+          speakerPass: camera.status.speaker.password || ''
         } : undefined,
         anavaKey: result.anavaKey || '',
         customerId: result.customerId || ''
@@ -229,8 +256,8 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
       // Use the correct IPC handler
       const response = await (window.electronAPI as any).pushSystemConfig({
         cameraIp: camera.ip,
-        username: camera.username || 'anava',
-        password: camera.password || 'baton',
+        username: camera.status.credentials.username || 'anava',
+        password: camera.status.credentials.password || 'baton',
         systemConfig
       });
 
@@ -246,11 +273,46 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     }
   };
 
-  // Load configured cameras when component mounts
+  const handleCredentialsSubmit = async () => {
+    if (!pendingCamera || !cameraUsername || !cameraPassword) return;
+
+    // Update the camera credentials in the context
+    const updatedCamera = {
+      ...pendingCamera,
+      status: {
+        ...pendingCamera.status,
+        credentials: {
+          completed: true,
+          username: cameraUsername,
+          password: cameraPassword
+        }
+      }
+    };
+
+    // Update the camera in the global context
+    updateCamera(pendingCamera.id, updatedCamera);
+
+    // Close dialog and proceed with push
+    setCredentialsDialogOpen(false);
+    setCameraUsername('');
+    setCameraPassword('');
+    setPendingCamera(null);
+
+    // Now push the configuration
+    await pushConfigurationToCamera(updatedCamera);
+  };
+
+  // Load configured cameras when component mounts or cameras change
   useEffect(() => {
     saveDeployment();
-    loadConfiguredCameras();
   }, []);
+
+  useEffect(() => {
+    // Auto-select first camera when cameras are available
+    if (cameras.length > 0 && !selectedCamera) {
+      setSelectedCamera(cameras[0].id);
+    }
+  }, [cameras, selectedCamera]);
 
   return (
     <Paper elevation={3} sx={{ p: 6 }}>
@@ -445,15 +507,12 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
                   disabled={scanningCameras || cameras.length === 0}
                   label="Select Camera"
                 >
-                  {cameras.map((camera) => {
-                    const cameraId = camera.id || `${camera.ip}_${camera.model}`;
-                    return (
-                      <MenuItem key={cameraId} value={cameraId}>
-                        {camera.name || camera.model} - {camera.ip}
-                        {camera.hasSpeaker && ' (with speaker)'}
-                      </MenuItem>
-                    );
-                  })}
+                  {cameras.map((camera) => (
+                    <MenuItem key={camera.id} value={camera.id}>
+                      {camera.name} - {camera.ip}
+                      {camera.status.speaker?.configured && ' (with speaker)'}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
               
@@ -593,6 +652,45 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             startIcon={creatingUser && <CircularProgress size={20} />}
           >
             Create User
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Camera Credentials Dialog */}
+      <Dialog open={credentialsDialogOpen} onClose={() => setCredentialsDialogOpen(false)}>
+        <DialogTitle>Camera Credentials Required</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Please enter the camera credentials to push the configuration.
+          </Typography>
+          <Stack spacing={2} sx={{ mt: 2, minWidth: 300 }}>
+            <TextField
+              label="Username"
+              fullWidth
+              value={cameraUsername}
+              onChange={(e) => setCameraUsername(e.target.value)}
+              autoFocus
+            />
+            <TextField
+              label="Password"
+              type="password"
+              fullWidth
+              value={cameraPassword}
+              onChange={(e) => setCameraPassword(e.target.value)}
+              helperText="Enter the camera's admin password"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCredentialsDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleCredentialsSubmit} 
+            variant="contained"
+            disabled={!cameraUsername || !cameraPassword}
+          >
+            Save & Push
           </Button>
         </DialogActions>
       </Dialog>

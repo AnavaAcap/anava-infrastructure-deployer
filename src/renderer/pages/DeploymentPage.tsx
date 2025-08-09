@@ -125,8 +125,8 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
   const stepTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
 
   useEffect(() => {
-    // Set up event listeners
-    window.electronAPI.deployment.onProgress((prog) => {
+    // Define event handlers
+    const handleProgress = (prog: DeploymentProgress) => {
       setProgress(prog);
       
       // Update step statuses based on progress
@@ -178,29 +178,32 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
           return updated;
         });
       }
-    });
+    };
 
-    window.electronAPI.deployment.onLog((message) => {
+    const handleLog = (message: string) => {
       setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
-    });
+    };
 
-    window.electronAPI.deployment.onError((err) => {
+    const handleError = (err: any) => {
       setError(err.message || 'An error occurred during deployment');
       
       // Mark current step as error
-      if (progress?.currentStep) {
-        setStepStatuses(prev => ({
-          ...prev,
-          [progress.currentStep]: {
-            ...prev[progress.currentStep],
-            status: 'error',
-            message: err.message
-          }
-        }));
-      }
-    });
+      setProgress(prev => {
+        if (prev?.currentStep) {
+          setStepStatuses(s => ({
+            ...s,
+            [prev.currentStep]: {
+              ...s[prev.currentStep],
+              status: 'error',
+              message: err.message
+            }
+          }));
+        }
+        return prev;
+      });
+    };
 
-    window.electronAPI.deployment.onComplete((result) => {
+    const handleComplete = (result: any) => {
       // Mark all steps as completed
       setStepStatuses(prev => {
         const updated = { ...prev };
@@ -215,20 +218,34 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
       stepTimersRef.current = {};
       
       onComplete(result);
-    });
+    };
 
+    // Set up event listeners and store cleanup functions
+    const unsubscribeProgress = window.electronAPI.deployment.onProgress(handleProgress);
+    const unsubscribeLog = window.electronAPI.deployment.onLog(handleLog);
+    const unsubscribeError = window.electronAPI.deployment.onError(handleError);
+    const unsubscribeComplete = window.electronAPI.deployment.onComplete(handleComplete);
+
+    return () => {
+      // Cleanup timers
+      Object.values(stepTimersRef.current).forEach(timer => clearInterval(timer));
+      // Remove event listeners
+      unsubscribeProgress();
+      unsubscribeLog();
+      unsubscribeError();
+      unsubscribeComplete();
+    };
+  }, []); // Empty dependency array - only run once on mount
+
+  // Separate effect for starting deployment
+  useEffect(() => {
     // Start deployment
     if (config && !existingDeployment) {
       window.electronAPI.deployment.start(config);
     } else if (existingDeployment) {
       window.electronAPI.deployment.resume(existingDeployment.id);
     }
-
-    return () => {
-      // Cleanup timers
-      Object.values(stepTimersRef.current).forEach(timer => clearInterval(timer));
-    };
-  }, [config, existingDeployment, onComplete]);
+  }, []); // Also only run once on mount
 
   const handlePause = () => {
     if (isPaused) {

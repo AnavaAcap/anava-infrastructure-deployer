@@ -555,13 +555,27 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         });
       }, 500);
       
-      // Get Firebase config (we'll need to implement this)
-      const firebaseConfig = await getFirebaseConfig();
+      // Get API key that should have been generated on home screen
+      const geminiApiKey = await (window.electronAPI as any).getConfigValue?.('geminiApiKey') || '';
+      if (!geminiApiKey) {
+        console.warn('No API key found - user may need to add it manually in Detection Test');
+      }
+      
+      // Get Firebase config (use real Anava AI config)
+      const firebaseConfig = {
+        apiKey: "AIzaSyCJbWAa-zQir1v8kmlye8Kv3kmhPb9r18s",
+        authDomain: "anava-ai.firebaseapp.com",
+        projectId: "anava-ai",
+        storageBucket: "anava-ai.appspot.com",
+        messagingSenderId: "392865621461",
+        appId: "1:392865621461:web:15db206ae4e9c72f7dc95c",
+        databaseId: "(default)"
+      };
       
       const configPayload = {
         firebase: firebaseConfig,
         gemini: {
-          apiKey: '', // Will be set if using AI Studio mode
+          apiKey: geminiApiKey || '', // Use the generated/stored API key
           vertexApiGatewayUrl: '',
           vertexApiGatewayKey: '',
           vertexGcpProjectId: '',
@@ -687,19 +701,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
     ));
   };
 
-  const getFirebaseConfig = async () => {
-    // For now, return a mock config
-    // In production, this would fetch from your deployment
-    return {
-      apiKey: "AIzaSyDemoKey",
-      authDomain: "demo.firebaseapp.com",
-      projectId: "anava-demo",
-      storageBucket: "anava-demo.appspot.com",
-      messagingSenderId: "123456789",
-      appId: "1:123456789:web:abcdef",
-      databaseId: "(default)",
-    };
-  };
+  // Removed getFirebaseConfig - using real config inline
 
   const captureAndAnalyzeScene = async (camera: CameraInfo) => {
     // Mock implementation - would call actual VAPIX endpoint

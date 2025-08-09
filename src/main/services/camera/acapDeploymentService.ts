@@ -4,10 +4,8 @@ import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import crypto from 'crypto';
 import https from 'https';
 import { Camera } from './cameraDiscoveryService';
-import { getCameraBaseUrl } from './cameraProtocolUtils';
 
 export interface DeploymentResult {
   success: boolean;
@@ -555,93 +553,41 @@ export class ACAPDeploymentService {
     options: any = {}
   ): Promise<any> {
     try {
-      const baseUrl = await getCameraBaseUrl(ip, username, password);
-      const url = `${baseUrl}${uri}`;
-      // const isHttps = url.startsWith('https');
+      // Always use HTTPS with Basic auth for security
+      const url = `https://${ip}${uri}`;
       const httpsAgent = new https.Agent({ rejectUnauthorized: false });
       
-      // First request to get the digest challenge
-      const form1 = formFactory();
-      const config1: any = {
+      // Use Basic auth directly
+      const auth = Buffer.from(`${username}:${password}`).toString('base64');
+      const form = formFactory();
+      const config: any = {
         method,
         url,
         httpsAgent,
         timeout: options.timeout || 300000,
-        validateStatus: () => true,
-        data: form1,
+        data: form,
         headers: {
-          ...form1.getHeaders(),
+          ...form.getHeaders(),
+          'Authorization': `Basic ${auth}`,
           ...options.headers
         },
         ...options
       };
 
-      console.log(`[digestAuth] ${method} ${url}`);
-      console.log('[digestAuth] Making first request for digest challenge...');
-      const response1 = await axios(config1);
-
-      if (response1.status === 401) {
-        const wwwAuth = response1.headers['www-authenticate'];
-        console.log('[digestAuth] Got 401 challenge:', wwwAuth);
-        
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          // Parse digest parameters
-          const digestData: any = {};
-          const regex = /(\w+)=(?:"([^"]+)"|([^,]+))/g;
-          let match;
-          while ((match = regex.exec(wwwAuth)) !== null) {
-            digestData[match[1]] = match[2] || match[3];
-          }
-
-          console.log('[digestAuth] Building digest response...');
-
-          // Build digest header
-          const nc = '00000001';
-          const cnonce = crypto.randomBytes(8).toString('hex');
-          const ha1 = crypto.createHash('md5')
-            .update(`${username}:${digestData.realm}:${password}`)
-            .digest('hex');
-          const ha2 = crypto.createHash('md5')
-            .update(`${method}:${uri}`)
-            .digest('hex');
-          const response = crypto.createHash('md5')
-            .update(`${ha1}:${digestData.nonce}:${nc}:${cnonce}:${digestData.qop}:${ha2}`)
-            .digest('hex');
-          
-          let authHeader = `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop="${digestData.qop}", nc=${nc}, cnonce="${cnonce}", response="${response}"`;
-          
-          if (digestData.algorithm) {
-            authHeader += `, algorithm=${digestData.algorithm}`;
-          }
-          
-          console.log('[digestAuth] Making authenticated request with fresh form...');
-          
-          // Create fresh form for second request
-          const form2 = formFactory();
-          const config2 = {
-            ...config1,
-            data: form2,
-            headers: {
-              ...form2.getHeaders(),
-              'Authorization': authHeader,
-              ...options.headers
-            }
-          };
-
-          const response2 = await axios(config2);
-          console.log('[digestAuth] Authenticated response status:', response2.status);
-          return response2;
-        }
-      } else if (response1.status === 200) {
-        console.log('[digestAuth] No authentication required, got 200 OK');
-        return response1;
-      }
+      console.log(`[digestAuthWithFormFactory] ${method} ${url}`);
+      console.log('[digestAuthWithFormFactory] Making request with Basic auth...');
+      const response = await axios(config);
       
-      throw new Error(`Unexpected response: ${response1.status}`);
+      if (response.status === 200 || response.status === 204) {
+        console.log('[digestAuthWithFormFactory] Basic auth successful');
+        return response;
+      } else {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
     } catch (error: any) {
-      console.error('[digestAuth] Error:', error.message);
+      console.error('[digestAuthWithFormFactory] Error:', error.message);
       if (error.code) {
-        console.error('[digestAuth] Error code:', error.code);
+        console.error('[digestAuthWithFormFactory] Error code:', error.code);
       }
       throw error;
     }
@@ -657,107 +603,43 @@ export class ACAPDeploymentService {
     options: any = {}
   ): Promise<any> {
     try {
-      const baseUrl = await getCameraBaseUrl(ip, username, password);
-      const url = `${baseUrl}${uri}`;
-      // const isHttps = url.startsWith('https');
+      // Always use HTTPS with Basic auth for security
+      const url = `https://${ip}${uri}`;
       const httpsAgent = new https.Agent({ rejectUnauthorized: false });
       
-      // First request to get the digest challenge
-      const config1: any = {
+      // Use Basic auth directly
+      const auth = Buffer.from(`${username}:${password}`).toString('base64');
+      
+      const config: any = {
         method,
         url,
         httpsAgent,
-        timeout: options.timeout || 300000, // 5 minutes for large file uploads (increased from 2 min)
-        validateStatus: () => true,
+        timeout: options.timeout || 300000, // 5 minutes for large file uploads
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          ...options.headers
+        },
         ...options
       };
 
       if (data) {
-        config1.data = data;
+        config.data = data;
       }
 
-      console.log(`[digestAuth] ${method} ${url}`);
-      console.log('[digestAuth] Making first request for digest challenge...');
-      const response1 = await axios(config1);
-
-      if (response1.status === 401) {
-        const wwwAuth = response1.headers['www-authenticate'];
-        console.log('[digestAuth] Got 401 challenge:', wwwAuth);
-        
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          // Parse digest parameters
-          const digestData: any = {};
-          const regex = /(\w+)=(?:"([^"]+)"|([^,]+))/g;
-          let match;
-          while ((match = regex.exec(wwwAuth)) !== null) {
-            digestData[match[1]] = match[2] || match[3];
-          }
-
-          console.log('[digestAuth] Digest realm:', digestData.realm);
-          console.log('[digestAuth] Digest qop:', digestData.qop);
-
-          // Build digest header
-          const nc = '00000001';
-          const cnonce = crypto.randomBytes(8).toString('hex');
-          const ha1 = crypto.createHash('md5')
-            .update(`${username}:${digestData.realm}:${password}`)
-            .digest('hex');
-          const ha2 = crypto.createHash('md5')
-            .update(`${method}:${uri}`)
-            .digest('hex');
-          const response = crypto.createHash('md5')
-            .update(`${ha1}:${digestData.nonce}:${nc}:${cnonce}:${digestData.qop}:${ha2}`)
-            .digest('hex');
-          
-          // Include algorithm if specified
-          let authHeader = `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop="${digestData.qop}", nc=${nc}, cnonce="${cnonce}", response="${response}"`;
-          
-          if (digestData.algorithm) {
-            authHeader += `, algorithm=${digestData.algorithm}`;
-          }
-          
-          console.log('[digestAuth] Sending authenticated request...');
-          
-          // Second request with auth
-          const config2 = {
-            ...config1,
-            headers: {
-              ...config1.headers,
-              'Authorization': authHeader
-            }
-          };
-
-          try {
-            console.log('[digestAuth] Request config:', {
-              method: config2.method,
-              url: config2.url,
-              timeout: config2.timeout,
-              hasData: !!config2.data,
-              dataType: config2.data ? typeof config2.data : 'none'
-            });
-            
-            const response2 = await axios(config2);
-            console.log('[digestAuth] Authenticated response status:', response2.status);
-            return response2;
-          } catch (error: any) {
-            console.error('[digestAuth] Authenticated request failed:', error.message);
-            if (error.code === 'ECONNRESET') {
-              console.error('[digestAuth] Connection reset by camera - this may happen if ACAP is already installed');
-            }
-            throw error;
-          }
-        }
-      } else if (response1.status === 200) {
-        // No auth required
-        console.log('[digestAuth] No authentication required, got 200 OK');
-        return response1;
-      }
+      console.log(`[basicAuth] ${method} ${url}`);
+      console.log('[basicAuth] Making request with Basic auth...');
+      const response = await axios(config);
       
-      throw new Error(`Unexpected response: ${response1.status}`);
+      if (response.status === 200 || response.status === 204) {
+        console.log('[basicAuth] Response status:', response.status);
+        return response;
+      } else {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
     } catch (error: any) {
-      console.error('[digestAuth] Error:', error.message);
+      console.error('[basicAuth] Error:', error.message);
       if (error.code) {
-        console.error('[digestAuth] Error code:', error.code);
+        console.error('[basicAuth] Error code:', error.code);
       }
       throw error;
     }
