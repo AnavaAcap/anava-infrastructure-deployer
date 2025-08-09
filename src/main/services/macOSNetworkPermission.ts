@@ -207,7 +207,7 @@ do shell script "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add '${a
         spawn('open', ['x-apple.systempreferences:com.apple.preference.security?Firewall']);
       } else if (manualResult.response === 1) {
         // Copy terminal commands to clipboard
-        const { clipboard } = require('electron');
+        const { clipboard } = await import('electron');
         const commands = 'sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add "/Applications/Anava Vision.app" && sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "/Applications/Anava Vision.app"';
         clipboard.writeText(commands);
         
@@ -242,7 +242,7 @@ do shell script "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add '${a
     const { exec } = require('child_process');
     const appPath = app.getPath('exe');
     
-    exec('/usr/libexec/ApplicationFirewall/socketfilterfw --listapps', { encoding: 'utf8' }, (error, stdout) => {
+    exec('/usr/libexec/ApplicationFirewall/socketfilterfw --listapps', { encoding: 'utf8' }, (error: any, stdout: any) => {
       if (!error && stdout && stdout.includes(appPath)) {
         logger.info('App is already in firewall, network access should be available');
       } else {

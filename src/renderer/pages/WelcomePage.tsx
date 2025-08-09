@@ -45,7 +45,52 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
 
     // Get license key if assigned
     loadLicenseKey();
+    
+    // Check Google auth and generate API key on page load
+    checkAuthAndGenerateApiKey();
   }, []);
+  
+  const checkAuthAndGenerateApiKey = async () => {
+    try {
+      // Check if we already have an API key
+      const existingApiKey = await window.electronAPI?.getConfigValue('geminiApiKey');
+      if (existingApiKey) {
+        console.log('API key already exists');
+        return;
+      }
+      
+      // Check if user is authenticated with Google
+      const authCheck = await window.electronAPI?.auth?.check();
+      if (!authCheck?.authenticated) {
+        console.log('User not authenticated, prompting for Google login...');
+        // Prompt for Google login
+        const loginResult = await window.electronAPI?.auth?.login();
+        if (!loginResult?.success) {
+          console.log('Google login cancelled or failed');
+          return;
+        }
+        console.log('Google login successful');
+      }
+      
+      // Now generate the API key
+      console.log('Generating AI Studio API key...');
+      const apiKeyResult = await window.electronAPI?.magical?.generateApiKey();
+      if (apiKeyResult?.success && apiKeyResult.apiKey) {
+        console.log('AI Studio API key generated successfully');
+        await window.electronAPI?.setConfigValue('geminiApiKey', apiKeyResult.apiKey);
+        if (apiKeyResult.projectId) {
+          await window.electronAPI?.setConfigValue('aiStudioProjectId', apiKeyResult.projectId);
+        }
+      } else if (apiKeyResult?.needsManual) {
+        console.log('Manual API key creation needed');
+        // The AI Studio console will open for manual creation
+      } else {
+        console.warn('API key generation failed:', apiKeyResult?.error);
+      }
+    } catch (error) {
+      console.error('Error in auth/API key generation:', error);
+    }
+  };
 
   const loadLicenseKey = async () => {
     try {
@@ -111,28 +156,7 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
         <Grid container spacing={3} justifyContent="center">
           <Grid item xs={12} md={6}>
             <Card sx={{ height: '100%', cursor: 'pointer', transition: 'all 0.3s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}
-                onClick={async () => {
-                  // Check if we already have an API key
-                  const storedApiKey = await window.electronAPI?.getConfigValue('geminiApiKey');
-                  if (!storedApiKey) {
-                    console.log('Generating AI Studio API key for Quick Start...');
-                    try {
-                      const apiKeyResult = await window.electronAPI.magical.generateApiKey();
-                      if (apiKeyResult.success && apiKeyResult.apiKey) {
-                        console.log('AI Studio API key generated successfully');
-                        await window.electronAPI.setConfigValue('geminiApiKey', apiKeyResult.apiKey);
-                        await window.electronAPI.setConfigValue('aiStudioProjectId', apiKeyResult.projectId);
-                      } else if (apiKeyResult.needsManual) {
-                        console.log('Manual API key creation needed - will handle in camera setup');
-                      } else {
-                        console.warn('AI Studio API key generation failed:', apiKeyResult.error);
-                      }
-                    } catch (apiError) {
-                      console.warn('Failed to generate API key:', apiError);
-                    }
-                  }
-                  onNavigate?.('camera-setup');
-                }}>
+                onClick={() => onNavigate?.('camera-setup')}>
             <CardContent sx={{ textAlign: 'center', py: 4 }}>
               <Videocam sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
               <Typography variant="h5" gutterBottom>

@@ -7,7 +7,7 @@ import net from 'net';
 import https from 'https';
 import { macOSNetworkPermission } from '../macOSNetworkPermission';
 import { safeConsole } from '../../utils/safeConsole';
-import { getCameraBaseUrl, testCameraProtocol } from './cameraProtocolUtils';
+import { getCameraBaseUrl } from './cameraProtocolUtils';
 const PQueue = require('p-queue').default || require('p-queue');
 const Bonjour = require('bonjour-service').Bonjour || require('bonjour-service');
 const { Client: SSDPClient } = require('node-ssdp');

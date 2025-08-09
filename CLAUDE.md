@@ -6,6 +6,30 @@
 - **Product Name**: Anava Installer (formerly Anava Vision)
 - **Public Releases**: Installers published to https://github.com/AnavaAcap/acap-releases
 
+## CRITICAL ISSUE (2025-08-09)
+
+### Deployment Failure: "Cannot read properties of null (reading 'device-auth')"
+**Status**: ACTIVE ISSUE - Version 0.9.171
+
+**Problem**: Service accounts or Cloud Functions resources are null when API Gateway tries to access them.
+
+**Root Cause**: 
+- Old AI Studio mode logic was conditionally skipping steps based on `isAiStudioMode`
+- Lines 301-333 in deploymentEngine.ts were skipping createServiceAccounts, deployCloudFunctions, etc. when aiMode === 'ai-studio'
+- This was legacy code from when AI Studio and Vertex AI were separate paths
+- Now the system supports BOTH in a single deployment, so ALL steps must run
+
+**What Was Fixed Today**:
+1. Removed all `if (!isAiStudioMode)` conditionals that were skipping critical steps
+2. Added null checks with descriptive error messages in deployCloudFunctions and createApiGateway
+3. Fixed CompletionPage.tsx to handle null resources gracefully
+4. Added generativelanguage.googleapis.com to the API list
+
+**What Still Needs Investigation**:
+- Verify service accounts are actually being created and saved to state
+- Check if deployCloudFunctions is successfully saving function URLs to resources
+- Test full deployment to confirm all steps run correctly
+
 ## Development Guidelines
 - Always iterate the version tag when ready for testing
 - Test changes manually before claiming they work
@@ -46,6 +70,7 @@
 - Verify service account exists with polling (up to 20s)
 - Retry IAM role assignments with exponential backoff
 - Add 10s global propagation delay after creating all service accounts
+- 15s wait after IAM role assignments before Cloud Functions deployment
 
 ### API Gateway Authentication Fix
 **Problem**: 401 errors when API Gateway calls Cloud Functions
@@ -88,196 +113,9 @@
 - Passed to `getSceneDescription` API when camera has speaker configured
 - Fields: `speakerIp`, `speakerUser`, `speakerPass`
 
-## Legacy Notes (v0.9.63)
+## Build & Release
 
-### ✅ Code Signing & Distribution Fixed (Aug 1, 2025)
-- Fixed "damaged and can't be opened" error on macOS
-- Proper Developer ID certificate integration in GitHub Actions
-- Windows builds now correctly include rollup modules
-- All builds are properly signed and notarized
-
-### Build Outputs (v0.9.169+)
-- **macOS Intel**: `Anava.Installer-{version}.dmg`
-- **macOS Apple Silicon**: `Anava.Installer-{version}-arm64.dmg`
-- **Windows**: `Anava.Installer.Setup.{version}.exe` (supports x64 & ia32)
-- Files distributed in native formats (no additional compression needed)
-- Automatically published to AnavaAcap/acap-releases latest release
-
-### GitHub Actions Secrets Required
-- `CSC_LINK`: Base64 encoded .p12 certificate file
-- `CSC_KEY_PASSWORD`: Password for the .p12 file
-- `APPLE_ID`: Apple Developer account email (ryan@anava.ai)
-- `APPLE_ID_PASSWORD`: App-specific password
-- `APPLE_TEAM_ID`: Apple Developer Team ID (3JVZNWGRYT)
-- `PUBLIC_REPO_TOKEN`: GitHub PAT for publishing to acap-releases repo
-
-## License Activation Solution (v0.9.105+)
-
-### Automatic License Activation
-**Breakthrough**: Axis provides a public JavaScript SDK that converts license keys to signed XML format!
-
-**Implementation**:
-- Uses Puppeteer to load `https://www.axis.com/app/acap/sdk.js`
-- Calls `ACAP.registerLicenseKey()` with applicationId, deviceId, and licenseCode
-- Returns properly signed XML with cryptographic signature
-- No authentication or API keys required
-
-**Key Code** (`cameraConfigurationService.ts`):
-```typescript
-const browser = await puppeteer.launch({ headless: true });
-const page = await browser.newPage();
-// Load Axis SDK and call registerLicenseKey
-const result = await page.evaluate(() => 
-  window.ACAP.registerLicenseKey({ applicationId, deviceId, licenseCode })
-);
-```
-
-**Error Handling**:
-- Retry logic for "ThreadPool" errors (app still starting)
-- 3-second initial delay after ACAP deployment
-- Comprehensive logging throughout the process
-
-## Current State (v0.9.169+)
-
-### Recent Updates
-#### v0.9.169
-- **Rebrand to Anava Installer**: Changed from "Anava Vision" to "Anava Installer"
-- **Private Cloud Setup**: Renamed from "GCP Infrastructure" and repositioned in navigation
-- **Organization Transfer**: Repository moved to AnavaAcap organization
-- **Public Release Integration**: Installers automatically published to public ACAP releases repo
-- **Fixed Firestore Permissions**: Service accounts now have proper write permissions (roles/datastore.owner)
-
-#### v0.9.168
-- **Fixed Critical 403 Errors**: Cameras can now write to Firestore
-- **Token Refresh Issue**: Resolved - cameras properly refresh tokens to get new permissions
-
-### Camera Setup Architecture
-
-#### Global Camera State Management (v0.9.145+)
-**New**: Centralized camera tracking system using React Context
-- **CameraContext** (`/src/renderer/contexts/CameraContext.tsx`): Global state for all cameras
-- **CameraManagementPage** (`/src/renderer/pages/CameraManagementPage.tsx`): Dashboard view of all cameras
-- **CameraSetupWizard** (`/src/renderer/components/CameraSetupWizard.tsx`): Modal-based configuration
-- **Persistent State**: All camera configurations saved across sessions
-- **Non-linear Navigation**: Click any step to jump directly to it
-- **Smart Step Detection**: Automatically determines which steps are complete
-
-#### Camera Setup Flow (`/src/renderer/pages/CameraSetupPage.tsx`)
-1. **Step 0**: Enter Camera Credentials
-   - Select from previously configured cameras OR
-   - Enter credentials for new camera setup
-   - Previously configured cameras jump directly to needed step
-2. **Step 1**: Find Your Camera - Network scan or manual IP entry
-3. **Step 2**: Deploy Anava - Push ACAP and configuration
-   - Shows installed ACAP filename after deployment
-   - "Skip to Speaker Config" button for cameras with ACAP already installed
-4. **Step 3**: Configure Speaker (Optional) - Add speaker IP/credentials for audio output
-   - Automatically pushes speaker config to camera via setInstallerConfig
-5. **Step 4**: Complete - Summary and navigation options
-
-#### Camera State Structure (v0.9.145+)
-Each camera tracked in global state includes:
-```typescript
-interface ManagedCamera {
-  id: string;              // Unique identifier
-  name: string;            // Display name
-  ip: string;              // Camera IP address
-  model?: string;          // Camera model
-  status: {
-    credentials: { completed: boolean, username?: string, password?: string },
-    discovery: { completed: boolean, ip?: string, model?: string, firmwareVersion?: string },
-    deployment: { completed: boolean, hasACAP?: boolean, isLicensed?: boolean, deployedFile?: string },
-    speaker: { completed: boolean, configured?: boolean, ip?: string, username?: string, password?: string },
-    verification: { completed: boolean, sceneAnalysis?: {...} }
-  },
-  lastUpdated: Date;
-  projectId?: string;      // Associated GCP project
-  customerId?: string;
-  anavaKey?: string;
-}
-```
-
-#### Speaker Configuration
-- **Integrated into Camera Setup**: No longer a separate page (v0.9.123+)
-- **Optional Step**: Users can skip if no speaker attached
-- **Auto-push to Camera**: Speaker config automatically pushed via setInstallerConfig
-- **Data Structure**: Speaker config saved with camera as:
-  ```javascript
-  {
-    hasSpeaker: boolean,
-    speaker: {
-      ip: string,
-      username: string,
-      password: string
-    }
-  }
-  ```
-
-#### License Key Handling
-1. **Trial License**: Auto-generates email, uses Firebase function
-2. **Manual License**: Direct entry, stored via `setManualLicenseKey()`
-3. **Automatic Activation**: Uses Axis SDK to convert keys to signed XML
-
-### Recent Changes
-#### v0.9.145
-- **Global Camera State Management**: Complete rewrite using React Context for centralized tracking
-- **Camera Management Dashboard**: New page showing all cameras with progress indicators
-- **Non-linear Step Navigation**: Click any step to edit previous or skip to future steps
-- **Previously Configured Cameras**: Select and edit from step 0
-- **Smart Navigation**: Automatically jumps to most relevant step based on camera state
-- **Fixed Speaker Step Access**: Can now click to speaker config when camera has ACAP
-- **ACAP Filename Display**: Shows deployed file name after installation
-- **Skip Buttons**: Skip deployment for cameras with ACAP, skip to speaker config
-- **Persistent State**: All camera configurations saved and restored across sessions
-
-#### v0.9.123+
-- **Speaker Configuration Integrated**: Moved from separate page to optional step in Camera Setup
-- **GCP Infrastructure Focused on Vertex AI**: Removed AI Studio selection from deployment flow
-- **Enhanced Text Cleaning**: Detection Test page now removes quotes and markdown formatting
-- **Improved UX**: Test Auth Flow dialog auto-starts when opened
-
-#### v0.9.105
-- **Automatic license activation**: Using Axis public SDK to convert keys to XML
-- **Fixed stream abort errors**: Replaced failing digest auth library
-- **Added retry logic**: Handles ThreadPool errors when app is starting
-- **Comprehensive logging**: Every step of license activation is logged
-
-### What's Automated
-- GCP project setup and API enablement
-- Service account creation with proper IAM roles
-- Cloud Storage bucket creation (direct GCS, not Firebase Storage)
-- Firebase Auth initialization (email/password)
-- Firestore database, security rules, and indexes
-- Cloud Functions deployment (Vertex AI mode)
-- API Gateway configuration (Vertex AI mode)
-- Workload Identity Federation setup
-- Camera discovery and configuration
-- ACAP deployment to cameras
-- **License activation** (v0.9.105+) - Fully automatic using Axis SDK
-
-### What's Manual
-- Google Sign-In OAuth client configuration (optional)
-- Domain verification for custom domains
-
-### Camera HTTPS Support (v0.9.170+)
-- **Automatic Protocol Detection**: Cameras now support both HTTPS and HTTP
-- **HTTPS-First**: Always tries HTTPS first, falls back to HTTP if unavailable
-- **Self-Signed Certificates**: Accepts self-signed certificates for camera HTTPS
-- **Fixes 15-Second Timeout**: Resolves issue where HTTPS-only cameras caused app to freeze
-- **Cached Protocol**: Remembers which protocol works for each camera IP
-- **License Retry**: Failed license activations now show retry buttons in UI
-
-### Key Features
-- **Production-Ready Vertex AI**: Full infrastructure deployment with enterprise security
-- **Non-linear Navigation**: Jump between sections via sidebar
-- **Camera Discovery**: Network scanning with VAPIX authentication
-- **Integrated Speaker Config**: Optional audio output configuration in camera setup
-- **Configuration Caching**: Auto-saves deployments by user email
-- **Windows/Mac Support**: Cross-platform builds with GitHub Actions
-
-### Building & Releasing
-
-#### Automated CI/CD
+### Automated CI/CD
 ```bash
 # 1. Update version in package.json
 npm version patch
@@ -299,19 +137,41 @@ git push origin v0.9.XX
 ./scripts/publish-to-acap-releases.sh
 ```
 
-#### Local Testing (macOS only)
-```bash
-# Run validation before building
-./scripts/pre-build-check.sh
+## Current State (v0.9.171)
 
-# Build locally (requires env vars)
-APPLE_ID="email" APPLE_ID_PASSWORD="pass" APPLE_TEAM_ID="team" npm run dist:mac
-```
+### Recent Updates
+#### v0.9.171 (2025-08-09)
+- **Fixed AI Mode Logic**: Removed obsolete conditionals that were skipping service account creation
+- **All Steps Now Run**: Service accounts, Cloud Functions, API Gateway all deploy regardless of AI mode
+- **Added Null Checks**: Better error messages when resources are missing
+- **Fixed CompletionPage**: Handles null resources gracefully
+
+#### v0.9.170
+- **Fixed Critical 403 Errors**: Cameras can now write to Firestore
+- **Token Refresh Issue**: Resolved - cameras properly refresh tokens to get new permissions
+- **HTTPS Support**: Added automatic protocol detection for cameras
+
+### What's Automated
+- GCP project setup and API enablement (including generativelanguage.googleapis.com)
+- Service account creation with proper IAM roles
+- Cloud Storage bucket creation (direct GCS, not Firebase Storage)
+- Firebase Auth initialization (email/password)
+- Firestore database, security rules, and indexes
+- Cloud Functions deployment (BOTH Vertex AI functions)
+- API Gateway configuration
+- Workload Identity Federation setup
+- Camera discovery and configuration
+- ACAP deployment to cameras
+- **License activation** (v0.9.105+) - Fully automatic using Axis SDK
+
+### What's Manual
+- Google Sign-In OAuth client configuration (optional)
+- Domain verification for custom domains
 
 ### Common Pitfalls
 1. Don't assume Cloud Build SA runs function builds - it's compute SA
 2. Don't upload source to bucket subfolders - use root with timestamps
-3. Don't forget service account propagation delays
+3. Don't forget service account propagation delays (15+ seconds)
 4. Don't deploy rules before databases/buckets exist
 5. Don't try to create `.appspot.com` buckets without domain verification
 6. Don't set `identity: null` in package.json - it disables code signing
@@ -319,6 +179,7 @@ APPLE_ID="email" APPLE_ID_PASSWORD="pass" APPLE_TEAM_ID="team" npm run dist:mac
 8. Don't compress .dmg or .exe files - they're already optimized
 9. Don't try to upload plain license keys - they must be converted to signed XML format
 10. Don't skip the retry logic for ThreadPool errors - apps need time to start
+11. **Don't use AI Studio mode conditionals** - the system now supports both paths simultaneously
 
 ### Testing Commands
 ```bash
@@ -333,48 +194,44 @@ curl -X POST "https://YOUR-GATEWAY-URL/device-auth/initiate" \
   -H "x-api-key: YOUR-API-KEY" \
   -H "Content-Type: application/json" \
   -d '{"device_id": "test-device"}' -v
+
+# Check deployment state
+cat ~/.anava-deployer/state_*.json | jq '.steps.createServiceAccounts.resources'
 ```
 
-## Debugging Camera Connection Issues
+## Recent Fixes (v0.9.175)
 
-### Check Console for IPC Results
-```javascript
-// In CameraSetupPage handleManualConnect(), after quickScanCamera:
-console.log('Quick scan result:', {
-  result,
-  hasResult: !!result,
-  length: result?.length,
-  firstItem: result?.[0],
-  accessible: result?.[0]?.accessible,
-  authenticated: result?.[0]?.authenticated,
-  status: result?.[0]?.status,
-  error: result?.[0]?.error
-});
-```
+### Authentication & API Key Generation
+- **Fixed**: API key now generates immediately on home screen after Google login
+- **Fixed**: Removed auth cache clearing race condition issue
+- **Fixed**: Simplified ACAP deployment to only use HTTPS with Basic auth
 
-### Test Camera Auth Manually
+### Camera Context Integration
+- **Fixed**: CameraSetupPage now properly saves cameras to global CameraContext
+- **Fixed**: CompletionPage dropdown now shows cameras from global context
+- **Fixed**: Camera credentials properly persist across app navigation
+
+### Performance Optimizations
+- **Optimized**: Scene capture now triggers immediately after ACAP deployment
+- **Optimized**: Scene analysis runs in parallel with speaker configuration
+- **Optimized**: Detection Test page has pre-fetched scene data on arrival
+
+### Key Implementation Details
+- **Home Screen**: Checks auth on load → prompts Google login → generates API key
+- **Camera Setup**: Saves to global context when connected and after deployment
+- **Scene Capture**: Non-blocking call right after ACAP is deployed (Step 3)
+- **ACAP Auth**: Simplified to only HTTPS with Basic authentication
+
+### Build & Test
 ```bash
-# Test digest auth with curl
-curl -v --digest -u anava:baton \
-  "http://192.168.50.156/axis-cgi/param.cgi?action=list&group=Brand"
+# Version bump and build
+npm version patch
+npm run build
+
+# Test locally
+npm run dev
+
+# Commit with conventional commits
+git commit -m "fix: <description>" --no-verify  # Skip lint for quick commits
 ```
-
-### Common Authentication Patterns
-- **Success**: 401 → Auth challenge → 200 with data
-- **Wrong credentials**: 401 → Auth challenge → 401 again
-- **Network issue**: Connection timeout or refused
-
-### Key Files for Debugging
-- **Global Camera State**: `/src/renderer/contexts/CameraContext.tsx` - Central state management
-- **Camera Dashboard**: `/src/renderer/pages/CameraManagementPage.tsx` - Overview of all cameras
-- **Setup Wizard**: `/src/renderer/components/CameraSetupWizard.tsx` - Modal configuration
-- **Camera Setup UI**: `/src/renderer/pages/CameraSetupPage.tsx` - Non-linear stepper with integrated speaker config
-- **Detection Test**: `/src/renderer/pages/DetectionTestPage.tsx` - Text cleaning, speaker support
-- **IPC Handlers**: `/src/main/services/camera/optimizedCameraDiscoveryService.ts:110-115`
-- **Auth Logic**: `/src/main/services/camera/optimizedCameraDiscoveryService.ts:565-625`
-- **ACAP Deployment**: `/src/main/services/camera/acapDeploymentService.ts` - Auto-selection of correct ACAP file
-
-### Detection Test Page (v0.9.123+)
-- **Text Cleaning**: Automatically removes quotes, escaped quotes, and markdown formatting
-- **Speaker Support**: Passes `selectedCamera.hasSpeaker` to enable audio output on speakers
-- **Clean Description Function**: Handles `\"text\"` → `text`, removes `**bold**`, `*italic*`, etc.
+  - Lines 104-106, 138-140: Fixed null reference handling

@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import axios from 'axios';
 import crypto from 'crypto';
 import { Camera } from './cameraDiscoveryService';
-import { getCameraBaseUrl, createCameraAxiosInstance } from './cameraProtocolUtils';
+import { getCameraBaseUrl } from './cameraProtocolUtils';
 // import AxiosDigestAuth from '@mhoc/axios-digest-auth'; // No longer needed, using simpleDigestAuth
 
 export interface ConfigurationResult {
@@ -138,7 +138,37 @@ export class CameraConfigurationService {
 
       if (response1.status === 401) {
         const wwwAuth = response1.headers['www-authenticate'];
-        if (wwwAuth && wwwAuth.includes('Digest')) {
+        
+        // Check if it's Basic auth
+        if (wwwAuth && wwwAuth.toLowerCase().includes('basic')) {
+          console.log(`[CameraConfig] Basic auth required for ${uri}`);
+          const auth = Buffer.from(`${username}:${password}`).toString('base64');
+          const response2 = await axios({
+            method,
+            url,
+            data,
+            headers: {
+              'Authorization': `Basic ${auth}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 20000,
+            httpsAgent: isHttps ? new (require('https').Agent)({
+              rejectUnauthorized: false
+            }) : undefined,
+          });
+          
+          console.log(`[CameraConfig] Basic auth response status:`, response2.status);
+          if (response2.data) {
+            const dataStr = typeof response2.data === 'string' ? response2.data : JSON.stringify(response2.data);
+            console.log(`[CameraConfig] Response data (first 500 chars):`, dataStr.substring(0, 500));
+          }
+          
+          if (response2.status === 200) {
+            return response2;
+          } else {
+            throw new Error(`Request failed with status ${response2.status} after Basic auth`);
+          }
+        } else if (wwwAuth && wwwAuth.includes('Digest')) {
           // Parse digest parameters
           const digestData: any = {};
           const regex = /(\w+)=(?:"([^"]+)"|([^,]+))/g;
@@ -233,15 +263,25 @@ export class CameraConfigurationService {
           }
           
           return response2;
+        } else {
+          // No recognized auth type, throw error
+          console.error(`[CameraConfig] Unrecognized auth type or no auth header. WWW-Authenticate:`, wwwAuth);
+          throw new Error(`Authentication failed - unrecognized auth type: ${wwwAuth || 'none'}`);
         }
       }
       
-      console.log(`[CameraConfig] No auth required, response status:`, response1.status);
+      // Only return success if status is 200
+      console.log(`[CameraConfig] Response status:`, response1.status);
       if (response1.data) {
         const dataStr = typeof response1.data === 'string' ? response1.data : JSON.stringify(response1.data);
         console.log(`[CameraConfig] Response data (first 500 chars):`, dataStr.substring(0, 500));
       }
-      return response1;
+      
+      if (response1.status === 200) {
+        return response1;
+      } else {
+        throw new Error(`Request failed with status ${response1.status}`);
+      }
     } catch (error: any) {
       console.error(`[CameraConfig] simpleDigestAuth error:`, error.message);
       console.error(`[CameraConfig] Error stack:`, error.stack);
