@@ -108,7 +108,10 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
   const [progress, setProgress] = useState<DeploymentProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
-  const [showLogs, setShowLogs] = useState(false);
+  const [showLogs, setShowLogs] = useState(true); // Show logs by default
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
   
   // Get deployment steps based on AI mode
   const deploymentSteps = getDeploymentSteps(config);
@@ -181,7 +184,20 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
     };
 
     const handleLog = (message: string) => {
-      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+      const timestamp = new Date().toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+      });
+      setLogs(prev => {
+        const newLogs = [...prev, `[${timestamp}] ${message}`];
+        // Keep only last 500 logs to prevent memory issues
+        if (newLogs.length > 500) {
+          return newLogs.slice(-500);
+        }
+        return newLogs;
+      });
     };
 
     const handleError = (err: any) => {
@@ -239,13 +255,34 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
 
   // Separate effect for starting deployment
   useEffect(() => {
-    // Start deployment
+    // Start deployment and immediately show that we're starting
     if (config && !existingDeployment) {
+      const timestamp = new Date().toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+      });
+      setLogs([`[${timestamp}] Initializing deployment for project ${project.projectId}...`]);
       window.electronAPI.deployment.start(config);
     } else if (existingDeployment) {
+      const timestamp = new Date().toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+      });
+      setLogs([`[${timestamp}] Resuming deployment ${existingDeployment.id}...`]);
       window.electronAPI.deployment.resume(existingDeployment.id);
     }
   }, []); // Also only run once on mount
+
+  // Auto-scroll to bottom when new logs arrive
+  useEffect(() => {
+    if (autoScroll && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, autoScroll]);
 
   const handlePause = () => {
     if (isPaused) {
@@ -402,31 +439,176 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
       </List>
       
       <Box sx={{ mt: 4, mb: 2 }}>
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={() => setShowLogs(!showLogs)}
-          startIcon={<ViewInAr />}
-        >
-          {showLogs ? 'Hide' : 'View'} Logs
-        </Button>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setShowLogs(!showLogs)}
+            startIcon={<ViewInAr />}
+          >
+            {showLogs ? 'Hide' : 'Show'} Deployment Logs
+          </Button>
+          {showLogs && (
+            <>
+              <Typography variant="caption" color="text.secondary">
+                {logs.length} log entries
+              </Typography>
+              <Button
+                variant="text"
+                size="small"
+                onClick={() => setAutoScroll(!autoScroll)}
+                color={autoScroll ? 'primary' : 'inherit'}
+              >
+                Auto-scroll: {autoScroll ? 'ON' : 'OFF'}
+              </Button>
+              {logs.length > 0 && (
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={() => setLogs([])}
+                >
+                  Clear
+                </Button>
+              )}
+            </>
+          )}
+        </Stack>
       </Box>
       
       <Collapse in={showLogs}>
         <Paper
           variant="outlined"
           sx={{
-            p: 2,
-            maxHeight: 200,
-            overflow: 'auto',
-            bgcolor: 'grey.50',
-            fontFamily: 'monospace',
-            fontSize: '0.875rem',
+            position: 'relative',
+            bgcolor: '#1e1e1e',
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            overflow: 'hidden',
           }}
         >
-          {logs.map((log, index) => (
-            <div key={index}>{log}</div>
-          ))}
+          <Box
+            sx={{
+              position: 'sticky',
+              top: 0,
+              bgcolor: '#2d2d2d',
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+              px: 2,
+              py: 1,
+              zIndex: 1,
+            }}
+          >
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                fontFamily: 'monospace',
+                color: '#9ca3af',
+                textTransform: 'uppercase',
+                letterSpacing: 1,
+              }}
+            >
+              Deployment Console
+            </Typography>
+          </Box>
+          <Box
+            ref={logsContainerRef}
+            sx={{
+              p: 2,
+              maxHeight: 400,
+              minHeight: 200,
+              overflow: 'auto',
+              fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+              fontSize: '0.875rem',
+              lineHeight: 1.6,
+              color: '#e5e7eb',
+              '&::-webkit-scrollbar': {
+                width: 8,
+              },
+              '&::-webkit-scrollbar-track': {
+                bgcolor: '#2d2d2d',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                bgcolor: '#4b5563',
+                borderRadius: 1,
+                '&:hover': {
+                  bgcolor: '#6b7280',
+                },
+              },
+            }}
+          >
+            {logs.length === 0 ? (
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: '#6b7280',
+                  fontFamily: 'monospace',
+                }}
+              >
+                Waiting for deployment logs...
+              </Typography>
+            ) : (
+              logs.map((log, index) => {
+                // Parse log for special formatting
+                const isError = log.includes('error') || log.includes('Error') || log.includes('failed');
+                const isSuccess = log.includes('✓') || log.includes('✅') || log.includes('successfully');
+                const isWarning = log.includes('warning') || log.includes('Warning') || log.includes('⚠');
+                const isInfo = log.includes('ℹ') || log.includes('→') || log.includes('•');
+                
+                let color = '#e5e7eb'; // default
+                if (isError) color = '#ef4444';
+                else if (isSuccess) color = '#10b981';
+                else if (isWarning) color = '#f59e0b';
+                else if (isInfo) color = '#3b82f6';
+                
+                // Extract timestamp and message
+                const timestampMatch = log.match(/^\[(\d{2}:\d{2}:\d{2})\]\s*(.*)/);
+                const timestamp = timestampMatch ? timestampMatch[1] : '';
+                const message = timestampMatch ? timestampMatch[2] : log;
+                
+                return (
+                  <Box 
+                    key={index} 
+                    sx={{ 
+                      display: 'flex',
+                      gap: 2,
+                      '&:hover': {
+                        bgcolor: 'rgba(255, 255, 255, 0.02)',
+                      },
+                      py: 0.25,
+                    }}
+                  >
+                    {timestamp && (
+                      <Typography
+                        component="span"
+                        sx={{
+                          color: '#6b7280',
+                          fontFamily: 'inherit',
+                          fontSize: 'inherit',
+                          minWidth: 70,
+                        }}
+                      >
+                        {timestamp}
+                      </Typography>
+                    )}
+                    <Typography
+                      component="span"
+                      sx={{
+                        color,
+                        fontFamily: 'inherit',
+                        fontSize: 'inherit',
+                        wordBreak: 'break-word',
+                        flex: 1,
+                      }}
+                    >
+                      {message}
+                    </Typography>
+                  </Box>
+                );
+              })
+            )}
+            <div ref={logsEndRef} />
+          </Box>
         </Paper>
       </Collapse>
       

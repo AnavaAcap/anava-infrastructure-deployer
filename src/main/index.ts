@@ -1,23 +1,28 @@
 import { app, BrowserWindow, ipcMain, Menu, Notification } from 'electron';
 import path from 'path';
-import { DeploymentEngine } from './services/deploymentEngine';
-import { StateManager } from './services/stateManager';
-import { GCPOAuthService } from './services/gcpOAuthService';
-import { OptimizedCameraDiscoveryService } from './services/camera/optimizedCameraDiscoveryService';
-import { ACAPDeploymentService } from './services/camera/acapDeploymentService';
-import { ACAPDownloaderService } from './services/camera/acapDownloaderService';
-import { CameraConfigurationService } from './services/camera/cameraConfigurationService';
-import { ProjectCreatorService } from './services/projectCreatorService';
-import { AuthTestService } from './services/authTestService';
+// Lazy load heavy services to improve startup performance
 import { getLogger } from './utils/logger';
-import { configCacheService } from './services/configCache';
-import { fastStartService } from './services/fastStartService';
-import { AIStudioService } from './services/aiStudioService';
-import { UnifiedAuthService } from './services/unifiedAuthService';
-import { google } from 'googleapis';
+import type { DeploymentEngine } from './services/deploymentEngine';
+import type { StateManager } from './services/stateManager';
+import type { GCPOAuthService } from './services/gcpOAuthService';
+import type { UnifiedAuthService } from './services/unifiedAuthService';
+
+// These will be lazy loaded when needed
+let DeploymentEngineClass: typeof import('./services/deploymentEngine').DeploymentEngine;
+let StateManagerClass: typeof import('./services/stateManager').StateManager;
+let GCPOAuthServiceClass: typeof import('./services/gcpOAuthService').GCPOAuthService;
+let UnifiedAuthServiceClass: typeof import('./services/unifiedAuthService').UnifiedAuthService;
+let configCacheService: typeof import('./services/configCache').configCacheService;
+let fastStartService: typeof import('./services/fastStartService').fastStartService;
+let AIStudioServiceClass: typeof import('./services/aiStudioService').AIStudioService;
 
 // Critical: Allow self-signed certificates for camera connections
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+// Global flag to track camera services initialization
+declare global {
+  var cameraServicesInitialized: boolean;
+}
 
 // Disable certificate errors in Chromium for packaged app
 app.commandLine.appendSwitch('ignore-certificate-errors', 'true');
@@ -31,6 +36,40 @@ let deploymentEngine: DeploymentEngine;
 let stateManager: StateManager;
 let gcpOAuthService: GCPOAuthService;
 let unifiedAuthService: UnifiedAuthService;
+
+// Lazy initialization function for camera services
+const initializeCameraServices = async () => {
+  if (!global.cameraServicesInitialized) {
+    try {
+      logger.info('Initializing camera services...');
+      
+      // Import services one by one to catch individual failures
+      const OptimizedCameraDiscoveryService = (await import('./services/camera/optimizedCameraDiscoveryService')).OptimizedCameraDiscoveryService;
+      new OptimizedCameraDiscoveryService();
+      
+      const ACAPDeploymentService = (await import('./services/camera/acapDeploymentService')).ACAPDeploymentService;
+      new ACAPDeploymentService();
+      
+      const ACAPDownloaderService = (await import('./services/camera/acapDownloaderService')).ACAPDownloaderService;
+      new ACAPDownloaderService();
+      
+      const CameraConfigurationService = (await import('./services/camera/cameraConfigurationService')).CameraConfigurationService;
+      new CameraConfigurationService();
+      
+      const ProjectCreatorService = (await import('./services/projectCreatorService')).ProjectCreatorService;
+      new ProjectCreatorService(gcpOAuthService);
+      
+      const AuthTestService = (await import('./services/authTestService')).AuthTestService;
+      new AuthTestService();
+      
+      global.cameraServicesInitialized = true;
+      logger.info('Camera services initialized successfully');
+    } catch (error) {
+      logger.error('Failed to initialize camera services:', error);
+      throw error;
+    }
+  }
+};
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -126,7 +165,7 @@ function checkWindowsDefender() {
 }
 
 app.whenReady().then(async () => {
-  logger.info('App ready, initializing services...');
+  logger.info('App ready, starting fast initialization...');
   
   // Windows-specific DPI scaling
   if (process.platform === 'win32') {
@@ -134,32 +173,48 @@ app.whenReady().then(async () => {
     app.commandLine.appendSwitch('force-device-scale-factor', '1');
   }
   
-  // macOS 15 Sequoia: Initialize network permission handling
-  // This is a production-ready solution that doesn't cause crashes
-  const { macOSNetworkPermission } = await import('./services/macOSNetworkPermission');
-  await macOSNetworkPermission.initialize();
+  // Initialize services immediately
+  // macOS network permissions (only if on macOS)
+  if (process.platform === 'darwin') {
+    const { macOSNetworkPermission } = await import('./services/macOSNetworkPermission');
+    await macOSNetworkPermission.initialize();
+  }
   
-  // Initialize services
-  stateManager = new StateManager();
-  gcpOAuthService = new GCPOAuthService();
+  // Load core services
+  logger.info('Loading core services...');
+  [StateManagerClass, GCPOAuthServiceClass, UnifiedAuthServiceClass] = await Promise.all([
+    import('./services/stateManager').then(m => m.StateManager),
+    import('./services/gcpOAuthService').then(m => m.GCPOAuthService),
+    import('./services/unifiedAuthService').then(m => m.UnifiedAuthService)
+  ]);
   
-  // Clear Google auth cache on startup to prevent race conditions
-  // This ensures users must authenticate fresh each time
-  logger.info('Clearing Google auth cache on startup...');
-  await gcpOAuthService.logout();
+  // Initialize essential services
+  stateManager = new StateManagerClass();
+  gcpOAuthService = new GCPOAuthServiceClass();
+  unifiedAuthService = new UnifiedAuthServiceClass();
   
-  unifiedAuthService = new UnifiedAuthService();
-  await unifiedAuthService.clearAuthCache();
-  deploymentEngine = new DeploymentEngine(stateManager, gcpOAuthService);
+  // Initialize camera services inline
+  const { OptimizedCameraDiscoveryService } = await import('./services/camera/optimizedCameraDiscoveryService');
+  const { ACAPDeploymentService } = await import('./services/camera/acapDeploymentService');
+  const { ACAPDownloaderService } = await import('./services/camera/acapDownloaderService');
+  const { CameraConfigurationService } = await import('./services/camera/cameraConfigurationService');
+  const { ProjectCreatorService } = await import('./services/projectCreatorService');
+  const { AuthTestService } = await import('./services/authTestService');
   
-  // Initialize camera services
-  // Only use one discovery service to avoid duplicate IPC handlers
   new OptimizedCameraDiscoveryService();
   new ACAPDeploymentService();
   new ACAPDownloaderService();
   new CameraConfigurationService();
   new ProjectCreatorService(gcpOAuthService);
   new AuthTestService();
+  
+  // Clear auth cache asynchronously (non-blocking)
+  Promise.all([
+    gcpOAuthService.logout().catch(err => logger.warn('Auth logout failed:', err)),
+    unifiedAuthService.clearAuthCache().catch(err => logger.warn('Clear auth cache failed:', err))
+  ]);
+  
+  logger.info('Core services initialized');
   
   // Setup Windows Jump List
   if (process.platform === 'win32') {
@@ -242,7 +297,8 @@ app.whenReady().then(async () => {
 
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
-
+  
+  // Create window after menu setup
   createWindow();
   
   // Check for Windows Defender potential issues
@@ -374,6 +430,11 @@ ipcMain.handle('auth:logout', async () => {
 
 // Config cache handlers
 ipcMain.handle('config:getCached', async () => {
+  // Lazy load config cache service
+  if (!configCacheService) {
+    const module = await import('./services/configCache');
+    configCacheService = module.configCacheService;
+  }
   const user = await gcpOAuthService.getCurrentUser();
   if (user?.email) {
     return configCacheService.getConfig(user.email);
@@ -382,10 +443,20 @@ ipcMain.handle('config:getCached', async () => {
 });
 
 ipcMain.handle('config:getAllCached', async () => {
+  // Lazy load config cache service
+  if (!configCacheService) {
+    const module = await import('./services/configCache');
+    configCacheService = module.configCacheService;
+  }
   return configCacheService.getAllConfigs();
 });
 
 ipcMain.handle('config:clearCached', async () => {
+  // Lazy load config cache service
+  if (!configCacheService) {
+    const module = await import('./services/configCache');
+    configCacheService = module.configCacheService;
+  }
   const user = await gcpOAuthService.getCurrentUser();
   if (user?.email) {
     configCacheService.clearConfig(user.email);
@@ -436,6 +507,14 @@ ipcMain.handle('state:clear', async () => {
 });
 
 ipcMain.handle('deployment:start', async (_, config: any) => {
+  // Lazy load deployment engine
+  if (!deploymentEngine) {
+    if (!DeploymentEngineClass) {
+      const module = await import('./services/deploymentEngine');
+      DeploymentEngineClass = module.DeploymentEngine;
+    }
+    deploymentEngine = new DeploymentEngineClass(stateManager, gcpOAuthService);
+  }
   // Always clear state before starting a new deployment
   stateManager.clearState();
   return deploymentEngine.startDeployment(config);
@@ -449,7 +528,16 @@ ipcMain.handle('deployment:pause', async () => {
   return deploymentEngine.pauseDeployment();
 });
 
-ipcMain.on('deployment:subscribe', (event) => {
+ipcMain.on('deployment:subscribe', async (event) => {
+  // Ensure deployment engine is loaded
+  if (!deploymentEngine) {
+    if (!DeploymentEngineClass) {
+      const module = await import('./services/deploymentEngine');
+      DeploymentEngineClass = module.DeploymentEngine;
+    }
+    deploymentEngine = new DeploymentEngineClass(stateManager, gcpOAuthService);
+  }
+  
   deploymentEngine.on('progress', (progress) => {
     event.sender.send('deployment:progress', progress);
     
@@ -489,6 +577,11 @@ ipcMain.on('deployment:subscribe', (event) => {
       const user = await gcpOAuthService.getCurrentUser();
       const state = stateManager.getState();
       if (state && user?.email) {
+        // Lazy load config cache service
+        if (!configCacheService) {
+          const module = await import('./services/configCache');
+          configCacheService = module.configCacheService;
+        }
         configCacheService.saveConfig(user.email, {
           ...state.configuration,
           apiGatewayUrl: result.apiGatewayUrl,
@@ -621,7 +714,12 @@ ipcMain.handle('magical:generate-api-key', async () => {
       projectId = projects[0].projectId;
     }
 
-    const aiStudioService = new AIStudioService(gcpOAuthService.oauth2Client);
+    // Lazy load AI Studio service
+    if (!AIStudioServiceClass) {
+      const module = await import('./services/aiStudioService');
+      AIStudioServiceClass = module.AIStudioService;
+    }
+    const aiStudioService = new AIStudioServiceClass(gcpOAuthService.oauth2Client);
     
     if (projectId) {
       try {
@@ -630,6 +728,8 @@ ipcMain.handle('magical:generate-api-key', async () => {
         
         // Also enable API Keys API if needed
         try {
+          // Lazy load googleapis only when needed
+          const { google } = await import('googleapis');
           const serviceusage = google.serviceusage({ version: 'v1', auth: gcpOAuthService.oauth2Client });
           await serviceusage.services.enable({
             name: `projects/${projectId}/services/apikeys.googleapis.com`,
@@ -688,6 +788,15 @@ ipcMain.handle('magical:start-experience', async (_, apiKey: string, anavaKey?: 
       logger.info('Anava license key provided for automatic activation');
     }
     
+    // Lazy load fast start service and camera services
+    if (!fastStartService) {
+      const module = await import('./services/fastStartService');
+      fastStartService = module.fastStartService;
+    }
+    
+    // Initialize camera services if not already done
+    await initializeCameraServices();
+    
     // Subscribe to progress events
     const progressHandler = (progress: any) => {
       mainWindow?.webContents.send('magical:progress', progress);
@@ -712,6 +821,12 @@ ipcMain.handle('magical:analyze-custom', async (_, params: {
   camera: any;
 }) => {
   try {
+    // Lazy load fast start service
+    if (!fastStartService) {
+      const module = await import('./services/fastStartService');
+      fastStartService = module.fastStartService;
+    }
+    
     const response = await fastStartService.processUserQuery(params.query, params.camera);
     return { success: true, response };
   } catch (error: any) {
@@ -732,6 +847,15 @@ ipcMain.handle('magical:connect-to-camera', async (_, params: {
     if (params.anavaKey) {
       logger.info('Anava license key provided for manual connection');
     }
+    
+    // Lazy load fast start service and camera services
+    if (!fastStartService) {
+      const module = await import('./services/fastStartService');
+      fastStartService = module.fastStartService;
+    }
+    
+    // Initialize camera services if not already done
+    await initializeCameraServices();
     
     // Subscribe to progress events
     const progressHandler = (progress: any) => {
@@ -758,7 +882,13 @@ ipcMain.handle('magical:connect-to-camera', async (_, params: {
   }
 });
 
-ipcMain.on('magical:subscribe', (event) => {
+ipcMain.on('magical:subscribe', async (event) => {
+  // Lazy load fast start service if needed
+  if (!fastStartService) {
+    const module = await import('./services/fastStartService');
+    fastStartService = module.fastStartService;
+  }
+  
   // Cancelled
   fastStartService.on('cancelled', () => {
     event.sender.send('magical:cancelled');
@@ -766,7 +896,10 @@ ipcMain.on('magical:subscribe', (event) => {
 });
 
 ipcMain.handle('magical:cancel', async () => {
-  fastStartService.cancel();
+  // Only cancel if service is loaded
+  if (fastStartService) {
+    fastStartService.cancel();
+  }
   return { success: true };
 });
 

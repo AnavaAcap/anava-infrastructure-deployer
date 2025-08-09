@@ -248,6 +248,7 @@ export class DeploymentEngine extends EventEmitter {
 
   private async executeStep(stepName: string): Promise<void> {
     console.log(`\n======== EXECUTING STEP: ${stepName} ========`);
+    this.emitLog(`\n>>> Starting step: ${stepName.replace(/([A-Z])/g, ' $1').trim()}`);
     
     // Define retry configuration for different step types
     const getRetryOptions = (step: string) => {
@@ -336,6 +337,7 @@ export class DeploymentEngine extends EventEmitter {
       
       this.stateManager.updateStep(stepName, { status: 'completed' });
       console.log(`✓ Step ${stepName} completed successfully`);
+      this.emitLog(`✓ Step completed: ${stepName.replace(/([A-Z])/g, ' $1').trim()}`);
     } catch (error) {
       console.error(`✗ Step ${stepName} failed after all retry attempts:`, error);
       this.stateManager.updateStep(stepName, { 
@@ -409,6 +411,10 @@ export class DeploymentEngine extends EventEmitter {
       'generativelanguage.googleapis.com', // AI Studio API
     ];
     
+    const totalApis = criticalApis.length + otherApis.length;
+    this.emitLog(`Preparing to enable ${totalApis} Google Cloud APIs for project ${state.projectId}`);
+    this.emitLog(`Critical APIs (${criticalApis.length}): ${criticalApis.join(', ')}`);
+    
     this.emitProgress({
       currentStep: 'enableApis',
       stepProgress: 0,
@@ -418,7 +424,22 @@ export class DeploymentEngine extends EventEmitter {
 
     // Enable critical APIs first (these are dependencies)
     console.log('Enabling critical APIs...');
-    await this.gcpService.enableApis(state.projectId, criticalApis);
+    this.emitLog('Enabling critical infrastructure APIs first...');
+    
+    // Create a progress callback for API enablement
+    const apiProgressCallback = (apiName: string, status: 'checking' | 'enabling' | 'enabled' | 'already_enabled') => {
+      const statusMessage = {
+        checking: 'Checking',
+        enabling: 'Enabling',
+        enabled: 'Enabled',
+        already_enabled: 'Already enabled'
+      };
+      this.emitLog(`  • ${apiName}: ${statusMessage[status]}`);
+    };
+    
+    await this.gcpService.enableApis(state.projectId, criticalApis, apiProgressCallback);
+    
+    this.emitLog('Critical APIs enabled successfully');
     
     this.emitProgress({
       currentStep: 'enableApis',
@@ -427,25 +448,60 @@ export class DeploymentEngine extends EventEmitter {
       message: 'Enabling remaining APIs in parallel...',
     });
 
-    // Enable other APIs in parallel
+    // Enable other APIs in parallel with progress tracking
     console.log('Enabling remaining APIs in parallel...');
-    await this.gcpService.enableApis(state.projectId, otherApis);
+    this.emitLog(`Enabling ${otherApis.length} additional APIs in parallel (this may take a minute)...`);
+    
+    let enabledCount = 0;
+    const parallelProgressCallback = (apiName: string, status: 'checking' | 'enabling' | 'enabled' | 'already_enabled') => {
+      const statusMessage = {
+        checking: 'Checking',
+        enabling: 'Enabling',
+        enabled: 'Enabled',
+        already_enabled: 'Already enabled'
+      };
+      this.emitLog(`  • ${apiName}: ${statusMessage[status]}`);
+      
+      if (status === 'enabled' || status === 'already_enabled') {
+        enabledCount++;
+        const progress = 30 + (enabledCount / otherApis.length) * 65;
+        this.emitProgress({
+          currentStep: 'enableApis',
+          stepProgress: progress,
+          totalProgress: 16.25 + (progress - 30) * 0.125,
+          message: `Enabled ${criticalApis.length + enabledCount}/${totalApis} APIs...`,
+        });
+      }
+    };
+    
+    await this.gcpService.enableApis(state.projectId, otherApis, parallelProgressCallback);
 
     const allApis = [...criticalApis, ...otherApis];
     this.stateManager.updateStepResource('enableApis', 'apis', allApis);
     
-    // Wait for APIs to propagate, especially firebasestorage.googleapis.com
+    this.emitLog(`All ${totalApis} APIs enabled successfully`);
+    
+    // Wait for APIs to propagate
     console.log('Waiting 15 seconds for APIs to fully propagate...');
+    this.emitLog('Waiting 15 seconds for APIs to propagate across Google Cloud regions...');
     this.emitProgress({
       currentStep: 'enableApis',
       stepProgress: 95,
       totalProgress: 24.5,
       message: 'Waiting for API propagation...',
     });
-    await new Promise(resolve => setTimeout(resolve, 15000));
+    
+    // Emit countdown logs
+    for (let i = 15; i > 0; i--) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (i % 5 === 0) {
+        this.emitLog(`  ${i} seconds remaining...`);
+      }
+    }
     
     const elapsed = Date.now() - startTime;
     console.log(`All APIs enabled in ${elapsed}ms`);
+    this.emitLog(`API enablement completed in ${Math.round(elapsed / 1000)} seconds`);
     
     this.emitProgress({
       currentStep: 'enableApis',
@@ -535,10 +591,12 @@ export class DeploymentEngine extends EventEmitter {
 
   private async stepAssignIamRoles(): Promise<void> {
     console.log('Starting IAM role assignments...');
+    this.emitLog('Configuring IAM roles and permissions...');
     const state = this.stateManager.getState()!;
     const accounts = this.getResourceValue('createServiceAccounts', 'accounts');
     
     console.log('Service accounts found:', accounts);
+    this.emitLog(`Found ${Object.keys(accounts || {}).length} service accounts to configure`);
     
     if (!accounts) {
       throw new Error('No service accounts found. The createServiceAccounts step may have failed or been skipped.');
@@ -603,7 +661,9 @@ export class DeploymentEngine extends EventEmitter {
     ];
     
     // Assign all roles in parallel
+    this.emitLog(`Assigning ${roleAssignments.length} IAM roles in parallel...`);
     await this.gcpService.assignIamRoles(state.projectId, roleAssignments);
+    this.emitLog('IAM roles assigned successfully');
     
     // Grant Cloud Build SA permission to act as the function service accounts
     for (const sa of ['device-auth-sa', 'tvm-sa']) {
@@ -675,6 +735,7 @@ export class DeploymentEngine extends EventEmitter {
 
   private async stepDeployCloudFunctions(): Promise<void> {
     console.log('Starting Cloud Functions deployment...');
+    this.emitLog('Deploying Cloud Functions (this typically takes 5-7 minutes)...');
     const state = this.stateManager.getState()!;
     const accounts = this.getResourceValue('createServiceAccounts', 'accounts');
     const startTime = Date.now();
@@ -933,6 +994,7 @@ export class DeploymentEngine extends EventEmitter {
     const functions = this.getResourceValue('deployCloudFunctions', 'functions');
     
     console.log('Starting API Gateway deployment step...');
+    this.emitLog('Creating API Gateway (this typically takes 10-15 minutes)...');
     console.log('Service accounts:', accounts);
     console.log('Cloud Functions URLs:', functions);
     

@@ -33,7 +33,11 @@ export class GCPApiServiceManager {
     return this.gcpOAuthService.oauth2Client;
   }
 
-  async enableApi(projectId: string, apiName: string): Promise<void> {
+  async enableApi(
+    projectId: string, 
+    apiName: string,
+    progressCallback?: (apiName: string, status: 'checking' | 'enabling' | 'enabled' | 'already_enabled') => void
+  ): Promise<void> {
     try {
       const auth = await this.getAuthClient();
       const serviceUsage = google.serviceusage({
@@ -42,6 +46,10 @@ export class GCPApiServiceManager {
       });
 
       // Check if API is already enabled
+      if (progressCallback) {
+        progressCallback(apiName, 'checking');
+      }
+      
       const parent = `projects/${projectId}`;
       const { data } = await serviceUsage.services.list({
         parent,
@@ -54,6 +62,9 @@ export class GCPApiServiceManager {
 
       if (isEnabled) {
         console.log(`API ${apiName} is already enabled`);
+        if (progressCallback) {
+          progressCallback(apiName, 'already_enabled');
+        }
         return;
       }
 
@@ -73,9 +84,17 @@ export class GCPApiServiceManager {
       }
 
       // Enable the API
+      if (progressCallback) {
+        progressCallback(apiName, 'enabling');
+      }
+      
       await serviceUsage.services.enable({
         name: `${parent}/services/${apiName}`
       });
+
+      if (progressCallback) {
+        progressCallback(apiName, 'enabled');
+      }
 
       // Wait a bit for the API to be fully enabled
       await this.sleep(2000);
@@ -87,7 +106,11 @@ export class GCPApiServiceManager {
     }
   }
 
-  async enableApis(projectId: string, apis: string[]): Promise<void> {
+  async enableApis(
+    projectId: string, 
+    apis: string[], 
+    progressCallback?: (apiName: string, status: 'checking' | 'enabling' | 'enabled' | 'already_enabled') => void
+  ): Promise<void> {
     console.log(`Enabling ${apis.length} APIs in parallel...`);
     const startTime = Date.now();
     
@@ -100,6 +123,12 @@ export class GCPApiServiceManager {
 
       // Check which APIs are already enabled
       const parent = `projects/${projectId}`;
+      
+      // Report checking status for all APIs
+      if (progressCallback) {
+        apis.forEach(api => progressCallback(api, 'checking'));
+      }
+      
       const { data } = await serviceUsage.services.list({
         parent,
         filter: `state:ENABLED`,
@@ -109,6 +138,15 @@ export class GCPApiServiceManager {
       const enabledApis = new Set(
         data.services?.map(service => service.name?.split('/').pop()) || []
       );
+
+      // Report already enabled APIs
+      if (progressCallback) {
+        apis.forEach(api => {
+          if (enabledApis.has(api)) {
+            progressCallback(api, 'already_enabled');
+          }
+        });
+      }
 
       const apisToEnable = apis.filter(api => !enabledApis.has(api));
       
@@ -135,10 +173,16 @@ export class GCPApiServiceManager {
       const tasks = apisToEnable.map(api => ({
         name: api,
         fn: async () => {
+          if (progressCallback) {
+            progressCallback(api, 'enabling');
+          }
           await serviceUsage.services.enable({
             name: `${parent}/services/${api}`
           });
           console.log(`Enabled API: ${api}`);
+          if (progressCallback) {
+            progressCallback(api, 'enabled');
+          }
         },
         critical: false // Continue even if one fails
       }));

@@ -50,6 +50,7 @@ import {
   Security as SecurityIcon,
   CloudDownload as CloudDownloadIcon,
   Speaker as SpeakerIcon,
+  Cloud as CloudIcon,
   SkipNext as SkipNextIcon,
   SmartToy as SmartToyIcon,
   OpenInNew as OpenInNewIcon,
@@ -795,6 +796,9 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       setDeploying(false);
       setDeploymentProgress(0);
       setDeploymentStatus('');
+      
+      // Mark step 2 as completed
+      setCompleted(prev => ({ ...prev, 2: true }));
       
       // Use a callback to ensure state updates properly
       setActiveStep(prev => {
@@ -1738,6 +1742,34 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               </Typography>
               
               <Grid container spacing={2} sx={{ mt: 2 }}>
+                <Grid item xs={12}>
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    onClick={() => {
+                      // Save current camera to context before navigating
+                      if (selectedCamera) {
+                        updateCamera(selectedCamera.id, {
+                          ...selectedCamera,
+                          credentials: { username: credentials.username, password: credentials.password }
+                        });
+                      }
+                      // Navigate to Private Cloud Setup
+                      if (onNavigate) {
+                        onNavigate('gcp-setup');
+                      }
+                    }}
+                    startIcon={<CloudDownloadIcon />}
+                    color="secondary"
+                    size="large"
+                    sx={{ py: 1.5 }}
+                  >
+                    Setup Private Cloud
+                  </Button>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                    Deploy your own Google Cloud infrastructure for this camera
+                  </Typography>
+                </Grid>
                 <Grid item xs={12} sm={6}>
                   <Button
                     variant="outlined"

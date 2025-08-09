@@ -1,16 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Box, Container, ThemeProvider, CssBaseline, Typography, Button, CircularProgress } from '@mui/material';
-import WelcomePage from './pages/WelcomePage';
-import LoginPageUnified from './pages/LoginPageUnified';
-import AuthenticationPage from './pages/AuthenticationPage';
-import ConfigurationPage from './pages/ConfigurationPage';
-import DeploymentPage from './pages/DeploymentPage';
-import CompletionPage from './pages/CompletionPage';
-import { EnhancedCameraDiscoveryPage } from './pages/camera/EnhancedCameraDiscoveryPage';
-import { ACAPDeploymentPage } from './pages/camera/ACAPDeploymentPage';
-import { ACAPManager } from './pages/camera/ACAPManager';
-import CameraSetupPage from './pages/CameraSetupPage';
-import DetectionTestPage from './pages/DetectionTestPage';
 import NavigationSidebar, { NavigationView } from './components/NavigationSidebar';
 import TopBar from './components/TopBar';
 import { anavaTheme } from './theme/anavaTheme';
@@ -20,6 +9,21 @@ import EULADialog from './components/EULADialog';
 import AppLoader from './components/AppLoader';
 import { DeploymentConfig, GCPProject, CameraInfo } from '../types';
 import { CameraProvider } from './contexts/CameraContext';
+
+// Import essential pages directly for now
+import WelcomePage from './pages/WelcomePage';
+import LoginPageUnified from './pages/LoginPageUnified';
+
+// Lazy load only heavy/less-used pages
+const AuthenticationPage = lazy(() => import('./pages/AuthenticationPage'));
+const ConfigurationPage = lazy(() => import('./pages/ConfigurationPage'));
+const DeploymentPage = lazy(() => import('./pages/DeploymentPage'));
+const CompletionPage = lazy(() => import('./pages/CompletionPage'));
+const EnhancedCameraDiscoveryPage = lazy(() => import('./pages/camera/EnhancedCameraDiscoveryPage').then(m => ({ default: m.EnhancedCameraDiscoveryPage })));
+const ACAPDeploymentPage = lazy(() => import('./pages/camera/ACAPDeploymentPage').then(m => ({ default: m.ACAPDeploymentPage })));
+const ACAPManager = lazy(() => import('./pages/camera/ACAPManager').then(m => ({ default: m.ACAPManager })));
+const CameraSetupPage = lazy(() => import('./pages/CameraSetupPage'));
+const DetectionTestPage = lazy(() => import('./pages/DetectionTestPage'));
 
 function App() {
   const [isAppReady, setIsAppReady] = useState(false);
@@ -36,40 +40,34 @@ function App() {
   const [eulaAccepted, setEulaAccepted] = useState(false);
 
   useEffect(() => {
-    // Show UI immediately, then load heavy operations
-    const initializeApp = async () => {
-      // First, show the UI quickly
-      setIsAppReady(true);
-      
-      // Then subscribe to deployment events
+    // Show UI immediately with minimal initialization
+    setIsAppReady(true);
+    
+    // Check EULA from localStorage (synchronous, fast)
+    const accepted = localStorage.getItem('eulaAccepted') === 'true';
+    setEulaAccepted(accepted);
+    
+    // Defer all heavy operations to next tick
+    requestAnimationFrame(() => {
+      // Subscribe to deployment events
       window.electronAPI.deployment.subscribe();
       
-      // Check EULA (fast, local storage)
-      const accepted = localStorage.getItem('eulaAccepted') === 'true';
-      console.log('EULA acceptance status:', accepted);
-      setEulaAccepted(accepted);
-      
-      // Defer authentication check slightly to let UI render
-      setTimeout(async () => {
-        try {
-          // Check for cached license key
-          const licenseResult = await window.electronAPI.license.getAssignedKey();
-          if (licenseResult.success && licenseResult.key) {
-            setLicenseKey(licenseResult.key);
-            setAuthState('authenticated');
-          } else {
-            // Check standard GCP authentication
-            const result = await window.electronAPI.auth.check();
-            setAuthState(result.authenticated ? 'authenticated' : 'unauthenticated');
-          }
-        } catch (error) {
-          console.error('Failed to initialize auth:', error);
-          setAuthState('unauthenticated');
+      // Check authentication state asynchronously
+      Promise.all([
+        window.electronAPI.license.getAssignedKey().catch(() => ({ success: false })),
+        window.electronAPI.auth.check().catch(() => ({ authenticated: false }))
+      ]).then(([licenseResult, authResult]) => {
+        if (licenseResult.success && licenseResult.key) {
+          setLicenseKey(licenseResult.key);
+          setAuthState('authenticated');
+        } else {
+          setAuthState(authResult.authenticated ? 'authenticated' : 'unauthenticated');
         }
-      }, 100); // Small delay to let UI render first
-    };
-    
-    initializeApp();
+      }).catch(error => {
+        console.error('Failed to initialize auth:', error);
+        setAuthState('unauthenticated');
+      });
+    });
   }, []);
 
   const handleViewChange = (view: NavigationView) => {
@@ -182,9 +180,11 @@ function App() {
       );
     }
     
-    switch (currentView) {
-      case 'welcome':
-        return (
+    // Wrap content in Suspense for lazy-loaded components
+    const content = (() => {
+      switch (currentView) {
+        case 'welcome':
+          return (
           <WelcomePage
             key={licenseKey || 'no-license'} // Force re-render when license changes
             onNewDeployment={() => setCurrentView('gcp-setup')}
@@ -312,9 +312,20 @@ function App() {
       case 'detection-test':
         return <DetectionTestPage />;
 
-      default:
-        return null;
-    }
+        default:
+          return null;
+      }
+    })();
+    
+    return (
+      <Suspense fallback={
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+          <CircularProgress />
+        </Box>
+      }>
+        {content}
+      </Suspense>
+    );
   };
 
   // Use the standard theme
@@ -339,12 +350,14 @@ function App() {
           open={!eulaAccepted} 
           onAccept={() => setEulaAccepted(true)} 
         />
-        <LoginPageUnified 
-          onLoginSuccess={() => {
-            setAuthState('authenticated');
-            loadLicenseKey();
-          }}
-        />
+        <Suspense fallback={<AppLoader message="Loading login..." />}>
+          <LoginPageUnified 
+            onLoginSuccess={() => {
+              setAuthState('authenticated');
+              loadLicenseKey();
+            }}
+          />
+        </Suspense>
         <RetroEasterEgg trigger="konami" />
       </ThemeProvider>
     );
@@ -361,35 +374,35 @@ function App() {
         <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
           <TopBar title="Anava Vision Installer" onLogout={handleLogout} />
         
-        <Box sx={{ display: 'flex', flex: 1 }}>
-          <NavigationSidebar
-            currentView={currentView}
-            onViewChange={handleViewChange}
-            deploymentComplete={deploymentComplete}
-            camerasConfigured={camerasConfigured}
-          />
-          
-          <Box
-            component="main"
-            sx={{
-              flexGrow: 1,
-              bgcolor: 'background.default',
-              marginTop: '48px', // Account for TopBar height
-              position: 'relative',
-              display: 'flex',
-              flexDirection: 'column',
-              height: 'calc(100vh - 48px)',
-            }}
-          >
-            <Box sx={{ flex: 1, overflow: 'auto' }}>
-              {renderContent()}
+          <Box sx={{ display: 'flex', flex: 1 }}>
+            <NavigationSidebar
+              currentView={currentView}
+              onViewChange={handleViewChange}
+              deploymentComplete={deploymentComplete}
+              camerasConfigured={camerasConfigured}
+            />
+            
+            <Box
+              component="main"
+              sx={{
+                flexGrow: 1,
+                bgcolor: 'background.default',
+                marginTop: '48px', // Account for TopBar height
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                height: 'calc(100vh - 48px)',
+              }}
+            >
+              <Box sx={{ flex: 1, overflow: 'auto' }}>
+                {renderContent()}
+              </Box>
+              <AppFooter />
             </Box>
-            <AppFooter />
           </Box>
         </Box>
-      </Box>
-      <RetroEasterEgg trigger="konami" />
-    </ThemeProvider>
+        <RetroEasterEgg trigger="konami" />
+      </ThemeProvider>
     </CameraProvider>
   );
 }

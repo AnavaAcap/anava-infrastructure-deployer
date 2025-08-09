@@ -4,7 +4,8 @@
   "description": "Anava Installer - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "npm run build:main && NODE_ENV=development electron .",
+    "dev": "node scripts/dev-concurrent.js",
+    "dev:electron": "npm run build:main && NODE_ENV=development electron .",
     "download-terraform": "node scripts/download-terraform.js",
     "download-terraform-win": "node scripts/download-terraform-win.js",
     "dev:renderer": "vite --config vite.config.ts",
