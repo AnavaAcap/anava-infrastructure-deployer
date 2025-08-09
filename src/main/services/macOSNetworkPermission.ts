@@ -242,7 +242,7 @@ do shell script "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add '${a
     const { exec } = require('child_process');
     const appPath = app.getPath('exe');
     
-    exec('/usr/libexec/ApplicationFirewall/socketfilterfw --listapps', { encoding: 'utf8' }, (error, stdout) => {
+    exec('/usr/libexec/ApplicationFirewall/socketfilterfw --listapps', { encoding: 'utf8' }, (error: any, stdout: any) => {
       if (!error && stdout && stdout.includes(appPath)) {
         logger.info('App is already in firewall, network access should be available');
       } else {
