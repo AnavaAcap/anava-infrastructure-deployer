@@ -10,6 +10,7 @@ import { CameraInfo } from '../../types';
 import axios from 'axios';
 import crypto from 'crypto';
 import os from 'os';
+import { getCameraBaseUrl } from './camera/cameraProtocolUtils';
 
 const logger = getLogger();
 
@@ -1235,7 +1236,8 @@ export class FastStartService extends EventEmitter {
     if (this.abortController?.signal.aborted) return null;
     
     try {
-      const baseURL = `http://${ip}:80`;
+      // Try HTTPS first, fallback to HTTP
+      const baseURL = await getCameraBaseUrl(ip);
       
       // First, quick TCP check to see if port 80 is even open
       const isOpen = await new Promise<boolean>((resolve) => {

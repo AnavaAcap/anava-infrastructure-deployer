@@ -102,6 +102,7 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
       [cam.id]: cam.ip
     }), {})
   );
+  const [licenseFailures, setLicenseFailures] = useState<Map<string, string>>(new Map());
 
   const steps = [
     {
@@ -117,6 +118,36 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
       description: 'Test camera connections',
     },
   ];
+
+  const retryLicenseActivation = async (cameraId: string) => {
+    const camera = cameras.find(c => c.id === cameraId);
+    if (!camera) return;
+
+    try {
+      setDeploymentLog(prev => [...prev, `Retrying license activation for ${camera.model}...`]);
+      
+      const currentIP = cameraIPs[camera.id] || camera.ip;
+      await window.electronAPI.activateLicenseKey(
+        currentIP,
+        credentials[camera.id].username,
+        credentials[camera.id].password,
+        deploymentConfig.anavaKey,
+        'BatonAnalytic'
+      );
+      
+      // Remove from failures if successful
+      setLicenseFailures(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(cameraId);
+        return newMap;
+      });
+      
+      setDeploymentLog(prev => [...prev, `✓ License activated successfully for ${camera.model}`]);
+    } catch (error: any) {
+      setDeploymentLog(prev => [...prev, `✗ License retry failed: ${error.message}`]);
+      setLicenseFailures(prev => new Map(prev).set(cameraId, error.message));
+    }
+  };
 
   const configureCameras = async () => {
     setConfiguring(true);
@@ -309,8 +340,12 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                   addLog(`✓ Camera already has a valid license`);
                 } else if (licenseError.message?.includes('stream has been aborted')) {
                   addLog(`⚠ License activation timeout - camera may be processing the request`);
+                  // Track failure for retry
+                  setLicenseFailures(prev => new Map(prev).set(camera.id, 'License activation timeout'));
                 } else {
                   addLog(`⚠ License activation failed: ${licenseError.message}`);
+                  // Track failure for retry
+                  setLicenseFailures(prev => new Map(prev).set(camera.id, licenseError.message));
                 }
                 // Non-fatal - continue with deployment
               }
@@ -592,6 +627,46 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                   </Box>
                 </CardContent>
               </Card>
+            )}
+            
+            {/* License Activation Failures */}
+            {licenseFailures.size > 0 && activeStep === 1 && (
+              <Alert 
+                severity="warning" 
+                sx={{ mt: 2 }}
+                action={
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {Array.from(licenseFailures.entries()).map(([cameraId, errorMsg]) => {
+                      const camera = cameras.find(c => c.id === cameraId);
+                      return (
+                        <Button
+                          key={cameraId}
+                          size="small"
+                          variant="outlined"
+                          onClick={() => retryLicenseActivation(cameraId)}
+                        >
+                          Retry {camera?.model || cameraId}
+                        </Button>
+                      );
+                    })}
+                  </Box>
+                }
+              >
+                <Typography variant="subtitle2" gutterBottom>
+                  License Activation Issues
+                </Typography>
+                {Array.from(licenseFailures.entries()).map(([cameraId, errorMsg]) => {
+                  const camera = cameras.find(c => c.id === cameraId);
+                  return (
+                    <Typography key={cameraId} variant="body2">
+                      • {camera?.model || cameraId}: {errorMsg}
+                    </Typography>
+                  );
+                })}
+                <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
+                  You can retry activation or manually activate through the camera's web interface.
+                </Typography>
+              </Alert>
             )}
           </Box>
         );
