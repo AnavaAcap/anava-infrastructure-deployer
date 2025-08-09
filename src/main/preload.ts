@@ -19,16 +19,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resume: (deploymentId: string) => ipcRenderer.invoke('deployment:resume', deploymentId),
     pause: () => ipcRenderer.invoke('deployment:pause'),
     onProgress: (callback: (progress: any) => void) => {
-      ipcRenderer.on('deployment:progress', (_, progress) => callback(progress));
+      const handler = (_: any, progress: any) => callback(progress);
+      ipcRenderer.on('deployment:progress', handler);
+      return () => ipcRenderer.removeListener('deployment:progress', handler);
     },
     onError: (callback: (error: any) => void) => {
-      ipcRenderer.on('deployment:error', (_, error) => callback(error));
+      const handler = (_: any, error: any) => callback(error);
+      ipcRenderer.on('deployment:error', handler);
+      return () => ipcRenderer.removeListener('deployment:error', handler);
     },
     onComplete: (callback: (result: any) => void) => {
-      ipcRenderer.on('deployment:complete', (_, result) => callback(result));
+      const handler = (_: any, result: any) => callback(result);
+      ipcRenderer.on('deployment:complete', handler);
+      return () => ipcRenderer.removeListener('deployment:complete', handler);
     },
     onLog: (callback: (message: string) => void) => {
-      ipcRenderer.on('deployment:log', (_, message) => callback(message));
+      const handler = (_: any, message: string) => callback(message);
+      ipcRenderer.on('deployment:log', handler);
+      return () => ipcRenderer.removeListener('deployment:log', handler);
     },
     subscribe: () => ipcRenderer.send('deployment:subscribe'),
   },

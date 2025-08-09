@@ -252,6 +252,22 @@ export class UnifiedAuthService {
     await authSession.clearStorageData();
   }
 
+  /**
+   * Clear auth cache on startup to prevent race conditions
+   */
+  async clearAuthCache(): Promise<void> {
+    this.store.delete('authTokens');
+    if (this.oauth2Client) {
+      this.oauth2Client.setCredentials({});
+    }
+    
+    // Clear auth session
+    const authSession = session.fromPartition('auth-session');
+    await authSession.clearStorageData();
+    
+    console.log('Unified auth cache cleared');
+  }
+
   private closeAuthWindow(): void {
     if (this.authWindow && !this.authWindow.isDestroyed()) {
       this.authWindow.close();

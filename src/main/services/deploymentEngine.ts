@@ -125,16 +125,15 @@ export class DeploymentEngine extends EventEmitter {
           console.log('🎉 ========================================= 🎉\n');
           
           const state = this.stateManager.getState()!;
-          const isAiStudioMode = state.configuration.aiMode === 'ai-studio';
           
-          const gatewayUrl = isAiStudioMode ? null : this.getResourceValue('createApiGateway', 'gatewayUrl');
-          const apiKey = isAiStudioMode ? null : this.getResourceValue('createApiGateway', 'apiKey');
+          const gatewayUrl = this.getResourceValue('createApiGateway', 'gatewayUrl');
+          const apiKey = this.getResourceValue('createApiGateway', 'apiKey');
           const firebaseConfig = this.getResourceValue('createFirebaseWebApp', 'config');
           
           // Validate critical resources exist
           const missingResources: string[] = [];
-          if (!isAiStudioMode && !gatewayUrl) missingResources.push('API Gateway URL');
-          if (!isAiStudioMode && !apiKey) missingResources.push('API Key');
+          if (!gatewayUrl) missingResources.push('API Gateway URL');
+          if (!apiKey) missingResources.push('API Key');
           if (!firebaseConfig) missingResources.push('Firebase Configuration');
           if (!firebaseConfig?.apiKey) missingResources.push('Firebase API Key');
           
@@ -284,8 +283,6 @@ export class DeploymentEngine extends EventEmitter {
       
       // Execute step with retry logic
       await ResilienceUtils.withRetry(async () => {
-        const isAiStudioMode = this.stateManager.getState()?.configuration.aiMode === 'ai-studio';
-        
         switch (stepName) {
           case 'authenticate':
             await this.stepAuthenticate();
@@ -294,44 +291,31 @@ export class DeploymentEngine extends EventEmitter {
             await this.stepEnableApis();
             break;
           case 'createAiStudioKey':
-            if (isAiStudioMode) {
+            // Optional step - only runs if AI Studio API key is configured
+            if (this.stateManager.getState()?.configuration.aiStudioApiKey) {
               await this.stepCreateAiStudioKey();
             }
             break;
           case 'createServiceAccounts':
-            if (!isAiStudioMode) {
-              await this.stepCreateServiceAccounts();
-            }
+            await this.stepCreateServiceAccounts();
             break;
           case 'assignIamRoles':
-            if (!isAiStudioMode) {
-              await this.stepAssignIamRoles();
-            }
+            await this.stepAssignIamRoles();
             break;
           case 'deployCloudFunctions':
-            if (!isAiStudioMode) {
-              await this.stepDeployCloudFunctions();
-            }
+            await this.stepDeployCloudFunctions();
             break;
           case 'createApiGateway':
-            if (!isAiStudioMode) {
-              await this.stepCreateApiGateway();
-            }
+            await this.stepCreateApiGateway();
             break;
           case 'configureWorkloadIdentity':
-            if (!isAiStudioMode) {
-              await this.stepConfigureWorkloadIdentity();
-            }
+            await this.stepConfigureWorkloadIdentity();
             break;
           case 'setupFirestore':
-            if (!isAiStudioMode) {
-              await this.stepSetupFirestore();
-            }
+            await this.stepSetupFirestore();
             break;
           case 'createFirebaseWebApp':
-            if (!isAiStudioMode) {
-              await this.stepCreateFirebaseWebApp();
-            }
+            await this.stepCreateFirebaseWebApp();
             break;
           default:
             throw new Error(`Unknown step: ${stepName}`);
@@ -393,49 +377,9 @@ export class DeploymentEngine extends EventEmitter {
 
   private async stepEnableApis(): Promise<void> {
     const state = this.stateManager.getState()!;
-    const isAiStudioMode = state.configuration.aiMode === 'ai-studio';
-    const isNoProject = state.projectId === 'no-project';
     const startTime = Date.now();
 
-    // For AI Studio mode with no project, skip API enabling
-    if (isAiStudioMode && isNoProject) {
-      this.emitProgress({
-        currentStep: 'enableApis',
-        stepProgress: 100,
-        totalProgress: 50,
-        message: 'Skipped - Using personal API key',
-      });
-      return;
-    }
-
-    // For AI Studio mode with project, only enable minimal APIs
-    if (isAiStudioMode) {
-      const aiStudioApis = [
-        'serviceusage.googleapis.com',
-        'generativelanguage.googleapis.com',
-        'apikeys.googleapis.com',
-      ];
-
-      this.emitProgress({
-        currentStep: 'enableApis',
-        stepProgress: 0,
-        totalProgress: 25,
-        message: 'Enabling AI Studio APIs...',
-      });
-
-      await this.gcpService.enableApis(state.projectId, aiStudioApis);
-
-      this.emitProgress({
-        currentStep: 'enableApis',
-        stepProgress: 100,
-        totalProgress: 50,
-        message: 'AI Studio APIs enabled',
-      });
-      
-      return;
-    }
-
-    // Full API list for Vertex AI mode
+    // Full API list for complete deployment
     const criticalApis = [
       'serviceusage.googleapis.com',
       'iam.googleapis.com',
@@ -462,6 +406,7 @@ export class DeploymentEngine extends EventEmitter {
       'apikeys.googleapis.com',
       'identitytoolkit.googleapis.com', // Firebase Auth API
       'aiplatform.googleapis.com', // Vertex AI API
+      'generativelanguage.googleapis.com', // AI Studio API
     ];
     
     this.emitProgress({
@@ -485,19 +430,6 @@ export class DeploymentEngine extends EventEmitter {
     // Enable other APIs in parallel
     console.log('Enabling remaining APIs in parallel...');
     await this.gcpService.enableApis(state.projectId, otherApis);
-    
-    // Enable AI Studio API if using AI Studio mode
-    if (state.configuration.aiMode === 'ai-studio' && this.aiStudioService) {
-      console.log('Enabling Generative Language API for AI Studio...');
-      this.emitProgress({
-        currentStep: 'enableApis',
-        stepProgress: 90,
-        totalProgress: 23.75,
-        message: 'Enabling AI Studio API...',
-      });
-      
-      await this.aiStudioService.enableGenerativeLanguageAPI(state.projectId);
-    }
 
     const allApis = [...criticalApis, ...otherApis];
     this.stateManager.updateStepResource('enableApis', 'apis', allApis);
@@ -749,6 +681,10 @@ export class DeploymentEngine extends EventEmitter {
     
     console.log('Service accounts for functions:', accounts);
     
+    if (!accounts) {
+      throw new Error('Service accounts not found. The createServiceAccounts step may have failed or been skipped.');
+    }
+    
     if (!this.cloudFunctionsAPIDeployer) {
       throw new Error('Cloud Functions API deployer not initialized');
     }
@@ -761,6 +697,10 @@ export class DeploymentEngine extends EventEmitter {
     const cloudFunctionsSA = `service-${projectNumber}@gcf-admin-robot.iam.gserviceaccount.com`;
     console.log(`Granting Cloud Functions service agent (${cloudFunctionsSA}) required permissions...`);
     
+    // Wait a bit for the service agent to be created by Google after enabling Cloud Functions API
+    console.log('Waiting 5 seconds for Cloud Functions service agent to be created...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
     try {
       await this.gcpService.assignIamRole(
         state.projectId,
@@ -769,13 +709,29 @@ export class DeploymentEngine extends EventEmitter {
       );
       console.log(`✅ Granted Artifact Registry reader permissions to Cloud Functions service agent`);
       
+      // Also grant writer permission for creating images during build
+      await this.gcpService.assignIamRole(
+        state.projectId,
+        cloudFunctionsSA,
+        'roles/artifactregistry.writer'
+      );
+      console.log(`✅ Granted Artifact Registry writer permissions to Cloud Functions service agent`);
+      
       // Wait for IAM propagation - critical for avoiding race conditions
-      console.log('Waiting 10 seconds for IAM permissions to propagate...');
-      await new Promise(resolve => setTimeout(resolve, 10000));
+      console.log('Waiting 15 seconds for IAM permissions to propagate globally...');
+      await new Promise(resolve => setTimeout(resolve, 15000));
     } catch (error: any) {
-      console.warn('Warning: Could not grant Cloud Functions service agent permissions:', error.message);
-      console.warn('This may cause deployment failures. Error details:', error.response?.data || error);
-      // Continue anyway - the user might have already set this up manually
+      console.error('ERROR: Could not grant Cloud Functions service agent permissions:', error.message);
+      console.error('Error details:', error.response?.data || error);
+      
+      // This is CRITICAL - if we can't grant permissions, deployment WILL fail
+      throw new Error(
+        `Failed to grant Artifact Registry permissions to Cloud Functions service agent.\n` +
+        `Service account: ${cloudFunctionsSA}\n` +
+        `This is required for Cloud Functions deployment.\n` +
+        `Error: ${error.message}\n` +
+        `Please manually grant 'roles/artifactregistry.reader' and 'roles/artifactregistry.writer' to the service account above.`
+      );
     }
     
     // Ensure gcf-artifacts repository permissions are set up
@@ -979,6 +935,14 @@ export class DeploymentEngine extends EventEmitter {
     console.log('Starting API Gateway deployment step...');
     console.log('Service accounts:', accounts);
     console.log('Cloud Functions URLs:', functions);
+    
+    if (!accounts) {
+      throw new Error('Service accounts not found. The createServiceAccounts step may have failed or been skipped.');
+    }
+    
+    if (!functions || !functions['device-auth'] || !functions['token-vending-machine']) {
+      throw new Error('Cloud Functions not found. The deployCloudFunctions step may have failed or been skipped. Functions: ' + JSON.stringify(functions));
+    }
     
     if (!this.apiGatewayDeployer) {
       throw new Error('API Gateway deployer not initialized');

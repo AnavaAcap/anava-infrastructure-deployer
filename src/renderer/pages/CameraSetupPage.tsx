@@ -54,6 +54,7 @@ import {
   SmartToy as SmartToyIcon,
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
+import { useCameraContext } from '../contexts/CameraContext';
 
 interface CameraInfo {
   id: string;
@@ -78,6 +79,7 @@ interface CameraSetupPageProps {
 }
 
 const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
+  const { addCamera, updateCamera } = useCameraContext();
   const [activeStep, setActiveStep] = useState(0);
   const [completed, setCompleted] = useState<{ [key: number]: boolean }>({});
   const [previouslyConfiguredCameras, setPreviouslyConfiguredCameras] = useState<any[]>([]);
@@ -266,6 +268,42 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           };
           setCameras([updatedCamera]);
           setSelectedCamera(updatedCamera);
+          
+          // Add to global camera context
+          const globalCamera = {
+            id: updatedCamera.id,
+            name: updatedCamera.name || `Camera at ${updatedCamera.ip}`,
+            ip: updatedCamera.ip,
+            model: updatedCamera.model,
+            status: {
+              credentials: {
+                completed: true,
+                username: credentials.username,
+                password: credentials.password
+              },
+              discovery: {
+                completed: true,
+                ip: updatedCamera.ip,
+                model: updatedCamera.model,
+                firmwareVersion: updatedCamera.firmwareVersion
+              },
+              deployment: {
+                completed: hasACAP,
+                hasACAP: hasACAP,
+                isLicensed: hasACAP
+              },
+              speaker: {
+                completed: false,
+                configured: false
+              },
+              verification: {
+                completed: false
+              }
+            },
+            lastUpdated: new Date()
+          };
+          addCamera(globalCamera);
+          
           setActiveStep(2);
           setCompleted(prev => ({ ...prev, 0: true, 1: true }));
         } else {
@@ -540,6 +578,51 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         setDeploymentProgress(68);
         setDeploymentStatus('Camera already licensed, updating configuration...');
       }
+      
+      // Start background scene capture NOW - right after ACAP is deployed and licensed
+      // This runs in parallel while we configure the camera and user sets up speaker
+      console.log('Starting background scene capture after ACAP deployment...');
+      const geminiApiKeyForCapture = await (window.electronAPI as any).getConfigValue?.('geminiApiKey');
+      if (geminiApiKeyForCapture) {
+        // Create a temporary camera object with current info
+        const cameraForCapture = {
+          id: selectedCamera.id,
+          ip: selectedCamera.ip,
+          name: selectedCamera.model || `Camera at ${selectedCamera.ip}`,
+          hasACAP: true,
+          hasSpeaker: false, // Will be updated later if speaker is configured
+          credentials: {
+            username: credentials.username,
+            password: credentials.password
+          }
+        };
+        
+        // Fire and forget - don't await this
+        (window.electronAPI as any).getSceneDescription?.(
+          cameraForCapture,
+          geminiApiKeyForCapture,
+          false // No speaker yet
+        ).then(result => {
+          if (result?.success) {
+            console.log('Background scene capture completed successfully');
+            // Store the pre-fetched scene data
+            (window.electronAPI as any).setConfigValue?.('preFetchedScene', {
+              cameraId: cameraForCapture.id,
+              cameraIp: cameraForCapture.ip,
+              description: result.description,
+              imageBase64: result.imageBase64,
+              audioMP3Base64: result.audioMP3Base64,
+              timestamp: Date.now()
+            });
+          } else {
+            console.log('Background scene capture failed:', result?.error);
+          }
+        }).catch(error => {
+          console.error('Background scene capture error:', error);
+        });
+      } else {
+        console.log('No API key available for background scene capture');
+      }
 
       // Step 4: Configure camera
       setDeploymentProgress(70);
@@ -555,13 +638,27 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         });
       }, 500);
       
-      // Get Firebase config (we'll need to implement this)
-      const firebaseConfig = await getFirebaseConfig();
+      // Get API key that should have been generated on home screen
+      const geminiApiKey = await (window.electronAPI as any).getConfigValue?.('geminiApiKey') || '';
+      if (!geminiApiKey) {
+        console.warn('No API key found - user may need to add it manually in Detection Test');
+      }
+      
+      // Get Firebase config (use real Anava AI config)
+      const firebaseConfig = {
+        apiKey: "AIzaSyCJbWAa-zQir1v8kmlye8Kv3kmhPb9r18s",
+        authDomain: "anava-ai.firebaseapp.com",
+        projectId: "anava-ai",
+        storageBucket: "anava-ai.appspot.com",
+        messagingSenderId: "392865621461",
+        appId: "1:392865621461:web:15db206ae4e9c72f7dc95c",
+        databaseId: "(default)"
+      };
       
       const configPayload = {
         firebase: firebaseConfig,
         gemini: {
-          apiKey: '', // Will be set if using AI Studio mode
+          apiKey: geminiApiKey || '', // Use the generated/stored API key
           vertexApiGatewayUrl: '',
           vertexApiGatewayKey: '',
           vertexGcpProjectId: '',
@@ -651,9 +748,47 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       await (window.electronAPI as any).setConfigValue?.('configuredCameras', updatedCameras);
       console.log('Saved configured camera:', configuredCamera);
       
-      // Start background scene capture for Detection Test page
-      // This runs in the background while user configures speaker
-      startBackgroundSceneCapture(configuredCamera);
+      // Update global camera context
+      const globalCameraUpdate = {
+        id: selectedCamera.id,
+        name: selectedCamera.name || `Camera at ${selectedCamera.ip}`,
+        ip: selectedCamera.ip,
+        model: selectedCamera.model,
+        status: {
+          credentials: {
+            completed: true,
+            username: credentials.username,
+            password: credentials.password
+          },
+          discovery: {
+            completed: true,
+            ip: selectedCamera.ip,
+            model: selectedCamera.model,
+            firmwareVersion: selectedCamera.firmwareVersion
+          },
+          deployment: {
+            completed: true,
+            hasACAP: true,
+            isLicensed: true,
+            deployedFile: selectedACAPFile
+          },
+          speaker: {
+            completed: configureSpeaker,
+            configured: configureSpeaker && !!speakerConfig.ip,
+            ip: speakerConfig.ip,
+            username: speakerConfig.username,
+            password: speakerConfig.password
+          },
+          verification: {
+            completed: false
+          }
+        },
+        lastUpdated: new Date()
+      };
+      updateCamera(selectedCamera.id, globalCameraUpdate);
+      
+      // NOTE: Background scene capture already started earlier, right after ACAP deployment
+      // It's running in parallel while user configures speaker
       
       // Force step progression - clear deployment state and advance
       console.log('Deployment complete, advancing to step 3 (speaker config)');
@@ -687,19 +822,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
     ));
   };
 
-  const getFirebaseConfig = async () => {
-    // For now, return a mock config
-    // In production, this would fetch from your deployment
-    return {
-      apiKey: "AIzaSyDemoKey",
-      authDomain: "demo.firebaseapp.com",
-      projectId: "anava-demo",
-      storageBucket: "anava-demo.appspot.com",
-      messagingSenderId: "123456789",
-      appId: "1:123456789:web:abcdef",
-      databaseId: "(default)",
-    };
-  };
+  // Removed getFirebaseConfig - using real config inline
 
   const captureAndAnalyzeScene = async (camera: CameraInfo) => {
     // Mock implementation - would call actual VAPIX endpoint
@@ -710,47 +833,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
     };
   };
 
-  const startBackgroundSceneCapture = async (camera: any) => {
-    try {
-      console.log('Starting background scene capture for Detection Test page...');
-      
-      // Get API key
-      const apiKey = await (window.electronAPI as any).getConfigValue?.('geminiApiKey');
-      if (!apiKey) {
-        console.log('No API key available, skipping background capture');
-        return;
-      }
-      
-      // Start the capture in the background - don't await
-      (window.electronAPI as any).getSceneDescription?.(
-        camera,
-        apiKey,
-        camera.hasSpeaker
-      ).then(result => {
-        if (result.success) {
-          // Store the pre-fetched scene data
-          (window.electronAPI as any).setConfigValue?.('preFetchedScene', {
-            cameraId: camera.id,
-            cameraIp: camera.ip,
-            description: result.description,
-            imageBase64: result.imageBase64,
-            audioBase64: result.audioBase64,
-            audioFormat: result.audioFormat,
-            audioMP3Base64: result.audioMP3Base64,
-            timestamp: Date.now(),
-            hasSpeaker: camera.hasSpeaker || false
-          });
-          console.log('Background scene capture completed successfully');
-        } else {
-          console.error('Background scene capture failed:', result.error);
-        }
-      }).catch(err => {
-        console.error('Background scene capture error:', err);
-      });
-    } catch (error) {
-      console.error('Failed to start background scene capture:', error);
-    }
-  };
+  // Function removed - scene capture now happens inline right after ACAP deployment
 
   const getStepContent = (step: number) => {
     switch (step) {
@@ -1593,6 +1676,19 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                             configuredCameras.push(updatedCamera);
                           }
                           await (window.electronAPI as any).setConfigValue?.('configuredCameras', configuredCameras);
+                          
+                          // Update global camera context with speaker info
+                          updateCamera(selectedCamera.id, {
+                            status: {
+                              speaker: {
+                                completed: true,
+                                configured: true,
+                                ip: speakerConfig.ip,
+                                username: speakerConfig.username,
+                                password: speakerConfig.password
+                              }
+                            }
+                          });
                         }
                       } else {
                         console.error('Failed to push speaker configuration:', result.error);
