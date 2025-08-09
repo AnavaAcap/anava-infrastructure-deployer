@@ -151,7 +151,7 @@ export class DeploymentEngine extends EventEmitter {
           
           console.log('📋 Deployment Summary:');
           console.log(`✅ API Gateway URL: ${gatewayUrl}`);
-          console.log(`✅ API Key: ${apiKey}`);
+          console.log(`✅ API Key: ${apiKey ? apiKey.substring(0, 8) + '...' : 'MISSING'}`);
           console.log(`✅ Project: ${this.stateManager.getState()?.projectId}`);
           console.log(`✅ Region: ${this.stateManager.getState()?.region}`);
           

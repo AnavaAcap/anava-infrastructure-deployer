@@ -19,8 +19,20 @@
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux",
     "test": "jest",
+    "test:unit": "jest --selectProjects=unit",
+    "test:integration": "jest --selectProjects=integration",
+    "test:e2e": "jest --selectProjects=e2e",
+    "test:security": "jest --selectProjects=security",
+    "test:regression": "jest tests/regression",
+    "test:performance": "jest tests/performance --runInBand",
+    "test:coverage": "jest --coverage --selectProjects=unit,integration",
+    "test:watch": "jest --watch",
+    "test:ci": "jest --ci --coverage --maxWorkers=2",
     "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "typecheck": "tsc --noEmit",
+    "security:audit": "npm audit --audit-level=high",
+    "security:scan": "npm run security:audit && npm run test:security",
     "prepare": "husky"
   },
   "keywords": [
@@ -138,10 +150,14 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "husky": "^9.1.7",
     "jest": "^30.0.4",
+    "jest-junit": "^16.0.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/jest-dom": "^6.1.0",
     "puppeteer": "^24.15.0",
     "ts-jest": "^29.4.0",
     "typescript": "^5.8.3",
-    "vite": "^7.0.5"
+    "vite": "^7.0.5",
+    "dotenv": "^16.3.1"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

@@ -575,7 +575,7 @@ export class OptimizedCameraDiscoveryService {
                 // It's a camera
                 const camera = await this.checkAxisCamera(ip, cred.username, cred.password, port, protocol);
                 if (camera) {
-                  console.log(`  ✓ Found camera at ${ip}:${port} with ${cred.username}:${cred.password}`);
+                  console.log(`  ✓ Found camera at ${ip}:${port} with ${cred.username}:******`);
                   // If we already found a speaker, attach it to the camera
                   if (existingSpeaker) {
                     camera.speaker = existingSpeaker;
@@ -681,7 +681,7 @@ export class OptimizedCameraDiscoveryService {
 
   async testCameraCredentials(ip: string, username: string, password: string) {
     try {
-      console.log(`Testing credentials ${username}:${password} for ${ip}`);
+      console.log(`Testing credentials ${username}:****** for ${ip}`);
       
       // Find which port the camera is on
       const ports = [...DEFAULT_CAMERA_PORTS.priority, ...DEFAULT_CAMERA_PORTS.common];
