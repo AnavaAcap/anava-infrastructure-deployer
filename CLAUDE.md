@@ -259,6 +259,14 @@ interface ManagedCamera {
 - Google Sign-In OAuth client configuration (optional)
 - Domain verification for custom domains
 
+### Camera HTTPS Support (v0.9.170+)
+- **Automatic Protocol Detection**: Cameras now support both HTTPS and HTTP
+- **HTTPS-First**: Always tries HTTPS first, falls back to HTTP if unavailable
+- **Self-Signed Certificates**: Accepts self-signed certificates for camera HTTPS
+- **Fixes 15-Second Timeout**: Resolves issue where HTTPS-only cameras caused app to freeze
+- **Cached Protocol**: Remembers which protocol works for each camera IP
+- **License Retry**: Failed license activations now show retry buttons in UI
+
 ### Key Features
 - **Production-Ready Vertex AI**: Full infrastructure deployment with enterprise security
 - **Non-linear Navigation**: Jump between sections via sidebar
