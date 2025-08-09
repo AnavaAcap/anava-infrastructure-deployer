@@ -101,8 +101,8 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   const handleExportConfig = async () => {
     try {
       const config = {
-        projectId: result.resources?.createServiceAccounts?.accounts ? 
-          result.resources.createServiceAccounts.accounts['device-auth-sa']?.split('@')[1]?.split('.')[0] : 
+        projectId: result.firebaseConfig?.projectId || 
+          result.resources?.createServiceAccounts?.accounts?.['device-auth-sa']?.split('@')[1]?.split('.')[0] || 
           'unknown',
         apiGatewayUrl: result.apiGatewayUrl,
         apiKey: result.apiKey,
@@ -135,8 +135,8 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     setError(null);
 
     try {
-      const projectId = result.resources?.createServiceAccounts?.accounts ? 
-        result.resources.createServiceAccounts.accounts['device-auth-sa']?.split('@')[1]?.split('.')[0] : 
+      const projectId = result.firebaseConfig?.projectId || 
+        result.resources?.createServiceAccounts?.accounts?.['device-auth-sa']?.split('@')[1]?.split('.')[0] || 
         'unknown';
 
       const response = await window.electronAPI.createFirebaseUser({

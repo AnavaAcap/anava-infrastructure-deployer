@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import axios from 'axios';
 import crypto from 'crypto';
 import { Camera } from './cameraDiscoveryService';
-import { getCameraBaseUrl, createCameraAxiosInstance } from './cameraProtocolUtils';
+import { getCameraBaseUrl } from './cameraProtocolUtils';
 // import AxiosDigestAuth from '@mhoc/axios-digest-auth'; // No longer needed, using simpleDigestAuth
 
 export interface ConfigurationResult {

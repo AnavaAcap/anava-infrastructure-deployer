@@ -58,7 +58,7 @@ export async function testCameraProtocol(
     const httpsUrl = `https://${ip}/axis-cgi/param.cgi?action=list&group=Brand`;
     logger.debug(`[Protocol] Trying HTTPS for ${ip}`);
     
-    const response = await axios.get(httpsUrl, {
+    await axios.get(httpsUrl, {
       timeout: 3000, // Short timeout for protocol test
       auth: username && password ? { username, password } : undefined,
       httpsAgent: new (require('https').Agent)({
@@ -90,7 +90,7 @@ export async function testCameraProtocol(
     const httpUrl = `http://${ip}/axis-cgi/param.cgi?action=list&group=Brand`;
     logger.debug(`[Protocol] Trying HTTP for ${ip}`);
     
-    const response = await axios.get(httpUrl, {
+    await axios.get(httpUrl, {
       timeout: 3000, // Short timeout for protocol test
       auth: username && password ? { username, password } : undefined,
       validateStatus: (status) => status < 500 // Accept any non-server-error
