@@ -7,6 +7,7 @@ import os from 'os';
 import crypto from 'crypto';
 import https from 'https';
 import { Camera } from './cameraDiscoveryService';
+import { getCameraBaseUrl, createCameraAxiosInstance } from './cameraProtocolUtils';
 
 export interface DeploymentResult {
   success: boolean;
@@ -554,7 +555,9 @@ export class ACAPDeploymentService {
     options: any = {}
   ): Promise<any> {
     try {
-      const url = `http://${ip}${uri}`;
+      const baseUrl = await getCameraBaseUrl(ip, username, password);
+      const url = `${baseUrl}${uri}`;
+      const isHttps = url.startsWith('https');
       const httpsAgent = new https.Agent({ rejectUnauthorized: false });
       
       // First request to get the digest challenge
@@ -654,7 +657,9 @@ export class ACAPDeploymentService {
     options: any = {}
   ): Promise<any> {
     try {
-      const url = `http://${ip}${uri}`;
+      const baseUrl = await getCameraBaseUrl(ip, username, password);
+      const url = `${baseUrl}${uri}`;
+      const isHttps = url.startsWith('https');
       const httpsAgent = new https.Agent({ rejectUnauthorized: false });
       
       // First request to get the digest challenge

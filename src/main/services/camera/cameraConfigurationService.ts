@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import axios from 'axios';
 import crypto from 'crypto';
 import { Camera } from './cameraDiscoveryService';
+import { getCameraBaseUrl, createCameraAxiosInstance } from './cameraProtocolUtils';
 // import AxiosDigestAuth from '@mhoc/axios-digest-auth'; // No longer needed, using simpleDigestAuth
 
 export interface ConfigurationResult {
@@ -105,7 +106,8 @@ export class CameraConfigurationService {
     data?: any
   ): Promise<any> {
     try {
-      const url = `http://${ip}${uri}`;
+      const baseUrl = await getCameraBaseUrl(ip, username, password);
+      const url = `${baseUrl}${uri}`;
       
       console.log(`[CameraConfig] simpleDigestAuth: ${method} ${url}`);
       if (data) {
@@ -122,12 +124,16 @@ export class CameraConfigurationService {
       }
       
       // First request to get digest challenge
+      const isHttps = url.startsWith('https');
       const response1 = await axios({
         method,
         url,
         data,
         validateStatus: () => true,
         timeout: 20000,
+        httpsAgent: isHttps ? new (require('https').Agent)({
+          rejectUnauthorized: false // Accept self-signed certificates
+        }) : undefined,
       });
 
       if (response1.status === 401) {
@@ -211,6 +217,9 @@ export class CameraConfigurationService {
             validateStatus: () => true,
             maxRedirects: 0,
             decompress: false,
+            httpsAgent: isHttps ? new (require('https').Agent)({
+              rejectUnauthorized: false // Accept self-signed certificates
+            }) : undefined,
           });
 
           console.log(`[CameraConfig] Response status:`, response2.status);
@@ -381,7 +390,9 @@ export class CameraConfigurationService {
     config: any
   ): Promise<any> {
     try {
-      const url = `http://${ip}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`;
+      const baseUrl = await getCameraBaseUrl(ip, username, password);
+      const url = `${baseUrl}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`;
+      const isHttps = url.startsWith('https');
       
       // First request to get digest challenge
       const response1 = await axios.post(url, config, {
@@ -389,7 +400,10 @@ export class CameraConfigurationService {
         validateStatus: () => true,
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        httpsAgent: isHttps ? new (require('https').Agent)({
+          rejectUnauthorized: false
+        }) : undefined
       });
 
       if (response1.status === 401) {
@@ -410,7 +424,10 @@ export class CameraConfigurationService {
               'Authorization': authHeader,
               'Content-Type': 'application/json'
             },
-            timeout: 10000
+            timeout: 10000,
+            httpsAgent: isHttps ? new (require('https').Agent)({
+              rejectUnauthorized: false
+            }) : undefined
           });
 
           if (response2.status === 200) {
@@ -694,14 +711,15 @@ export class CameraConfigurationService {
           console.warn('[CameraConfig] Puppeteer error - ensure Chrome/Chromium is installed');
         }
         
-        // Don't throw - allow deployment to continue
-        return;
+        // Throw error with clear message so UI can display it
+        throw new Error(`License activation failed: ${error.message}. You may need to activate the license manually through the camera's web interface.`);
       }
       
     } catch (error: any) {
       console.error('[CameraConfig] Error in license activation process:', error);
-      // Don't throw - allow deployment to continue
-      console.warn('[CameraConfig] Please activate the license manually through the camera web UI');
+      // Throw error with user-friendly message
+      const message = error.message || 'Unknown error during license activation';
+      throw new Error(`License activation process failed: ${message}. Please activate the license manually through the camera web UI.`);
     }
   }
 

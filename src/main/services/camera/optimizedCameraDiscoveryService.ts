@@ -7,6 +7,7 @@ import net from 'net';
 import https from 'https';
 import { macOSNetworkPermission } from '../macOSNetworkPermission';
 import { safeConsole } from '../../utils/safeConsole';
+import { getCameraBaseUrl, testCameraProtocol } from './cameraProtocolUtils';
 const PQueue = require('p-queue').default || require('p-queue');
 const Bonjour = require('bonjour-service').Bonjour || require('bonjour-service');
 const { Client: SSDPClient } = require('node-ssdp');
@@ -189,7 +190,7 @@ export class OptimizedCameraDiscoveryService {
                 status: 'accessible',
                 credentials: { username: credentials.username, password: credentials.password },
                 rtspUrl: `rtsp://${credentials.username}:${credentials.password}@${ip}:554/axis-media/media.amp`,
-                httpUrl: `http://${ip}`,
+                httpUrl: await getCameraBaseUrl(ip, credentials.username, credentials.password),
                 authenticated: true
               };
               cameras.push(camera);
@@ -647,7 +648,7 @@ export class OptimizedCameraDiscoveryService {
           discoveredAt: new Date().toISOString(),
           discoveryMethod: 'manual',
           status: 'requires_auth',
-          httpUrl: `http://${ip}`,
+          httpUrl: await getCameraBaseUrl(ip),  // Try HTTPS first
           authenticated: false,
           error: lastAuthError
         }];
@@ -672,7 +673,7 @@ export class OptimizedCameraDiscoveryService {
         discoveredAt: new Date().toISOString(),
         discoveryMethod: 'manual',
         status: 'error',
-        httpUrl: `http://${ip}`,
+        httpUrl: await getCameraBaseUrl(ip),  // Try HTTPS first
         authenticated: false,
         error: error.message || 'Connection failed'
       }];
