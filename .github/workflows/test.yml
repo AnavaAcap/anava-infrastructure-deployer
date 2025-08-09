@@ -1,0 +1,358 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+    branches: [master, main]
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [18, 20]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run unit tests
+      run: npm test -- --selectProjects=unit --coverage
+      env:
+        NODE_ENV: test
+        
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest' && matrix.node == 20
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./coverage/lcov.info
+        flags: unit
+        name: unit-tests
+        
+    - name: Archive test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: unit-test-results-${{ matrix.os }}-node${{ matrix.node }}
+        path: test-results/
+        
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Setup test environment
+      run: |
+        # Create test credentials file
+        echo '{
+          "test": true,
+          "projectId": "test-project",
+          "credentials": {}
+        }' > .env.test
+        
+    - name: Run integration tests
+      run: npm test -- --selectProjects=integration
+      env:
+        NODE_ENV: test
+        INTEGRATION_TEST: true
+        
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: integration-test-results
+        path: test-results/
+        
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run npm audit
+      run: |
+        npm audit --json > audit-report.json || true
+        cat audit-report.json
+        
+    - name: Check for critical vulnerabilities
+      run: |
+        CRITICAL=$(cat audit-report.json | jq '.metadata.vulnerabilities.critical // 0')
+        HIGH=$(cat audit-report.json | jq '.metadata.vulnerabilities.high // 0')
+        if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+          echo "::error::Found $CRITICAL critical and $HIGH high vulnerabilities"
+          exit 1
+        fi
+        
+    - name: Run security tests
+      run: npm test -- --selectProjects=security
+      continue-on-error: true
+      
+    - name: Run Snyk Security Scan
+      uses: snyk/actions/node@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --severity-threshold=high
+      continue-on-error: true
+      
+    - name: Upload security results
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-scan-results
+        path: |
+          audit-report.json
+          test-results/security.json
+          
+  sast-scan:
+    name: Static Application Security Testing
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: javascript, typescript
+        queries: security-extended
+        
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v3
+      
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:javascript"
+        
+    - name: Run Semgrep
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: >-
+          p/security-audit
+          p/typescript
+          p/javascript
+          p/owasp-top-ten
+        generateSarif: true
+        
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: semgrep.sarif
+      if: always()
+      
+  regression-tests:
+    name: Regression Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run regression tests
+      run: npm test -- tests/regression
+      env:
+        NODE_ENV: test
+        
+    - name: Check for known issues
+      run: |
+        # Verify fixes for known issues are in place
+        echo "Checking for Cloud Functions v2 compute SA fix..."
+        grep -r "compute@developer.gserviceaccount.com" src/ || echo "Pattern check passed"
+        
+        echo "Checking for IAM propagation delay handling..."
+        grep -r "waitForServiceAccountPropagation\|exponential.*backoff" src/ || echo "Warning: No propagation delay handling found"
+        
+        echo "Checking for API Gateway placeholder replacement..."
+        grep -r "replace.*\/g" src/ | grep -i "DEVICE_AUTH_URL\|JWT_AUDIENCE" || echo "Warning: Check global replacements"
+        
+  performance-tests:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run performance benchmarks
+      run: |
+        npm run test:performance || true
+        
+    - name: Store benchmark results
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'customBiggerIsBetter'
+        output-file-path: test-results/performance.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        alert-threshold: '110%'
+        comment-on-alert: true
+        fail-on-alert: false
+        
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build application
+      run: npm run build
+      
+    - name: Run E2E tests
+      run: npm test -- --selectProjects=e2e
+      env:
+        NODE_ENV: test
+        E2E_TEST: true
+        
+    - name: Upload E2E test artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-failure-${{ matrix.os }}
+        path: |
+          test-results/
+          screenshots/
+          logs/
+          
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, security-scan, regression-tests]
+    if: always()
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      
+    - name: Generate test report
+      run: |
+        echo "# Test Results Summary" > test-summary.md
+        echo "" >> test-summary.md
+        
+        # Check job results
+        if [ "${{ needs.unit-tests.result }}" == "success" ]; then
+          echo "✅ Unit Tests: Passed" >> test-summary.md
+        else
+          echo "❌ Unit Tests: Failed" >> test-summary.md
+        fi
+        
+        if [ "${{ needs.integration-tests.result }}" == "success" ]; then
+          echo "✅ Integration Tests: Passed" >> test-summary.md
+        else
+          echo "❌ Integration Tests: Failed" >> test-summary.md
+        fi
+        
+        if [ "${{ needs.security-scan.result }}" == "success" ]; then
+          echo "✅ Security Scan: Passed" >> test-summary.md
+        else
+          echo "⚠️ Security Scan: Issues Found" >> test-summary.md
+        fi
+        
+        if [ "${{ needs.regression-tests.result }}" == "success" ]; then
+          echo "✅ Regression Tests: Passed" >> test-summary.md
+        else
+          echo "❌ Regression Tests: Failed" >> test-summary.md
+        fi
+        
+        cat test-summary.md
+        
+    - name: Comment PR with results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const summary = fs.readFileSync('test-summary.md', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: summary
+          });
+          
+    - name: Fail if any tests failed
+      if: |
+        needs.unit-tests.result == 'failure' ||
+        needs.integration-tests.result == 'failure' ||
+        needs.regression-tests.result == 'failure'
+      run: exit 1

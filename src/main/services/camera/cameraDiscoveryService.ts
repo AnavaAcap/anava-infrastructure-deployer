@@ -76,7 +76,7 @@ export class CameraDiscoveryService {
 
   async quickScanSpecificCamera(ip: string, username: string, password: string): Promise<Camera[]> {
     try {
-      console.log(`=== Quick scanning camera at ${ip} with credentials ${username}:${password} ===`);
+      console.log(`=== Quick scanning camera at ${ip} with credentials ${username}:****** ===`);
       
       // First check if the IP is reachable via TCP
       console.log(`Step 1: Checking if ${ip} is reachable via TCP...`);
@@ -109,7 +109,7 @@ export class CameraDiscoveryService {
 
   async testCameraCredentials(ip: string, username: string, password: string) {
     try {
-      console.log(`Testing credentials ${username}:${password} for ${ip}`);
+      console.log(`Testing credentials ${username}:****** for ${ip}`);
       
       // Test with digest auth on a simple endpoint
       const result = await this.digestAuth(ip, username, password, '/axis-cgi/param.cgi?action=list&group=Brand');
@@ -338,7 +338,7 @@ export class CameraDiscoveryService {
 
   private async checkAxisCamera(ip: string, username: string, password: string): Promise<Camera | null> {
     try {
-      console.log(`=== Checking Axis camera at ${ip} with credentials ${username}:${password} ===`);
+      console.log(`=== Checking Axis camera at ${ip} with credentials ${username}:****** ===`);
       
       // Try to get device info with digest auth
       const response = await this.digestAuth(ip, username, password, '/axis-cgi/param.cgi?action=list&group=Brand');

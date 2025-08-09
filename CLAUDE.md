@@ -1,4 +1,10 @@
-# CLAUDE.md - Anava Infrastructure Deployer
+# CLAUDE.md - Anava Installer
+
+## Repository Information
+- **GitHub**: https://github.com/AnavaAcap/anava-infrastructure-deployer
+- **Organization**: AnavaAcap
+- **Product Name**: Anava Installer (formerly Anava Vision)
+- **Public Releases**: Installers published to https://github.com/AnavaAcap/acap-releases
 
 ## Development Guidelines
 - Always iterate the version tag when ready for testing
@@ -90,18 +96,20 @@
 - Windows builds now correctly include rollup modules
 - All builds are properly signed and notarized
 
-### Build Outputs
-- **macOS Intel**: `Anava.Vision-{version}.dmg`
-- **macOS Apple Silicon**: `Anava.Vision-{version}-arm64.dmg`
-- **Windows**: `Anava.Vision.Setup.{version}.exe` (supports x64 & ia32)
+### Build Outputs (v0.9.169+)
+- **macOS Intel**: `Anava.Installer-{version}.dmg`
+- **macOS Apple Silicon**: `Anava.Installer-{version}-arm64.dmg`
+- **Windows**: `Anava.Installer.Setup.{version}.exe` (supports x64 & ia32)
 - Files distributed in native formats (no additional compression needed)
+- Automatically published to AnavaAcap/acap-releases latest release
 
 ### GitHub Actions Secrets Required
 - `CSC_LINK`: Base64 encoded .p12 certificate file
 - `CSC_KEY_PASSWORD`: Password for the .p12 file
-- `APPLE_ID`: Apple Developer account email
+- `APPLE_ID`: Apple Developer account email (ryan@anava.ai)
 - `APPLE_ID_PASSWORD`: App-specific password
-- `APPLE_TEAM_ID`: Your Apple Developer Team ID (e.g., "3JVZNWGRYT")
+- `APPLE_TEAM_ID`: Apple Developer Team ID (3JVZNWGRYT)
+- `PUBLIC_REPO_TOKEN`: GitHub PAT for publishing to acap-releases repo
 
 ## License Activation Solution (v0.9.105+)
 
@@ -129,7 +137,19 @@ const result = await page.evaluate(() =>
 - 3-second initial delay after ACAP deployment
 - Comprehensive logging throughout the process
 
-## Current State (v0.9.145+)
+## Current State (v0.9.169+)
+
+### Recent Updates
+#### v0.9.169
+- **Rebrand to Anava Installer**: Changed from "Anava Vision" to "Anava Installer"
+- **Private Cloud Setup**: Renamed from "GCP Infrastructure" and repositioned in navigation
+- **Organization Transfer**: Repository moved to AnavaAcap organization
+- **Public Release Integration**: Installers automatically published to public ACAP releases repo
+- **Fixed Firestore Permissions**: Service accounts now have proper write permissions (roles/datastore.owner)
+
+#### v0.9.168
+- **Fixed Critical 403 Errors**: Cameras can now write to Firestore
+- **Token Refresh Issue**: Resolved - cameras properly refresh tokens to get new permissions
 
 ### Camera Setup Architecture
 
@@ -264,8 +284,11 @@ git tag v0.9.XX
 git push origin v0.9.XX
 
 # Builds automatically create signed installers:
-# - macOS: .dmg files (Intel & Apple Silicon)
-# - Windows: .exe installer (x64 & ia32)
+# - macOS: Anava.Installer-{version}.dmg (Intel & Apple Silicon)
+# - Windows: Anava.Installer.Setup.{version}.exe (x64 & ia32)
+
+# 4. Publish to ACAP releases (manual, will be automated)
+./scripts/publish-to-acap-releases.sh
 ```
 
 #### Local Testing (macOS only)

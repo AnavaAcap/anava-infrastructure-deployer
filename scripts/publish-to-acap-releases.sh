@@ -38,7 +38,7 @@ echo -e "\n📦 Installer Version: ${GREEN}v${VERSION}${NC}"
 echo -e "\n🔍 Finding installer release v${VERSION}..."
 PRIVATE_RELEASE=$(gh api \
     -H "Accept: application/vnd.github+json" \
-    /repos/rywager/anava-infrastructure-deployer/releases/tags/v${VERSION} \
+    /repos/AnavaAcap/anava-infrastructure-deployer/releases/tags/v${VERSION} \
     2>/dev/null || echo "{}")
 
 if [ "$PRIVATE_RELEASE" = "{}" ]; then
@@ -60,7 +60,7 @@ cd "$TEMP_DIR"
 # Get list of assets
 ASSETS=$(gh api \
     -H "Accept: application/vnd.github+json" \
-    /repos/rywager/anava-infrastructure-deployer/releases/${PRIVATE_RELEASE_ID}/assets \
+    /repos/AnavaAcap/anava-infrastructure-deployer/releases/${PRIVATE_RELEASE_ID}/assets \
     --jq '.[] | select(.name | test("\\.(dmg|exe)$")) | {id: .id, name: .name}')
 
 # Download each asset
@@ -72,7 +72,7 @@ while IFS= read -r asset; do
         
         gh api \
             -H "Accept: application/octet-stream" \
-            /repos/rywager/anava-infrastructure-deployer/releases/assets/${ASSET_ID} \
+            /repos/AnavaAcap/anava-infrastructure-deployer/releases/assets/${ASSET_ID} \
             > "${ASSET_NAME}"
     fi
 done <<< "$(echo "$ASSETS" | jq -c '.')"
