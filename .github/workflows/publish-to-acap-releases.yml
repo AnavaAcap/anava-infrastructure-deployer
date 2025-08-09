@@ -115,7 +115,7 @@ jobs:
             --jq '.tag_name')
           echo "Latest ACAP release tag: $RELEASE_TAG"
         env:
-          GH_TOKEN: ${{ secrets.ACAP_RELEASES_TOKEN }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
       
       - name: Upload installer assets to ACAP releases
         run: |
@@ -158,7 +158,7 @@ jobs:
           
           echo "All installer assets uploaded successfully!"
         env:
-          GH_TOKEN: ${{ secrets.ACAP_RELEASES_TOKEN }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
       
       - name: Update release notes
         run: |
@@ -202,4 +202,4 @@ The installer provides a unified experience for:
             echo "✅ Updated release notes with installer information"
           fi
         env:
-          GH_TOKEN: ${{ secrets.ACAP_RELEASES_TOKEN }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
