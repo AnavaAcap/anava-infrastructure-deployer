@@ -761,6 +761,10 @@ export class DeploymentEngine extends EventEmitter {
     const cloudFunctionsSA = `service-${projectNumber}@gcf-admin-robot.iam.gserviceaccount.com`;
     console.log(`Granting Cloud Functions service agent (${cloudFunctionsSA}) required permissions...`);
     
+    // Wait a bit for the service agent to be created by Google after enabling Cloud Functions API
+    console.log('Waiting 5 seconds for Cloud Functions service agent to be created...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
     try {
       await this.gcpService.assignIamRole(
         state.projectId,
@@ -769,13 +773,29 @@ export class DeploymentEngine extends EventEmitter {
       );
       console.log(`✅ Granted Artifact Registry reader permissions to Cloud Functions service agent`);
       
+      // Also grant writer permission for creating images during build
+      await this.gcpService.assignIamRole(
+        state.projectId,
+        cloudFunctionsSA,
+        'roles/artifactregistry.writer'
+      );
+      console.log(`✅ Granted Artifact Registry writer permissions to Cloud Functions service agent`);
+      
       // Wait for IAM propagation - critical for avoiding race conditions
-      console.log('Waiting 10 seconds for IAM permissions to propagate...');
-      await new Promise(resolve => setTimeout(resolve, 10000));
+      console.log('Waiting 15 seconds for IAM permissions to propagate globally...');
+      await new Promise(resolve => setTimeout(resolve, 15000));
     } catch (error: any) {
-      console.warn('Warning: Could not grant Cloud Functions service agent permissions:', error.message);
-      console.warn('This may cause deployment failures. Error details:', error.response?.data || error);
-      // Continue anyway - the user might have already set this up manually
+      console.error('ERROR: Could not grant Cloud Functions service agent permissions:', error.message);
+      console.error('Error details:', error.response?.data || error);
+      
+      // This is CRITICAL - if we can't grant permissions, deployment WILL fail
+      throw new Error(
+        `Failed to grant Artifact Registry permissions to Cloud Functions service agent.\n` +
+        `Service account: ${cloudFunctionsSA}\n` +
+        `This is required for Cloud Functions deployment.\n` +
+        `Error: ${error.message}\n` +
+        `Please manually grant 'roles/artifactregistry.reader' and 'roles/artifactregistry.writer' to the service account above.`
+      );
     }
     
     // Ensure gcf-artifacts repository permissions are set up
