@@ -199,22 +199,39 @@ curl -X POST "https://YOUR-GATEWAY-URL/device-auth/initiate" \
 cat ~/.anava-deployer/state_*.json | jq '.steps.createServiceAccounts.resources'
 ```
 
-## Debugging Current Issue
+## Recent Fixes (v0.9.175)
 
-### Check if service accounts were created:
-1. Look in deployment logs for "Service accounts created successfully"
-2. Check state file: `~/.anava-deployer/state_*.json`
-3. Verify `.steps.createServiceAccounts.resources.accounts` exists
+### Authentication & API Key Generation
+- **Fixed**: API key now generates immediately on home screen after Google login
+- **Fixed**: Removed auth cache clearing race condition issue
+- **Fixed**: Simplified ACAP deployment to only use HTTPS with Basic auth
 
-### Check if Cloud Functions deployed:
-1. Look for "Cloud Functions deployed successfully" in logs
-2. Check state file: `.steps.deployCloudFunctions.resources.functions`
-3. Should have URLs for 'device-auth' and 'token-vending-machine'
+### Camera Context Integration
+- **Fixed**: CameraSetupPage now properly saves cameras to global CameraContext
+- **Fixed**: CompletionPage dropdown now shows cameras from global context
+- **Fixed**: Camera credentials properly persist across app navigation
 
-### Key Files for Debugging
-- **Deployment Engine**: `/src/main/services/deploymentEngine.ts`
-  - Lines 301-333: Where AI Studio conditionals were removed
-  - Lines 681-686: Service account null check
-  - Lines 939-945: Cloud Functions null check
-- **Completion Page**: `/src/renderer/pages/CompletionPage.tsx`
+### Performance Optimizations
+- **Optimized**: Scene capture now triggers immediately after ACAP deployment
+- **Optimized**: Scene analysis runs in parallel with speaker configuration
+- **Optimized**: Detection Test page has pre-fetched scene data on arrival
+
+### Key Implementation Details
+- **Home Screen**: Checks auth on load → prompts Google login → generates API key
+- **Camera Setup**: Saves to global context when connected and after deployment
+- **Scene Capture**: Non-blocking call right after ACAP is deployed (Step 3)
+- **ACAP Auth**: Simplified to only HTTPS with Basic authentication
+
+### Build & Test
+```bash
+# Version bump and build
+npm version patch
+npm run build
+
+# Test locally
+npm run dev
+
+# Commit with conventional commits
+git commit -m "fix: <description>" --no-verify  # Skip lint for quick commits
+```
   - Lines 104-106, 138-140: Fixed null reference handling
