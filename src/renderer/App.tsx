@@ -17,10 +17,12 @@ import { anavaTheme } from './theme/anavaTheme';
 import AppFooter from './components/AppFooter';
 import RetroEasterEgg from './components/RetroEasterEgg';
 import EULADialog from './components/EULADialog';
+import AppLoader from './components/AppLoader';
 import { DeploymentConfig, GCPProject, CameraInfo } from '../types';
 import { CameraProvider } from './contexts/CameraContext';
 
 function App() {
+  const [isAppReady, setIsAppReady] = useState(false);
   const [currentView, setCurrentView] = useState<NavigationView>('welcome');
   const [authState, setAuthState] = useState<'initializing' | 'authenticated' | 'unauthenticated'>('initializing');
   const [selectedAIMode, setSelectedAIMode] = useState<'vertex' | 'ai-studio' | null>(null);
@@ -34,39 +36,40 @@ function App() {
   const [eulaAccepted, setEulaAccepted] = useState(false);
 
   useEffect(() => {
-    // Subscribe to deployment events
-    window.electronAPI.deployment.subscribe();
-    
-    // Check EULA acceptance
-    const checkEula = () => {
+    // Show UI immediately, then load heavy operations
+    const initializeApp = async () => {
+      // First, show the UI quickly
+      setIsAppReady(true);
+      
+      // Then subscribe to deployment events
+      window.electronAPI.deployment.subscribe();
+      
+      // Check EULA (fast, local storage)
       const accepted = localStorage.getItem('eulaAccepted') === 'true';
       console.log('EULA acceptance status:', accepted);
       setEulaAccepted(accepted);
-    };
-
-    // Initialize authentication state
-    const initializeAuth = async () => {
-      try {
-        // Check for cached license key
-        const licenseResult = await window.electronAPI.license.getAssignedKey();
-        if (licenseResult.success && licenseResult.key) {
-          setLicenseKey(licenseResult.key);
-          // If we have a license key, consider authenticated
-          setAuthState('authenticated');
-        } else {
-          // Check standard GCP authentication
-          const result = await window.electronAPI.auth.check();
-          setAuthState(result.authenticated ? 'authenticated' : 'unauthenticated');
+      
+      // Defer authentication check slightly to let UI render
+      setTimeout(async () => {
+        try {
+          // Check for cached license key
+          const licenseResult = await window.electronAPI.license.getAssignedKey();
+          if (licenseResult.success && licenseResult.key) {
+            setLicenseKey(licenseResult.key);
+            setAuthState('authenticated');
+          } else {
+            // Check standard GCP authentication
+            const result = await window.electronAPI.auth.check();
+            setAuthState(result.authenticated ? 'authenticated' : 'unauthenticated');
+          }
+        } catch (error) {
+          console.error('Failed to initialize auth:', error);
+          setAuthState('unauthenticated');
         }
-        
-      } catch (error) {
-        console.error('Failed to initialize auth:', error);
-        setAuthState('unauthenticated');
-      }
+      }, 100); // Small delay to let UI render first
     };
     
-    checkEula();
-    initializeAuth();
+    initializeApp();
   }, []);
 
   const handleViewChange = (view: NavigationView) => {
@@ -316,6 +319,16 @@ function App() {
 
   // Use the standard theme
   const theme = anavaTheme;
+
+  // Show loader immediately while app initializes
+  if (!isAppReady) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <AppLoader message="Starting Anava Installer..." />
+      </ThemeProvider>
+    );
+  }
 
   // Show login page if not authenticated and not initializing
   if (authState === 'unauthenticated' && !licenseKey) {

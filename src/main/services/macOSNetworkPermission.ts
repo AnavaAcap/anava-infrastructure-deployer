@@ -238,22 +238,17 @@ do shell script "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add '${a
       return;
     }
 
-    // Check if the app is already in the firewall
-    try {
-      const { execSync } = require('child_process');
-      const appPath = app.getPath('exe');
-      const result = execSync('/usr/libexec/ApplicationFirewall/socketfilterfw --listapps', { encoding: 'utf8' });
-      
-      if (result.includes(appPath)) {
+    // Check firewall status asynchronously to avoid blocking startup
+    const { exec } = require('child_process');
+    const appPath = app.getPath('exe');
+    
+    exec('/usr/libexec/ApplicationFirewall/socketfilterfw --listapps', { encoding: 'utf8' }, (error, stdout) => {
+      if (!error && stdout && stdout.includes(appPath)) {
         logger.info('App is already in firewall, network access should be available');
-        return;
+      } else {
+        logger.info('Network permission not detected, will request when needed');
       }
-    } catch (e) {
-      // Couldn't check firewall status
-    }
-
-    // We need to request permission
-    logger.info('Network permission not detected, will request when needed');
+    });
   }
 }
 
