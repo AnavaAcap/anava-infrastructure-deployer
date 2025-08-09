@@ -578,6 +578,51 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         setDeploymentProgress(68);
         setDeploymentStatus('Camera already licensed, updating configuration...');
       }
+      
+      // Start background scene capture NOW - right after ACAP is deployed and licensed
+      // This runs in parallel while we configure the camera and user sets up speaker
+      console.log('Starting background scene capture after ACAP deployment...');
+      const geminiApiKeyForCapture = await (window.electronAPI as any).getConfigValue?.('geminiApiKey');
+      if (geminiApiKeyForCapture) {
+        // Create a temporary camera object with current info
+        const cameraForCapture = {
+          id: selectedCamera.id,
+          ip: selectedCamera.ip,
+          name: selectedCamera.model || `Camera at ${selectedCamera.ip}`,
+          hasACAP: true,
+          hasSpeaker: false, // Will be updated later if speaker is configured
+          credentials: {
+            username: credentials.username,
+            password: credentials.password
+          }
+        };
+        
+        // Fire and forget - don't await this
+        (window.electronAPI as any).getSceneDescription?.(
+          cameraForCapture,
+          geminiApiKeyForCapture,
+          false // No speaker yet
+        ).then(result => {
+          if (result?.success) {
+            console.log('Background scene capture completed successfully');
+            // Store the pre-fetched scene data
+            (window.electronAPI as any).setConfigValue?.('preFetchedScene', {
+              cameraId: cameraForCapture.id,
+              cameraIp: cameraForCapture.ip,
+              description: result.description,
+              imageBase64: result.imageBase64,
+              audioMP3Base64: result.audioMP3Base64,
+              timestamp: Date.now()
+            });
+          } else {
+            console.log('Background scene capture failed:', result?.error);
+          }
+        }).catch(error => {
+          console.error('Background scene capture error:', error);
+        });
+      } else {
+        console.log('No API key available for background scene capture');
+      }
 
       // Step 4: Configure camera
       setDeploymentProgress(70);
@@ -742,9 +787,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       };
       updateCamera(selectedCamera.id, globalCameraUpdate);
       
-      // Start background scene capture for Detection Test page
-      // This runs in the background while user configures speaker
-      startBackgroundSceneCapture(configuredCamera);
+      // NOTE: Background scene capture already started earlier, right after ACAP deployment
+      // It's running in parallel while user configures speaker
       
       // Force step progression - clear deployment state and advance
       console.log('Deployment complete, advancing to step 3 (speaker config)');
@@ -789,47 +833,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
     };
   };
 
-  const startBackgroundSceneCapture = async (camera: any) => {
-    try {
-      console.log('Starting background scene capture for Detection Test page...');
-      
-      // Get API key
-      const apiKey = await (window.electronAPI as any).getConfigValue?.('geminiApiKey');
-      if (!apiKey) {
-        console.log('No API key available, skipping background capture');
-        return;
-      }
-      
-      // Start the capture in the background - don't await
-      (window.electronAPI as any).getSceneDescription?.(
-        camera,
-        apiKey,
-        camera.hasSpeaker
-      ).then(result => {
-        if (result.success) {
-          // Store the pre-fetched scene data
-          (window.electronAPI as any).setConfigValue?.('preFetchedScene', {
-            cameraId: camera.id,
-            cameraIp: camera.ip,
-            description: result.description,
-            imageBase64: result.imageBase64,
-            audioBase64: result.audioBase64,
-            audioFormat: result.audioFormat,
-            audioMP3Base64: result.audioMP3Base64,
-            timestamp: Date.now(),
-            hasSpeaker: camera.hasSpeaker || false
-          });
-          console.log('Background scene capture completed successfully');
-        } else {
-          console.error('Background scene capture failed:', result.error);
-        }
-      }).catch(err => {
-        console.error('Background scene capture error:', err);
-      });
-    } catch (error) {
-      console.error('Failed to start background scene capture:', error);
-    }
-  };
+  // Function removed - scene capture now happens inline right after ACAP deployment
 
   const getStepContent = (step: number) => {
     switch (step) {
