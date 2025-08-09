@@ -54,6 +54,7 @@ import {
   SmartToy as SmartToyIcon,
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
+import { useCameraContext } from '../contexts/CameraContext';
 
 interface CameraInfo {
   id: string;
@@ -78,6 +79,7 @@ interface CameraSetupPageProps {
 }
 
 const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
+  const { addCamera, updateCamera } = useCameraContext();
   const [activeStep, setActiveStep] = useState(0);
   const [completed, setCompleted] = useState<{ [key: number]: boolean }>({});
   const [previouslyConfiguredCameras, setPreviouslyConfiguredCameras] = useState<any[]>([]);
@@ -266,6 +268,42 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           };
           setCameras([updatedCamera]);
           setSelectedCamera(updatedCamera);
+          
+          // Add to global camera context
+          const globalCamera = {
+            id: updatedCamera.id,
+            name: updatedCamera.name || `Camera at ${updatedCamera.ip}`,
+            ip: updatedCamera.ip,
+            model: updatedCamera.model,
+            status: {
+              credentials: {
+                completed: true,
+                username: credentials.username,
+                password: credentials.password
+              },
+              discovery: {
+                completed: true,
+                ip: updatedCamera.ip,
+                model: updatedCamera.model,
+                firmwareVersion: updatedCamera.firmwareVersion
+              },
+              deployment: {
+                completed: hasACAP,
+                hasACAP: hasACAP,
+                isLicensed: hasACAP
+              },
+              speaker: {
+                completed: false,
+                configured: false
+              },
+              verification: {
+                completed: false
+              }
+            },
+            lastUpdated: new Date()
+          };
+          addCamera(globalCamera);
+          
           setActiveStep(2);
           setCompleted(prev => ({ ...prev, 0: true, 1: true }));
         } else {
@@ -664,6 +702,45 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       // Save to config
       await (window.electronAPI as any).setConfigValue?.('configuredCameras', updatedCameras);
       console.log('Saved configured camera:', configuredCamera);
+      
+      // Update global camera context
+      const globalCameraUpdate = {
+        id: selectedCamera.id,
+        name: selectedCamera.name || `Camera at ${selectedCamera.ip}`,
+        ip: selectedCamera.ip,
+        model: selectedCamera.model,
+        status: {
+          credentials: {
+            completed: true,
+            username: credentials.username,
+            password: credentials.password
+          },
+          discovery: {
+            completed: true,
+            ip: selectedCamera.ip,
+            model: selectedCamera.model,
+            firmwareVersion: selectedCamera.firmwareVersion
+          },
+          deployment: {
+            completed: true,
+            hasACAP: true,
+            isLicensed: true,
+            deployedFile: selectedACAPFile
+          },
+          speaker: {
+            completed: configureSpeaker,
+            configured: configureSpeaker && !!speakerConfig.ip,
+            ip: speakerConfig.ip,
+            username: speakerConfig.username,
+            password: speakerConfig.password
+          },
+          verification: {
+            completed: false
+          }
+        },
+        lastUpdated: new Date()
+      };
+      updateCamera(selectedCamera.id, globalCameraUpdate);
       
       // Start background scene capture for Detection Test page
       // This runs in the background while user configures speaker
@@ -1595,6 +1672,19 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                             configuredCameras.push(updatedCamera);
                           }
                           await (window.electronAPI as any).setConfigValue?.('configuredCameras', configuredCameras);
+                          
+                          // Update global camera context with speaker info
+                          updateCamera(selectedCamera.id, {
+                            status: {
+                              speaker: {
+                                completed: true,
+                                configured: true,
+                                ip: speakerConfig.ip,
+                                username: speakerConfig.username,
+                                password: speakerConfig.password
+                              }
+                            }
+                          });
                         }
                       } else {
                         console.error('Failed to push speaker configuration:', result.error);
