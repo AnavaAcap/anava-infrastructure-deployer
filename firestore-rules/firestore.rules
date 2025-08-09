@@ -13,26 +13,30 @@ service cloud.firestore {
     }
     // Rule for the top-level 'devices' collection
     match /devices {
-      // For now, keep 'if true' for debugging the session/event reads.
-      // IMPORTANT: Change this back to 'if isAuthenticated();' later for security.
-      allow list: if true;
+      // Only authenticated users can list devices
+      allow list: if isAuthenticated();
     }
     // Match individual device documents
     match /devices/{deviceId} {
-      // TEMPORARY: Allow cameras to write without auth for testing
-      // TODO: Revert this after fixing authentication flow
-      allow read: if true;
-      allow write: if true;
+      // Cameras authenticate via service account tokens
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() &&
+                      request.resource.data.deviceId == deviceId &&
+                      isValidTimestamp(request.resource.data.updatedAt);
       // Match sessions subcollection
       match /sessions/{sessionId} { // Path: /devices/{deviceId}/sessions/{sessionId}
-        // TEMPORARY: Allow cameras to write without auth for testing
-        allow read: if true;
-        allow write: if true;
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated() &&
+                        request.resource.data.deviceId == deviceId &&
+                        request.resource.data.status is string &&
+                        isValidTimestamp(request.resource.data.updatedAt);
         // This 'events' subcollection is UNDER 'sessions/{sessionId}'
         match /events/{eventId} { // Path: /devices/{deviceId}/sessions/{sessionId}/events/{eventId}
-          // TEMPORARY: Allow cameras to write without auth for testing
-          allow read: if true;
-          allow write: if true;
+          allow read: if isAuthenticated();
+          allow write: if isAuthenticated() &&
+                         request.resource.data.deviceId == deviceId &&
+                         request.resource.data.sessionId == sessionId &&
+                         isValidTimestamp(request.resource.data.updatedAt);
         }
       }
     }
