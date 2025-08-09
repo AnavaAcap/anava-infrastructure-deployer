@@ -207,7 +207,7 @@ do shell script "sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add '${a
         spawn('open', ['x-apple.systempreferences:com.apple.preference.security?Firewall']);
       } else if (manualResult.response === 1) {
         // Copy terminal commands to clipboard
-        const { clipboard } = require('electron');
+        const { clipboard } = await import('electron');
         const commands = 'sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add "/Applications/Anava Vision.app" && sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "/Applications/Anava Vision.app"';
         clipboard.writeText(commands);
         
