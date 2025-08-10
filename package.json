@@ -16,7 +16,7 @@
     "postinstall": "electron-builder install-app-deps && node scripts/download-terraform.js",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
-    "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
+    "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux",
     "test": "jest",
@@ -111,7 +111,7 @@
       "gatekeeperAssess": false,
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
-      "singleArchFiles": "**/terraform-bin/terraform",
+      "x64ArchFiles": "**/terraform-bin/terraform",
       "extendInfo": {
         "NSLocalNetworkUsageDescription": "Anava Installer needs to access cameras on your local network for configuration and deployment.",
         "NSBonjourServices": [

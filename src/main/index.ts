@@ -82,6 +82,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false, // Required for executing Terraform binaries
     },
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     icon: process.platform === 'win32' 
