@@ -51,6 +51,21 @@ interface CompletionPageProps {
 }
 
 const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment, onBack, onLogout }) => {
+  // Guard against null/undefined result
+  if (!result) {
+    console.error('CompletionPage: No result object provided');
+    return (
+      <Box sx={{ p: 4 }}>
+        <Alert severity="error">
+          <Typography variant="h6">Deployment Result Missing</Typography>
+          <Typography variant="body2">The deployment result was not properly received.</Typography>
+        </Alert>
+        <Button variant="contained" onClick={onNewDeployment} sx={{ mt: 2 }}>
+          Start New Deployment
+        </Button>
+      </Box>
+    );
+  }
   const [showApiKey, setShowApiKey] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [testDialogOpen, setTestDialogOpen] = useState(false);
@@ -75,6 +90,12 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   const [cameraUsername, setCameraUsername] = useState('');
   const [cameraPassword, setCameraPassword] = useState('');
   const [pendingCamera, setPendingCamera] = useState<any>(null);
+  
+  // Manual camera entry state
+  const [useManualEntry, setUseManualEntry] = useState(false);
+  const [manualCameraIp, setManualCameraIp] = useState('');
+  const [manualCameraUsername, setManualCameraUsername] = useState('root');
+  const [manualCameraPassword, setManualCameraPassword] = useState('');
   
   // Get cameras that have been configured (have credentials)
   const cameras = managedCameras.filter(cam => 
@@ -128,24 +149,32 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
 
   const handleExportConfig = async () => {
     try {
+      // Extract project ID from various possible sources
+      const projectId = result.firebaseConfig?.projectId || 
+        result.projectId ||
+        result.resources?.createServiceAccounts?.accounts?.['device-auth-sa']?.split('@')[1]?.split('.')[0] || 
+        'unknown';
+      
       const config = {
-        projectId: result.firebaseConfig?.projectId || 
-          result.resources?.createServiceAccounts?.accounts?.['device-auth-sa']?.split('@')[1]?.split('.')[0] || 
-          'unknown',
-        apiGatewayUrl: result.apiGatewayUrl,
-        apiKey: result.apiKey,
-        firebaseConfig: result.firebaseConfig,
-        adminEmail: result.adminEmail,
-        aiMode: result.aiMode,
-        aiStudioApiKey: result.aiStudioApiKey,
-        timestamp: new Date().toISOString()
+        projectId,
+        apiGatewayUrl: result.apiGatewayUrl || null,
+        apiKey: result.apiKey || null,
+        firebaseConfig: result.firebaseConfig || null,
+        adminEmail: result.adminEmail || null,
+        aiMode: result.aiMode || 'vertex',
+        aiStudioApiKey: result.aiStudioApiKey || null,
+        region: result.region || result.resources?.region || 'us-central1',
+        gcsBucketName: result.gcsBucketName || `${projectId}-anava-analytics`,
+        anavaKey: result.anavaKey || null,
+        customerId: result.customerId || null,
+        timestamp: result.timestamp || new Date().toISOString()
       };
 
       const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `anava-config-${config.projectId}-${Date.now()}.json`;
+      a.download = `anava-config-${projectId}-${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
@@ -206,21 +235,45 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
   };
 
   const handlePushSettings = async () => {
-    if (!selectedCamera) return;
+    if (useManualEntry) {
+      // Manual entry mode
+      if (!manualCameraIp || !manualCameraUsername || !manualCameraPassword) {
+        setPushResult({ success: false, message: 'Please enter camera IP, username, and password' });
+        return;
+      }
 
-    const camera = cameras.find(c => c.id === selectedCamera);
-    if (!camera) return;
+      const manualCamera = {
+        id: `manual-${manualCameraIp}`,
+        ip: manualCameraIp,
+        name: `Camera at ${manualCameraIp}`,
+        status: {
+          credentials: {
+            username: manualCameraUsername,
+            password: manualCameraPassword,
+            completed: true
+          }
+        }
+      };
 
-    // Check if camera has credentials, if not prompt for them
-    if (!camera.status.credentials.username || !camera.status.credentials.password) {
-      setPendingCamera(camera);
-      setCameraUsername('anava'); // Set default username
-      setCameraPassword(''); // Leave password empty for user to fill
-      setCredentialsDialogOpen(true);
-      return;
+      await pushConfigurationToCamera(manualCamera);
+    } else {
+      // Dropdown mode
+      if (!selectedCamera) return;
+
+      const camera = cameras.find(c => c.id === selectedCamera);
+      if (!camera) return;
+
+      // Check if camera has credentials, if not prompt for them
+      if (!camera.status.credentials.username || !camera.status.credentials.password) {
+        setPendingCamera(camera);
+        setCameraUsername('anava'); // Set default username
+        setCameraPassword(''); // Leave password empty for user to fill
+        setCredentialsDialogOpen(true);
+        return;
+      }
+
+      await pushConfigurationToCamera(camera);
     }
-
-    await pushConfigurationToCamera(camera);
   };
 
   const handleAutoPushToLatestCamera = async (camera: any) => {
@@ -342,26 +395,28 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
     }
   }, [cameras, selectedCamera]);
 
-  return (
-    <Paper elevation={3} sx={{ p: 6 }}>
-      <TopBar 
-        title="Deployment Complete" 
-        showLogout={!!onLogout}
-        onLogout={onLogout}
-      />
-      
-      <Box textAlign="center" sx={{ mb: 4 }}>
-        <CheckCircle color="success" sx={{ fontSize: 64, mb: 2 }} />
-        <Typography variant="h4" gutterBottom>
-          {result.aiMode === 'ai-studio' 
-            ? 'AI Studio Setup Complete! 🎉'
-            : 'Infrastructure Deployed Successfully! 🎉'
-          }
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          {result.aiMode === 'ai-studio'
-            ? 'Your AI Studio configuration is ready. You can now use the Gemini API directly.'
-            : 'Your Anava Vision authentication infrastructure is ready. Authentication has been automatically configured.'
+  // Wrap entire component in try-catch to prevent white screen
+  try {
+    return (
+      <Paper elevation={3} sx={{ p: 6 }}>
+        <TopBar 
+          title="Deployment Complete" 
+          showLogout={!!onLogout}
+          onLogout={onLogout}
+        />
+        
+        <Box textAlign="center" sx={{ mb: 4 }}>
+          <CheckCircle color="success" sx={{ fontSize: 64, mb: 2 }} />
+          <Typography variant="h4" gutterBottom>
+            {result?.aiMode === 'ai-studio' 
+              ? 'AI Studio Setup Complete! 🎉'
+              : 'Infrastructure Deployed Successfully! 🎉'
+            }
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            {result?.aiMode === 'ai-studio'
+              ? 'Your AI Studio configuration is ready. You can now use the Gemini API directly.'
+              : 'Your Anava Vision authentication infrastructure is ready. Authentication has been automatically configured.'
           }
         </Typography>
       </Box>
@@ -400,7 +455,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
                         <Tooltip title={copied === 'ai-key' ? 'Copied!' : 'Copy'}>
                           <IconButton
                             size="small"
-                            onClick={() => handleCopy(result.aiStudioApiKey!, 'ai-key')}
+                            onClick={() => result.aiStudioApiKey && handleCopy(result.aiStudioApiKey, 'ai-key')}
                           >
                             <ContentCopy fontSize="small" />
                           </IconButton>
@@ -444,12 +499,12 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
                   secondary={
                     <Stack direction="row" alignItems="center" spacing={1}>
                       <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                        {result.apiGatewayUrl}
+                        {result.apiGatewayUrl || 'Not available'}
                       </Typography>
                       <Tooltip title={copied === 'url' ? 'Copied!' : 'Copy'}>
                         <IconButton
                           size="small"
-                          onClick={() => handleCopy(result.apiGatewayUrl!, 'url')}
+                          onClick={() => result.apiGatewayUrl && handleCopy(result.apiGatewayUrl, 'url')}
                         >
                           <ContentCopy fontSize="small" />
                         </IconButton>
@@ -467,7 +522,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
                   secondary={
                     <Stack direction="row" alignItems="center" spacing={1}>
                       <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                        {showApiKey ? result.apiKey : '••••••••-••••-••••'}
+                        {showApiKey ? (result.apiKey || 'Not available') : '••••••••-••••-••••'}
                       </Typography>
                       <IconButton
                         size="small"
@@ -478,7 +533,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
                       <Tooltip title={copied === 'key' ? 'Copied!' : 'Copy'}>
                         <IconButton
                           size="small"
-                          onClick={() => handleCopy(result.apiKey!, 'key')}
+                          onClick={() => result.apiKey && handleCopy(result.apiKey, 'key')}
                         >
                           <ContentCopy fontSize="small" />
                         </IconButton>
@@ -512,13 +567,12 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
         </List>
       </Paper>
 
-      {/* Camera Configuration Section */}
-      {(result.apiGatewayUrl || result.aiStudioApiKey) && (
-        <Paper elevation={1} sx={{ p: 3, mb: 4, backgroundColor: 'background.default' }}>
-          <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <VideocamIcon />
-            Push Configuration to Cameras
-          </Typography>
+      {/* Camera Configuration Section - Always show this section */}
+      <Paper elevation={1} sx={{ p: 3, mb: 4, backgroundColor: 'background.default' }}>
+        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <VideocamIcon />
+          Push Configuration to Cameras
+        </Typography>
           
           {autoPushStatus?.pushing && (
             <Alert severity="info" sx={{ mb: 2 }}>
@@ -542,46 +596,105 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
           </Typography>
           
           <Box sx={{ mt: 2 }}>
-            <Stack direction="row" spacing={2} alignItems="flex-end">
-              <FormControl fullWidth sx={{ flex: 1 }}>
-                <InputLabel>Select Camera</InputLabel>
-                <Select
-                  value={selectedCamera}
-                  onChange={(e) => setSelectedCamera(e.target.value)}
-                  disabled={scanningCameras || cameras.length === 0}
-                  label="Select Camera"
-                >
-                  {cameras.map((camera) => (
-                    <MenuItem key={camera.id} value={camera.id}>
-                      {camera.name} - {camera.ip}
-                      {camera.status.speaker?.configured && ' (with speaker)'}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              
+            {/* Toggle between dropdown and manual entry */}
+            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
               <Button
-                variant="outlined"
-                startIcon={scanningCameras ? <CircularProgress size={20} /> : <RefreshIcon />}
-                onClick={loadConfiguredCameras}
-                disabled={scanningCameras}
+                variant={!useManualEntry ? "contained" : "outlined"}
+                onClick={() => setUseManualEntry(false)}
+                size="small"
               >
-                {scanningCameras ? 'Loading...' : 'Refresh'}
+                Select from Configured Cameras
               </Button>
-              
               <Button
-                variant="contained"
-                startIcon={pushingSettings ? <CircularProgress size={20} /> : <SendIcon />}
-                onClick={handlePushSettings}
-                disabled={!selectedCamera || pushingSettings}
+                variant={useManualEntry ? "contained" : "outlined"}
+                onClick={() => setUseManualEntry(true)}
+                size="small"
               >
-                {pushingSettings ? 'Pushing...' : 'Push to Camera'}
+                Enter Camera Details Manually
               </Button>
             </Stack>
+
+            {/* Dropdown mode */}
+            {!useManualEntry && (
+              <Stack direction="row" spacing={2} alignItems="flex-end">
+                <FormControl fullWidth sx={{ flex: 1 }}>
+                  <InputLabel>Select Camera</InputLabel>
+                  <Select
+                    value={selectedCamera}
+                    onChange={(e) => setSelectedCamera(e.target.value)}
+                    disabled={scanningCameras || cameras.length === 0}
+                    label="Select Camera"
+                  >
+                    {cameras.map((camera) => (
+                      <MenuItem key={camera.id} value={camera.id}>
+                        {camera.name} - {camera.ip}
+                        {camera.status.speaker?.configured && ' (with speaker)'}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                
+                <Button
+                  variant="outlined"
+                  startIcon={scanningCameras ? <CircularProgress size={20} /> : <RefreshIcon />}
+                  onClick={loadConfiguredCameras}
+                  disabled={scanningCameras}
+                >
+                  {scanningCameras ? 'Loading...' : 'Refresh'}
+                </Button>
+                
+                <Button
+                  variant="contained"
+                  startIcon={pushingSettings ? <CircularProgress size={20} /> : <SendIcon />}
+                  onClick={handlePushSettings}
+                  disabled={!selectedCamera || pushingSettings}
+                >
+                  {pushingSettings ? 'Pushing...' : 'Push to Camera'}
+                </Button>
+              </Stack>
+            )}
+
+            {/* Manual entry mode */}
+            {useManualEntry && (
+              <Stack spacing={2}>
+                <TextField
+                  label="Camera IP Address"
+                  value={manualCameraIp}
+                  onChange={(e) => setManualCameraIp(e.target.value)}
+                  fullWidth
+                  placeholder="e.g., 192.168.1.100"
+                  helperText="Enter the IP address of your Axis camera"
+                />
+                <TextField
+                  label="Username"
+                  value={manualCameraUsername}
+                  onChange={(e) => setManualCameraUsername(e.target.value)}
+                  fullWidth
+                  placeholder="e.g., root or anava"
+                />
+                <TextField
+                  label="Password"
+                  type="password"
+                  value={manualCameraPassword}
+                  onChange={(e) => setManualCameraPassword(e.target.value)}
+                  fullWidth
+                  placeholder="Camera password"
+                />
+                <Button
+                  variant="contained"
+                  startIcon={pushingSettings ? <CircularProgress size={20} /> : <SendIcon />}
+                  onClick={handlePushSettings}
+                  disabled={!manualCameraIp || !manualCameraUsername || !manualCameraPassword || pushingSettings}
+                  fullWidth
+                >
+                  {pushingSettings ? 'Pushing Configuration...' : 'Push to Camera'}
+                </Button>
+              </Stack>
+            )}
             
-            {cameras.length === 0 && !scanningCameras && (
+            {cameras.length === 0 && !scanningCameras && !useManualEntry && (
               <Alert severity="info" sx={{ mt: 2 }}>
-                No cameras configured yet. Please set up cameras first using the Camera Setup page.
+                No cameras configured yet. Use manual entry above or set up cameras first using the Camera Setup page.
               </Alert>
             )}
             
@@ -592,7 +705,6 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             )}
           </Box>
         </Paper>
-      )}
 
       {result.aiMode !== 'ai-studio' && (
         <>
@@ -618,6 +730,7 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
 
       <Box sx={{ mt: 4 }}>
         <Stack direction="row" spacing={2} justifyContent="center">
+          {/* Always show Export Configuration button */}
           <Button
             variant="outlined"
             startIcon={<Download />}
@@ -626,7 +739,8 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             Export Configuration
           </Button>
           
-          {result.aiMode !== 'ai-studio' && (
+          {/* Show Test Auth Flow for non-AI Studio deployments that have an API Gateway URL */}
+          {result.aiMode !== 'ai-studio' && result.apiGatewayUrl && (
             <Button
               variant="outlined"
               startIcon={<ScienceIcon />}
@@ -636,7 +750,8 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
             </Button>
           )}
           
-          {result.aiMode !== 'ai-studio' && !result.adminEmail && !userCreated && (
+          {/* Show Create Admin User for Vertex AI deployments without an admin user */}
+          {result.aiMode !== 'ai-studio' && !result.adminEmail && !userCreated && result.firebaseConfig && (
             <Button
               variant="outlined"
               startIcon={<Person />}
@@ -744,15 +859,39 @@ const CompletionPage: React.FC<CompletionPageProps> = ({ result, onNewDeployment
         open={testDialogOpen}
         onClose={() => setTestDialogOpen(false)}
         deploymentConfig={{
-          apiGatewayUrl: result.apiGatewayUrl,
-          apiKey: result.apiKey,
-          firebaseConfig: result.firebaseConfig,
-          aiMode: result.aiMode,
-          aiStudioApiKey: result.aiStudioApiKey
+          apiGatewayUrl: result?.apiGatewayUrl,
+          apiKey: result?.apiKey,
+          firebaseConfig: result?.firebaseConfig,
+          aiMode: result?.aiMode,
+          aiStudioApiKey: result?.aiStudioApiKey
         }}
       />
     </Paper>
-  );
+    );
+  } catch (error) {
+    console.error('CompletionPage render error:', error);
+    // Return error fallback UI instead of white screen
+    return (
+      <Box sx={{ p: 4 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          <Typography variant="h6">An error occurred</Typography>
+          <Typography variant="body2">
+            {error instanceof Error ? error.message : 'Failed to display deployment results'}
+          </Typography>
+        </Alert>
+        <Stack direction="row" spacing={2}>
+          <Button variant="contained" onClick={onNewDeployment}>
+            Start New Deployment
+          </Button>
+          {onBack && (
+            <Button variant="outlined" onClick={onBack}>
+              Go Back
+            </Button>
+          )}
+        </Stack>
+      </Box>
+    );
+  }
 };
 
 export default CompletionPage;
