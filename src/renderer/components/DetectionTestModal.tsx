@@ -49,27 +49,14 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
   const [sceneImage, setSceneImage] = useState<string>('');
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioData, setAudioData] = useState<{data: string, format: string} | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [apiKey, setApiKey] = useState<string>('');
-  const [alternativeCamera, setAlternativeCamera] = useState<any>(null);
-  const [availableCameras, setAvailableCameras] = useState<any[]>([]);
   
   useEffect(() => {
     if (open) {
       // Load API key and test the camera immediately
       loadAndTest();
-      loadAvailableCameras();
     }
   }, [open]);
-
-  const loadAvailableCameras = async () => {
-    try {
-      const configuredCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras') || [];
-      setAvailableCameras(configuredCameras.filter((cam: any) => cam.id !== camera?.id));
-    } catch (error) {
-      console.error('Failed to load available cameras:', error);
-    }
-  };
 
   const loadAndTest = async () => {
     setLoading(true);
@@ -314,54 +301,6 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
     }
   };
 
-  const handleTestAgain = async () => {
-    if (!apiKey && showAdvanced) {
-      setError('Please enter an API key');
-      return;
-    }
-    
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const testCamera = alternativeCamera || camera;
-      const testApiKey = apiKey || await (window.electronAPI as any).getConfigValue?.('geminiApiKey');
-      
-      const result = await (window.electronAPI as any).getSceneDescription?.(
-        testCamera,
-        testApiKey,
-        testCamera.hasSpeaker || !!speakerConfig
-      );
-      
-      if (result.success) {
-        setSceneDescription(cleanDescription(result.description || ''));
-        setSceneImage(result.imageBase64 || '');
-        
-        // Store audio and auto-play since user clicked "Test Again"
-        if (result.audioBase64) {
-          setAudioData({
-            data: result.audioBase64,
-            format: result.audioFormat || 'pcm_l16_24000'
-          });
-          // Auto-play for manual test
-          playAudio(result.audioBase64, result.audioFormat || 'pcm_l16_24000');
-        } else if (result.audioMP3Base64) {
-          setAudioData({
-            data: result.audioMP3Base64,
-            format: 'mp3'
-          });
-          // Auto-play for manual test
-          playAudio(result.audioMP3Base64, 'mp3');
-        }
-      } else {
-        setError(result.error || 'Failed to analyze scene');
-      }
-    } catch (error: any) {
-      setError(error.message || 'Failed to perform detection test');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <Dialog
@@ -403,7 +342,7 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
             </Alert>
             <Button
               variant="contained"
-              onClick={handleTestAgain}
+              onClick={runFreshTest}
               startIcon={<RefreshIcon />}
             >
               Try Again
@@ -482,67 +421,6 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
               >
                 Run New Test
               </Button>
-              
-              <Button
-                variant="outlined"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                startIcon={<SettingsIcon />}
-                size="small"
-              >
-                Advanced Options
-              </Button>
-              
-              <Collapse in={showAdvanced}>
-                <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Test with Different Settings
-                  </Typography>
-                  
-                  <Box sx={{ mt: 2, display: 'flex', gap: 2, flexDirection: 'column' }}>
-                    {availableCameras.length > 0 && (
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Test Another Camera</InputLabel>
-                        <Select
-                          value={alternativeCamera?.id || ''}
-                          label="Test Another Camera"
-                          onChange={(e) => {
-                            const cam = availableCameras.find(c => c.id === e.target.value);
-                            setAlternativeCamera(cam);
-                          }}
-                        >
-                          <MenuItem value="">
-                            <em>Use Current Camera ({camera?.name || camera?.ip})</em>
-                          </MenuItem>
-                          {availableCameras.map((cam) => (
-                            <MenuItem key={cam.id} value={cam.id}>
-                              {cam.name || cam.ip}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    )}
-                    
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label="Custom API Key (Optional)"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="Leave empty to use configured key"
-                      helperText="Only needed if you want to test with a different API key"
-                    />
-                    
-                    <Button
-                      variant="contained"
-                      onClick={handleTestAgain}
-                      startIcon={<RefreshIcon />}
-                      disabled={loading}
-                    >
-                      Test Again
-                    </Button>
-                  </Box>
-                </Box>
-              </Collapse>
             </Box>
           </Box>
         )}

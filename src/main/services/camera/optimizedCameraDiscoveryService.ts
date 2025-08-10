@@ -8,9 +8,26 @@ import https from 'https';
 import { macOSNetworkPermission } from '../macOSNetworkPermission';
 import { safeConsole } from '../../utils/safeConsole';
 import { getCameraBaseUrl } from './cameraProtocolUtils';
-const PQueue = require('p-queue').default || require('p-queue');
-const Bonjour = require('bonjour-service').Bonjour || require('bonjour-service');
-const { Client: SSDPClient } = require('node-ssdp');
+
+// Dynamic imports for ESM modules
+let PQueue: any;
+let Bonjour: any;
+let SSDPClient: any;
+
+// Initialize ESM modules
+async function initializeModules() {
+  try {
+    const pQueueModule = await import('p-queue');
+    PQueue = pQueueModule.default;
+  } catch (err) {
+    // Fallback to older version if available
+    PQueue = require('p-queue').default || require('p-queue');
+  }
+  
+  Bonjour = require('bonjour-service').Bonjour || require('bonjour-service');
+  const ssdpModule = require('node-ssdp');
+  SSDPClient = ssdpModule.Client;
+}
 
 export interface Camera {
   id: string;
@@ -68,8 +85,14 @@ export class OptimizedCameraDiscoveryService {
   private preDiscoveryComplete = false;
   private hasShownNetworkPermissionDialog = false;
   private networkPermissionDenied = false;
+  private modulesInitialized = false;
 
   private async initializeDiscovery() {
+    // Initialize modules first
+    if (!this.modulesInitialized) {
+      await initializeModules();
+      this.modulesInitialized = true;
+    }
     // Check if we're on macOS 15+ and need permission
     if (process.platform === 'darwin') {
       const version = process.getSystemVersion?.() || '0.0.0';
@@ -98,9 +121,10 @@ export class OptimizedCameraDiscoveryService {
     
     this.setupIPC();
     
-    // Don't start discovery immediately on macOS 15+
-    // Wait for network permission to be granted
-    this.initializeDiscovery();
+    // Initialize modules and start discovery asynchronously
+    this.initializeDiscovery().catch(err => {
+      safeConsole.error('Failed to initialize discovery:', err);
+    });
   }
 
   private setupIPC() {
@@ -1247,6 +1271,10 @@ export class OptimizedCameraDiscoveryService {
       // No credentials for initial scan - just detect Axis devices
 
       // Use higher concurrency for faster discovery
+      if (!PQueue) {
+        safeConsole.error('PQueue not initialized, skipping network scan');
+        return;
+      }
       const queue = new PQueue({ concurrency: 30 });
       const scanPromises: Promise<void>[] = [];
 

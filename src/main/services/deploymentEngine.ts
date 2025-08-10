@@ -692,7 +692,7 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'assignIamRoles',
       stepProgress: 5,
-      totalProgress: 62.5 + (12.5 * 0.05),
+      totalProgress: 55 + (11 * 0.05),
       message: `Configuring Cloud Build and compute permissions...`,
     });
 
@@ -702,7 +702,7 @@ export class DeploymentEngine extends EventEmitter {
       this.emitProgress({
         currentStep: 'assignIamRoles',
         stepProgress: 20 + ((i / roleBindings.length) * 80),
-        totalProgress: 62.5 + (12.5 * (0.2 + (i / roleBindings.length) * 0.8)),
+        totalProgress: 55 + (11 * (0.2 + (i / roleBindings.length) * 0.8)),
         message: `Assigning ${roleBindings[i].role} to ${roleBindings[i].account}...`,
       });
 
@@ -1013,8 +1013,8 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'createApiGateway',
       stepProgress: 0,
-      totalProgress: 62.5,
-      message: 'Creating API Gateway...',
+      totalProgress: 88,
+      message: 'Creating API Gateway...,',
     });
 
     const configPath = app.isPackaged 
@@ -1045,7 +1045,7 @@ export class DeploymentEngine extends EventEmitter {
       this.emitProgress({
         currentStep: 'createApiGateway',
         stepProgress,
-        totalProgress: 62.5 + (12.5 * (stepProgress / 100)),
+        totalProgress: 88 + (11 * (stepProgress / 100)),
         message,
         detail: detail || undefined,
         subStep,
@@ -1117,7 +1117,7 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'configureWorkloadIdentity',
       stepProgress: 100,
-      totalProgress: 87.5,
+      totalProgress: 100,
       message: 'Workload Identity configured',
     });
   }
@@ -1151,7 +1151,7 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 0,
-      totalProgress: 87.5,
+      totalProgress: 66,
       message: 'Initializing Firebase Authentication...',
     });
 
@@ -1232,16 +1232,16 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 50,
-      totalProgress: 87.5,
-      message: 'Deploying Firestore security rules and indexes...',
+      totalProgress: 70,
+      message: 'Deploying Firestore security rules and indexes...,',
     });
     
     // Create GCS bucket for camera storage
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 60,
-      totalProgress: 87.5,
-      message: 'Creating GCS bucket for camera storage...',
+      totalProgress: 72,
+      message: 'Creating GCS bucket for camera storage...,',
     });
     
     try {
@@ -1264,8 +1264,8 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 80,
-      totalProgress: 87.5,
-      message: 'Deploying Firestore security rules and indexes...',
+      totalProgress: 74,
+      message: 'Deploying Firestore security rules and indexes...,',
     });
     
     await this.firestoreRulesDeployer.deploySecurityRules(state.projectId, logCallback);
@@ -1278,7 +1278,7 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'setupFirestore',
       stepProgress: 100,
-      totalProgress: 87.5,
+      totalProgress: 77,
       message: 'Firebase setup complete - Auth, Firestore, and GCS bucket configured',
     });
   }
@@ -1294,7 +1294,7 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'createFirebaseWebApp',
       stepProgress: 0,
-      totalProgress: 87.5,
+      totalProgress: 33,
       message: 'Creating Firebase web app...',
       subStep: 'create-app',
     });
@@ -1310,7 +1310,7 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'createFirebaseWebApp',
       stepProgress: 10,
-      totalProgress: 90,
+      totalProgress: 35,
       message: 'Creating web application...',
       subStep: 'create-app',
     });
@@ -1330,7 +1330,7 @@ export class DeploymentEngine extends EventEmitter {
     this.emitProgress({
       currentStep: 'createFirebaseWebApp',
       stepProgress: 100,
-      totalProgress: 100,
+      totalProgress: 44,
       message: 'Firebase web app created',
       subStep: 'create-app',
     });

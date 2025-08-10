@@ -16,7 +16,7 @@ import {
   CircularProgress,
   Divider,
 } from '@mui/material';
-import { ArrowBack, RocketLaunch, Visibility, VisibilityOff, Send as SendIcon } from '@mui/icons-material';
+import { ArrowBack, RocketLaunch, Visibility, VisibilityOff, Send as SendIcon, Download } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig } from '../../types';
 import TopBar from '../components/TopBar';
 
@@ -40,6 +40,12 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   const [pushingConfig, setPushingConfig] = useState(false);
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // Manual camera entry state
+  const [useManualEntry, setUseManualEntry] = useState(false);
+  const [manualCameraIp, setManualCameraIp] = useState('');
+  const [manualCameraUsername, setManualCameraUsername] = useState('root');
+  const [manualCameraPassword, setManualCameraPassword] = useState('');
 
   useEffect(() => {
     checkForExistingDeployment();
@@ -75,14 +81,36 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
   };
 
   const handlePushConfig = async () => {
-    if (!selectedCamera || !existingDeployment) return;
+    if (!existingDeployment) return;
+    
+    let camera;
+    
+    if (useManualEntry) {
+      // Manual entry mode
+      if (!manualCameraIp || !manualCameraUsername || !manualCameraPassword) {
+        setPushResult({ success: false, message: 'Please enter camera IP, username, and password' });
+        return;
+      }
+      
+      camera = {
+        id: `manual-${manualCameraIp}`,
+        ip: manualCameraIp,
+        model: 'Manual Entry',
+        name: `Camera at ${manualCameraIp}`,
+        hasSpeaker: false
+      };
+    } else {
+      // Dropdown mode
+      if (!selectedCamera) return;
+      
+      camera = cameras.find(c => (c.id || `${c.ip}_${c.model}`) === selectedCamera);
+      if (!camera) throw new Error('Camera not found');
+    }
     
     setPushingConfig(true);
     setPushResult(null);
     
     try {
-      const camera = cameras.find(c => (c.id || `${c.ip}_${c.model}`) === selectedCamera);
-      if (!camera) throw new Error('Camera not found');
       
       // Get the GCS bucket name from the deployment
       const bucketName = existingDeployment.gcsBucketName || `${project.projectId}-anava-analytics`;
@@ -114,8 +142,8 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
       
       const result = await (window.electronAPI as any).pushSystemConfig({
         cameraIp: camera.ip,
-        username: camera.credentials?.username || camera.username || 'anava',
-        password: camera.credentials?.password || camera.password || 'baton',
+        username: useManualEntry ? manualCameraUsername : (camera.credentials?.username || camera.username || 'anava'),
+        password: useManualEntry ? manualCameraPassword : (camera.credentials?.password || camera.password || 'baton'),
         systemConfig
       });
       
@@ -220,55 +248,144 @@ const ConfigurationPage: React.FC<ConfigurationPageProps> = ({ project, onComple
           Push Configuration to Cameras
         </Typography>
         <Typography variant="body2" color="text.secondary" paragraph>
-          Select a camera to push the Vertex AI configuration to it.
+          Enter camera details or select from configured cameras to push the configuration.
         </Typography>
         
-        {cameras.length > 0 ? (
-          <Stack spacing={2}>
-            <FormControl fullWidth>
-              <InputLabel>Select Camera</InputLabel>
-              <Select
-                value={selectedCamera}
-                onChange={(e) => setSelectedCamera(e.target.value)}
-                label="Select Camera"
-              >
-                {cameras.map((camera) => {
-                  const cameraId = camera.id || `${camera.ip}_${camera.model}`;
-                  return (
-                    <MenuItem key={cameraId} value={cameraId}>
-                      {camera.name || camera.model} - {camera.ip}
-                      {camera.hasSpeaker && ' (with speaker)'}
-                    </MenuItem>
-                  );
-                })}
-              </Select>
-            </FormControl>
-            
-            <Button
-              variant="contained"
-              size="large"
-              onClick={handlePushConfig}
-              disabled={!selectedCamera || pushingConfig}
-              startIcon={pushingConfig ? <CircularProgress size={20} /> : <SendIcon />}
-            >
-              {pushingConfig ? 'Pushing Configuration...' : 'Push Configuration to Camera'}
-            </Button>
-            
-            {pushResult && (
-              <Alert severity={pushResult.success ? 'success' : 'error'}>
-                {pushResult.message}
-              </Alert>
-            )}
-          </Stack>
-        ) : (
-          <Alert severity="info">
-            No cameras configured yet. Please set up cameras first using the Camera Setup page.
-          </Alert>
-        )}
+        {/* Toggle between dropdown and manual entry */}
+        <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+          <Button
+            variant={!useManualEntry ? "contained" : "outlined"}
+            onClick={() => setUseManualEntry(false)}
+            size="small"
+          >
+            Select from Configured Cameras
+          </Button>
+          <Button
+            variant={useManualEntry ? "contained" : "outlined"}
+            onClick={() => setUseManualEntry(true)}
+            size="small"
+          >
+            Enter Camera Details Manually
+          </Button>
+        </Stack>
+
+        <Stack spacing={2}>
+          {/* Dropdown mode */}
+          {!useManualEntry && (
+            <>
+              {cameras.length > 0 ? (
+                <FormControl fullWidth>
+                  <InputLabel>Select Camera</InputLabel>
+                  <Select
+                    value={selectedCamera}
+                    onChange={(e) => setSelectedCamera(e.target.value)}
+                    label="Select Camera"
+                  >
+                    {cameras.map((camera) => {
+                      const cameraId = camera.id || `${camera.ip}_${camera.model}`;
+                      return (
+                        <MenuItem key={cameraId} value={cameraId}>
+                          {camera.name || camera.model} - {camera.ip}
+                          {camera.hasSpeaker && ' (with speaker)'}
+                        </MenuItem>
+                      );
+                    })}
+                  </Select>
+                </FormControl>
+              ) : (
+                <Alert severity="info">
+                  No configured cameras found. Use manual entry above to enter camera details.
+                </Alert>
+              )}
+            </>
+          )}
+
+          {/* Manual entry mode */}
+          {useManualEntry && (
+            <>
+              <TextField
+                label="Camera IP Address"
+                value={manualCameraIp}
+                onChange={(e) => setManualCameraIp(e.target.value)}
+                fullWidth
+                placeholder="e.g., 192.168.1.100"
+                helperText="Enter the IP address of your Axis camera"
+              />
+              <TextField
+                label="Username"
+                value={manualCameraUsername}
+                onChange={(e) => setManualCameraUsername(e.target.value)}
+                fullWidth
+                placeholder="e.g., root or anava"
+              />
+              <TextField
+                label="Password"
+                type="password"
+                value={manualCameraPassword}
+                onChange={(e) => setManualCameraPassword(e.target.value)}
+                fullWidth
+                placeholder="Camera password"
+              />
+            </>
+          )}
+          
+          <Button
+            variant="contained"
+            size="large"
+            onClick={handlePushConfig}
+            disabled={
+              pushingConfig || 
+              (!useManualEntry && !selectedCamera) ||
+              (useManualEntry && (!manualCameraIp || !manualCameraUsername || !manualCameraPassword))
+            }
+            startIcon={pushingConfig ? <CircularProgress size={20} /> : <SendIcon />}
+          >
+            {pushingConfig ? 'Pushing Configuration...' : 'Push Configuration to Camera'}
+          </Button>
+          
+          {pushResult && (
+            <Alert severity={pushResult.success ? 'success' : 'error'}>
+              {pushResult.message}
+            </Alert>
+          )}
+        </Stack>
         
         <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
           <Button variant="outlined" onClick={onBack} sx={{ flex: 1 }}>
             Back to Home
+          </Button>
+          <Button 
+            variant="outlined"
+            startIcon={<Download />}
+            onClick={() => {
+              // Export the configuration
+              const projectId = existingDeployment?.firebaseConfig?.projectId || 
+                existingDeployment?.projectId || project.projectId;
+              
+              const config = {
+                projectId,
+                apiGatewayUrl: existingDeployment?.apiGatewayUrl || null,
+                apiKey: existingDeployment?.apiKey || null,
+                firebaseConfig: existingDeployment?.firebaseConfig || null,
+                aiMode: 'vertex',
+                region: existingDeployment?.region || 'us-central1',
+                gcsBucketName: existingDeployment?.gcsBucketName || `${projectId}-anava-analytics`,
+                anavaKey: existingDeployment?.anavaKey || anavaKey || null,
+                customerId: existingDeployment?.customerId || customerId || null,
+                timestamp: existingDeployment?.timestamp || new Date().toISOString()
+              };
+
+              const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `anava-config-${projectId}-${Date.now()}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            sx={{ flex: 1 }}
+          >
+            Export Configuration
           </Button>
           <Button 
             variant="outlined" 

@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import axios from 'axios';
 import crypto from 'crypto';
+import https from 'https';
 import { Camera } from './cameraDiscoveryService';
 import { getCameraBaseUrl } from './cameraProtocolUtils';
 // import AxiosDigestAuth from '@mhoc/axios-digest-auth'; // No longer needed, using simpleDigestAuth
@@ -574,6 +575,30 @@ export class CameraConfigurationService {
         
         return { success: true, data: response.data };
       } catch (digestError: any) {
+        // Check if this is the ThreadPool error which actually means success
+        if (digestError.response?.status === 500 && 
+            digestError.response?.data?.message?.includes('ThreadPool')) {
+          console.log('[CameraConfig] Received ThreadPool error - this means config was saved but ACAP is restarting');
+          console.log('[CameraConfig] Treating as success since configuration was actually saved');
+          
+          // Still try to activate license if we have one
+          if (anavaKey) {
+            console.log('[CameraConfig] Attempting license activation despite ThreadPool error...');
+            try {
+              await this.activateLicenseKey(ip, username, password, anavaKey, 'BatonAnalytic');
+              console.log('[CameraConfig] License key activated successfully');
+              return { success: true, message: 'Configuration saved (ACAP restarting)', licenseActivated: true };
+            } catch (licenseError: any) {
+              console.warn('[CameraConfig] License activation failed:', licenseError.message);
+              // Non-fatal - configuration succeeded, just license activation failed
+              return { success: true, message: 'Configuration saved (ACAP restarting)', licenseActivated: false };
+            }
+          }
+          
+          return { success: true, message: 'Configuration saved successfully (ACAP is restarting)' };
+        }
+        
+        // For other errors, log and throw
         console.error('[CameraConfig] simpleDigestAuth failed:', digestError.message);
         console.error('[CameraConfig] Full error object:');
         console.error('================== START ERROR DETAILS ==================');
@@ -1134,9 +1159,13 @@ export class CameraConfigurationService {
     applicationName: string,
     xmlContent: string
   ): Promise<void> {
+    const startTime = Date.now();
+    console.log('[CameraConfig] ========== LICENSE UPLOAD START ==========');
+    console.log('[CameraConfig] Target camera:', ip);
+    console.log('[CameraConfig] Application:', applicationName);
+    console.log('[CameraConfig] XML Content Length:', xmlContent.length);
+    
     try {
-      console.log('[CameraConfig] Uploading license XML to camera...');
-      
       const url = `/axis-cgi/applications/license.cgi?action=uploadlicensekey&package=${applicationName}`;
       
       // Create multipart form data
@@ -1151,28 +1180,106 @@ export class CameraConfigurationService {
         ''
       ].join('\r\n');
       
-      // Upload using digest auth
-      const response = await this.simpleDigestAuth(
-        ip,
-        username,
-        password,
-        'POST',
-        url,
-        formData
-      );
+      // Use HTTPS with Basic auth for compatibility
+      const fullUrl = `https://${ip}${url}`;
+      const auth = Buffer.from(`${username}:${password}`).toString('base64');
       
-      if (response.status === 200 && response.data) {
+      console.log('[CameraConfig] Request URL:', fullUrl);
+      console.log('[CameraConfig] Auth header: Basic (user:', username, ')');
+      console.log('[CameraConfig] Content-Type boundary:', boundary);
+      
+      const response = await axios.post(fullUrl, formData, {
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': Buffer.byteLength(formData).toString()
+        },
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false // Accept self-signed certificates
+        }),
+        timeout: 15000, // 15 second timeout - fail fast
+        validateStatus: null // We'll handle all statuses ourselves
+      });
+      
+      const elapsed = Date.now() - startTime;
+      console.log('[CameraConfig] Response received in', elapsed, 'ms');
+      console.log('[CameraConfig] Response status:', response.status);
+      console.log('[CameraConfig] Response headers:', response.headers);
+      console.log('[CameraConfig] Response data:', response.data);
+      
+      // Only accept 200 OK as success
+      if (response.status === 200) {
         const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-        if (responseText.includes('OK') || responseText.includes('Error: 0')) {
-          console.log('[CameraConfig] License XML uploaded successfully');
+        
+        // Check for success indicators
+        if (responseText.includes('OK') || responseText.includes('Error: 0') || responseText.includes('success')) {
+          console.log('[CameraConfig] ✅ License upload SUCCESSFUL');
+          console.log('[CameraConfig] ========== LICENSE UPLOAD END ==========');
           return;
         }
+        
+        // Check for known error patterns
+        if (responseText.includes('Error:') && !responseText.includes('Error: 0')) {
+          const errorMatch = responseText.match(/Error:\s*([^<\n]+)/);
+          const errorMsg = errorMatch ? errorMatch[1] : responseText;
+          throw new Error(`Camera rejected license: ${errorMsg}`);
+        }
+        
+        // Ambiguous 200 response - log full details
+        console.warn('[CameraConfig] ⚠️ Ambiguous 200 response:', responseText);
+        console.log('[CameraConfig] Treating as success due to 200 status');
+        console.log('[CameraConfig] ========== LICENSE UPLOAD END ==========');
+        return;
       }
       
-      throw new Error(`License upload failed: ${response.data}`);
+      // Non-200 status - this is a failure
+      const errorDetails = {
+        status: response.status,
+        statusText: response.statusText,
+        data: response.data,
+        headers: response.headers
+      };
+      
+      console.error('[CameraConfig] ❌ License upload FAILED:', errorDetails);
+      
+      // Provide specific error messages
+      if (response.status === 401) {
+        throw new Error(`Authentication failed (401). Username '${username}' was rejected by camera at ${ip}. Please verify credentials.`);
+      } else if (response.status === 403) {
+        throw new Error(`Access forbidden (403). User '${username}' lacks permission to upload licenses on camera at ${ip}.`);
+      } else if (response.status === 404) {
+        throw new Error(`License endpoint not found (404). Camera at ${ip} may not support license upload or application '${applicationName}' is not installed.`);
+      } else if (response.status >= 500) {
+        throw new Error(`Camera server error (${response.status}). The camera at ${ip} encountered an internal error. Response: ${response.data}`);
+      } else {
+        throw new Error(`License upload failed with HTTP ${response.status}: ${response.data || response.statusText}`);
+      }
       
     } catch (error: any) {
-      throw new Error(`Failed to upload license XML: ${error.message}`);
+      const elapsed = Date.now() - startTime;
+      console.error('[CameraConfig] ❌ License upload exception after', elapsed, 'ms');
+      console.error('[CameraConfig] Error object:', error);
+      
+      // Network/connection errors
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error(
+          `Cannot connect to camera at ${ip}:443. ` +
+          `Verify: 1) Camera IP is correct, 2) Camera is powered on, 3) HTTPS is enabled on camera, 4) No firewall blocking port 443`
+        );
+      } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+        throw new Error(
+          `Connection to camera at ${ip} timed out after ${elapsed}ms. ` +
+          `Camera may be: 1) Slow to respond, 2) On a different network, 3) Behind a firewall`
+        );
+      } else if (error.code === 'ENOTFOUND') {
+        throw new Error(`Cannot resolve IP address ${ip}. Please check the IP address is correct.`);
+      } else if (error.code === 'CERT_HAS_EXPIRED' || error.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
+        // Should not happen with rejectUnauthorized: false, but just in case
+        throw new Error(`SSL certificate issue with camera at ${ip}. This should not happen - please report this bug.`);
+      }
+      
+      // Re-throw with original message if we didn't handle it
+      throw error;
     }
   }
   

@@ -7,6 +7,7 @@ import AppFooter from './components/AppFooter';
 import RetroEasterEgg from './components/RetroEasterEgg';
 import EULADialog from './components/EULADialog';
 import AppLoader from './components/AppLoader';
+import ErrorBoundary from './components/ErrorBoundary';
 import { DeploymentConfig, GCPProject, CameraInfo } from '../types';
 import { CameraProvider } from './contexts/CameraContext';
 
@@ -40,34 +41,36 @@ function App() {
   const [eulaAccepted, setEulaAccepted] = useState(false);
 
   useEffect(() => {
-    // Show UI immediately with minimal initialization
+    console.time('App initialization');
+    
+    // IMMEDIATE: Show UI with no delay
     setIsAppReady(true);
     
-    // Check EULA from localStorage (synchronous, fast)
+    // IMMEDIATE: Check EULA (synchronous, from memory)
     const accepted = localStorage.getItem('eulaAccepted') === 'true';
     setEulaAccepted(accepted);
     
-    // Defer all heavy operations to next tick
-    requestAnimationFrame(() => {
+    // IMMEDIATE: Clear camera credentials from localStorage
+    localStorage.removeItem('cameraDefaultCredentials');
+    
+    // IMMEDIATE: Set auth state to unauthenticated
+    setAuthState('unauthenticated');
+    
+    // DEFERRED: Clear any existing auth sessions and subscribe to events
+    setTimeout(async () => {
+      try {
+        // Sign out any existing sessions to ensure fresh start
+        console.log('Clearing any existing auth sessions...');
+        await window.electronAPI.auth.logout();
+        console.log('Auth sessions cleared');
+      } catch (error) {
+        console.error('Error clearing auth:', error);
+      }
+      
       // Subscribe to deployment events
       window.electronAPI.deployment.subscribe();
-      
-      // Check authentication state asynchronously
-      Promise.all([
-        window.electronAPI.license.getAssignedKey().catch(() => ({ success: false })),
-        window.electronAPI.auth.check().catch(() => ({ authenticated: false }))
-      ]).then(([licenseResult, authResult]) => {
-        if (licenseResult.success && licenseResult.key) {
-          setLicenseKey(licenseResult.key);
-          setAuthState('authenticated');
-        } else {
-          setAuthState(authResult.authenticated ? 'authenticated' : 'unauthenticated');
-        }
-      }).catch(error => {
-        console.error('Failed to initialize auth:', error);
-        setAuthState('unauthenticated');
-      });
-    });
+      console.timeEnd('App initialization');
+    }, 0);
   }, []);
 
   const handleViewChange = (view: NavigationView) => {
@@ -364,46 +367,48 @@ function App() {
   }
 
   return (
-    <CameraProvider>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <EULADialog 
-          open={!eulaAccepted} 
-          onAccept={() => setEulaAccepted(true)} 
-        />
-        <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
-          <TopBar title="Anava Vision Installer" onLogout={handleLogout} />
-        
-          <Box sx={{ display: 'flex', flex: 1 }}>
-            <NavigationSidebar
-              currentView={currentView}
-              onViewChange={handleViewChange}
-              deploymentComplete={deploymentComplete}
-              camerasConfigured={camerasConfigured}
-            />
-            
-            <Box
-              component="main"
-              sx={{
-                flexGrow: 1,
-                bgcolor: 'background.default',
-                marginTop: '48px', // Account for TopBar height
-                position: 'relative',
-                display: 'flex',
-                flexDirection: 'column',
-                height: 'calc(100vh - 48px)',
-              }}
-            >
-              <Box sx={{ flex: 1, overflow: 'auto' }}>
-                {renderContent()}
+    <ErrorBoundary>
+      <CameraProvider>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <EULADialog 
+            open={!eulaAccepted} 
+            onAccept={() => setEulaAccepted(true)} 
+          />
+          <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
+            <TopBar title="Anava Vision Installer" onLogout={handleLogout} />
+          
+            <Box sx={{ display: 'flex', flex: 1 }}>
+              <NavigationSidebar
+                currentView={currentView}
+                onViewChange={handleViewChange}
+                deploymentComplete={deploymentComplete}
+                camerasConfigured={camerasConfigured}
+              />
+              
+              <Box
+                component="main"
+                sx={{
+                  flexGrow: 1,
+                  bgcolor: 'background.default',
+                  marginTop: '48px', // Account for TopBar height
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: 'calc(100vh - 48px)',
+                }}
+              >
+                <Box sx={{ flex: 1, overflow: 'auto' }}>
+                  {renderContent()}
+                </Box>
+                <AppFooter />
               </Box>
-              <AppFooter />
             </Box>
           </Box>
-        </Box>
-        <RetroEasterEgg trigger="konami" />
-      </ThemeProvider>
-    </CameraProvider>
+          <RetroEasterEgg trigger="konami" />
+        </ThemeProvider>
+      </CameraProvider>
+    </ErrorBoundary>
   );
 }
 
