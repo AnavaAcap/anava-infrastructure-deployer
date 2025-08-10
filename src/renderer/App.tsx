@@ -7,6 +7,7 @@ import AppFooter from './components/AppFooter';
 import RetroEasterEgg from './components/RetroEasterEgg';
 import EULADialog from './components/EULADialog';
 import AppLoader from './components/AppLoader';
+import ErrorBoundary from './components/ErrorBoundary';
 import { DeploymentConfig, GCPProject, CameraInfo } from '../types';
 import { CameraProvider } from './contexts/CameraContext';
 
@@ -49,31 +50,25 @@ function App() {
     const accepted = localStorage.getItem('eulaAccepted') === 'true';
     setEulaAccepted(accepted);
     
-    // DEFERRED: Clear auth and initialize in background
-    // Using setTimeout(0) instead of requestAnimationFrame for faster execution
+    // IMMEDIATE: Clear camera credentials from localStorage
+    localStorage.removeItem('cameraDefaultCredentials');
+    
+    // IMMEDIATE: Set auth state to unauthenticated
+    setAuthState('unauthenticated');
+    
+    // DEFERRED: Clear any existing auth sessions and subscribe to events
     setTimeout(async () => {
-      console.time('Auth cleanup');
+      try {
+        // Sign out any existing sessions to ensure fresh start
+        console.log('Clearing any existing auth sessions...');
+        await window.electronAPI.auth.logout();
+        console.log('Auth sessions cleared');
+      } catch (error) {
+        console.error('Error clearing auth:', error);
+      }
       
-      // Clear auth caches in parallel, don't wait for results
-      const clearPromises = [
-        window.electronAPI.auth.signOut().catch(() => {}),
-        window.electronAPI.license.clearAssignedKey?.().catch(() => {})
-      ];
-      
-      // Clear localStorage items synchronously (fast)
-      localStorage.removeItem('cameraDefaultCredentials');
-      
-      // Don't block on auth cleanup
-      Promise.all(clearPromises).then(() => {
-        console.timeEnd('Auth cleanup');
-      });
-      
-      // Set state immediately, don't wait for cleanup
-      setAuthState('unauthenticated');
-      
-      // Subscribe to deployment events (non-blocking)
+      // Subscribe to deployment events
       window.electronAPI.deployment.subscribe();
-      
       console.timeEnd('App initialization');
     }, 0);
   }, []);
@@ -372,46 +367,48 @@ function App() {
   }
 
   return (
-    <CameraProvider>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <EULADialog 
-          open={!eulaAccepted} 
-          onAccept={() => setEulaAccepted(true)} 
-        />
-        <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
-          <TopBar title="Anava Vision Installer" onLogout={handleLogout} />
-        
-          <Box sx={{ display: 'flex', flex: 1 }}>
-            <NavigationSidebar
-              currentView={currentView}
-              onViewChange={handleViewChange}
-              deploymentComplete={deploymentComplete}
-              camerasConfigured={camerasConfigured}
-            />
-            
-            <Box
-              component="main"
-              sx={{
-                flexGrow: 1,
-                bgcolor: 'background.default',
-                marginTop: '48px', // Account for TopBar height
-                position: 'relative',
-                display: 'flex',
-                flexDirection: 'column',
-                height: 'calc(100vh - 48px)',
-              }}
-            >
-              <Box sx={{ flex: 1, overflow: 'auto' }}>
-                {renderContent()}
+    <ErrorBoundary>
+      <CameraProvider>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <EULADialog 
+            open={!eulaAccepted} 
+            onAccept={() => setEulaAccepted(true)} 
+          />
+          <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
+            <TopBar title="Anava Vision Installer" onLogout={handleLogout} />
+          
+            <Box sx={{ display: 'flex', flex: 1 }}>
+              <NavigationSidebar
+                currentView={currentView}
+                onViewChange={handleViewChange}
+                deploymentComplete={deploymentComplete}
+                camerasConfigured={camerasConfigured}
+              />
+              
+              <Box
+                component="main"
+                sx={{
+                  flexGrow: 1,
+                  bgcolor: 'background.default',
+                  marginTop: '48px', // Account for TopBar height
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: 'calc(100vh - 48px)',
+                }}
+              >
+                <Box sx={{ flex: 1, overflow: 'auto' }}>
+                  {renderContent()}
+                </Box>
+                <AppFooter />
               </Box>
-              <AppFooter />
             </Box>
           </Box>
-        </Box>
-        <RetroEasterEgg trigger="konami" />
-      </ThemeProvider>
-    </CameraProvider>
+          <RetroEasterEgg trigger="konami" />
+        </ThemeProvider>
+      </CameraProvider>
+    </ErrorBoundary>
   );
 }
 

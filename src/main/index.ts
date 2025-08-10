@@ -321,8 +321,27 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  // Cleanup OAuth server before quitting
+  if (gcpOAuthService) {
+    gcpOAuthService.cleanup();
+  }
+  
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  // Ensure cleanup happens before quit
+  if (gcpOAuthService) {
+    gcpOAuthService.cleanup();
+  }
+});
+
+app.on('will-quit', () => {
+  // Final cleanup attempt
+  if (gcpOAuthService) {
+    gcpOAuthService.cleanup();
   }
 });
 

@@ -16,6 +16,7 @@ export class GCPOAuthService {
   private server: http.Server | null = null;
   private authConfig: any = null;
   private codeVerifier: string | null = null;
+  private cleanupHandlersRegistered = false;
 
   constructor() {
     this.store = new Store();
@@ -23,6 +24,90 @@ export class GCPOAuthService {
     this.initialize().catch(error => {
       console.error('Failed to initialize GCPOAuthService:', error);
     });
+    
+    // Register cleanup handlers
+    this.registerCleanupHandlers();
+  }
+  
+  private registerCleanupHandlers() {
+    if (this.cleanupHandlersRegistered) return;
+    this.cleanupHandlersRegistered = true;
+    
+    // Cleanup on normal app quit
+    app.on('before-quit', () => {
+      log.info('App is quitting, cleaning up OAuth server...');
+      this.cleanup();
+    });
+    
+    // Cleanup on window close
+    app.on('window-all-closed', () => {
+      log.info('All windows closed, cleaning up OAuth server...');
+      this.cleanup();
+    });
+    
+    // Cleanup on process exit
+    process.on('exit', () => {
+      log.info('Process exiting, cleaning up OAuth server...');
+      this.cleanup();
+    });
+    
+    // Cleanup on SIGINT (Ctrl+C)
+    process.on('SIGINT', () => {
+      log.info('SIGINT received, cleaning up OAuth server...');
+      this.cleanup();
+      process.exit(0);
+    });
+    
+    // Cleanup on SIGTERM
+    process.on('SIGTERM', () => {
+      log.info('SIGTERM received, cleaning up OAuth server...');
+      this.cleanup();
+      process.exit(0);
+    });
+    
+    // Cleanup on uncaught exceptions
+    process.on('uncaughtException', (error) => {
+      log.error('Uncaught exception, cleaning up OAuth server...', error);
+      this.cleanup();
+      process.exit(1);
+    });
+    
+    // Cleanup on unhandled rejections
+    process.on('unhandledRejection', (reason) => {
+      log.error('Unhandled rejection, cleaning up OAuth server...', reason);
+      this.cleanup();
+    });
+    
+    // Windows-specific cleanup
+    if (process.platform === 'win32') {
+      process.on('SIGHUP', () => {
+        log.info('SIGHUP received, cleaning up OAuth server...');
+        this.cleanup();
+        process.exit(0);
+      });
+    }
+  }
+  
+  public cleanup() {
+    try {
+      if (this.server) {
+        log.info('Closing OAuth server...');
+        // Force close all connections
+        this.server.close(() => {
+          log.info('OAuth server closed successfully');
+        });
+        
+        // Also destroy the server to ensure all sockets are closed
+        if (typeof (this.server as any).destroy === 'function') {
+          (this.server as any).destroy();
+        }
+        
+        // Set to null to prevent double cleanup
+        this.server = null;
+      }
+    } catch (error) {
+      log.error('Error during OAuth server cleanup:', error);
+    }
   }
 
   async initialize() {
@@ -238,8 +323,45 @@ export class GCPOAuthService {
     return crypto.createHash('sha256').update(verifier).digest('base64url');
   }
 
+  private async findAvailablePort(): Promise<number> {
+    const ports = [8085, 8086, 8087, 8088, 8089, 9090, 9091, 9092];
+    
+    for (const port of ports) {
+      const isAvailable = await new Promise<boolean>((resolve) => {
+        const testServer = http.createServer();
+        testServer.once('error', () => resolve(false));
+        testServer.once('listening', () => {
+          testServer.close();
+          resolve(true);
+        });
+        testServer.listen(port);
+      });
+      
+      if (isAvailable) {
+        log.info(`Found available port: ${port}`);
+        return port;
+      }
+    }
+    
+    // If no ports available, use 0 to get a random port
+    return 0;
+  }
+
   async startAuthFlow() {
     log.info('Starting OAuth authentication flow...');
+    
+    // Close any existing server
+    if (this.server) {
+      try {
+        this.server.close();
+        this.server = null;
+      } catch (error) {
+        log.warn('Error closing existing server:', error);
+      }
+    }
+    
+    // Find an available port
+    const availablePort = await this.findAvailablePort();
     
     return new Promise((resolve, reject) => {
       this.codeVerifier = this.generateCodeVerifier();
@@ -247,7 +369,7 @@ export class GCPOAuthService {
       log.info('Generated PKCE parameters');
 
       this.server = http.createServer(async (req, res) => {
-        const url = new URL(req.url!, `http://localhost:${this.getPort()}`);
+        const url = new URL(req.url!, `http://localhost:${availablePort}`);
         
         if (url.pathname === '/' && url.searchParams.has('code')) {
           const code = url.searchParams.get('code')!;
@@ -255,7 +377,10 @@ export class GCPOAuthService {
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end(this.getSuccessHTML());
           
-          this.server!.close();
+          // Close server immediately after sending response
+          setImmediate(() => {
+            this.cleanup();
+          });
           
           try {
             const { tokens } = await this.oauth2Client!.getToken({
@@ -286,14 +411,22 @@ export class GCPOAuthService {
         } else if (url.searchParams.has('error')) {
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end(this.getErrorHTML(url.searchParams.get('error')!));
-          this.server!.close();
+          setImmediate(() => {
+            this.cleanup();
+          });
           reject(new Error(`Authentication failed: ${url.searchParams.get('error')}`));
         }
       });
 
-      const port = this.getPort();
-      this.server.listen(port, () => {
-        log.info(`Auth server listening on port ${port}`);
+      // Update OAuth client with the actual port we're using
+      this.oauth2Client = new OAuth2Client(
+        this.authConfig.client_id,
+        this.authConfig.client_secret,
+        `http://localhost:${availablePort}/`
+      );
+      
+      this.server.listen(availablePort, () => {
+        log.info(`Auth server listening on port ${availablePort}`);
         
         const authUrl = this.oauth2Client!.generateAuthUrl({
           access_type: 'offline',
@@ -311,8 +444,8 @@ export class GCPOAuthService {
         log.info('Opening authentication URL in browser:', authUrl);
         console.log('=== OAUTH DEBUG ===');
         console.log('Auth URL:', authUrl);
-        console.log('Redirect URI:', this.authConfig.redirect_uris[0]);
-        console.log('Port:', port);
+        console.log('Redirect URI:', `http://localhost:${availablePort}/`);
+        console.log('Port:', availablePort);
         console.log('App path:', app.getPath('userData'));
         console.log('Logs path:', app.getPath('logs'));
         
@@ -345,12 +478,19 @@ export class GCPOAuthService {
           });
       });
 
-      setTimeout(() => {
-        if (this.server && this.server.listening) {
-          this.server.close();
+      // Set timeout with proper cleanup
+      const timeoutHandle = setTimeout(() => {
+        if (this.server) {
+          log.info('Authentication timeout, cleaning up...');
+          this.cleanup();
           reject(new Error('Authentication timeout'));
         }
       }, 5 * 60 * 1000);
+      
+      // Clear timeout on success
+      this.server!.once('close', () => {
+        clearTimeout(timeoutHandle);
+      });
     });
   }
 

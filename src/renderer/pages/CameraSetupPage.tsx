@@ -83,7 +83,6 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const { addCamera, updateCamera } = useCameraContext();
   const [activeStep, setActiveStep] = useState(0);
   const [completed, setCompleted] = useState<{ [key: number]: boolean }>({});
-  const [previouslyConfiguredCameras, setPreviouslyConfiguredCameras] = useState<any[]>([]);
   const [mode, setMode] = useState<'manual' | 'scan'>('manual');
   const [credentials, setCredentials] = useState({
     username: 'root',
@@ -121,22 +120,11 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [testingSpeaker, setTestingSpeaker] = useState(false);
   const [showDetectionModal, setShowDetectionModal] = useState(false);
 
-  // Load license key, previously configured cameras, and check for pre-discovered cameras on mount
+  // Load license key and check for pre-discovered cameras on mount
   useEffect(() => {
     loadLicenseKey();
-    loadPreviouslyConfiguredCameras();
     checkPreDiscoveredCameras();
   }, []);
-
-  const loadPreviouslyConfiguredCameras = async () => {
-    try {
-      const configuredCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras') || [];
-      setPreviouslyConfiguredCameras(configuredCameras);
-      console.log('Loaded previously configured cameras:', configuredCameras);
-    } catch (error) {
-      console.error('Failed to load configured cameras:', error);
-    }
-  };
 
   const loadLicenseKey = async () => {
     try {
@@ -739,36 +727,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       setDeploymentProgress(100);
       setDeploymentStatus('Setup complete!');
       
-      // Save configured camera for Detection Test page
-      const configuredCamera = {
-        id: selectedCamera.id,
-        ip: selectedCamera.ip,
-        name: selectedCamera.model || `Camera at ${selectedCamera.ip}`,
-        hasACAP: true,
-        hasSpeaker: configureSpeaker && speakerConfig.ip ? true : false,
-        speaker: configureSpeaker && speakerConfig.ip ? {
-          ip: speakerConfig.ip,
-          username: speakerConfig.username,
-          password: speakerConfig.password
-        } : undefined,
-        credentials: {
-          username: credentials.username,
-          password: credentials.password
-        },
-        isConfigured: true,
-        configuredAt: new Date().toISOString()
-      };
-      
-      // Get existing configured cameras
-      const existingCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras') || [];
-      
-      // Add or update this camera
-      const updatedCameras = existingCameras.filter((cam: any) => cam.ip !== selectedCamera.ip);
-      updatedCameras.push(configuredCamera);
-      
-      // Save to config
-      await (window.electronAPI as any).setConfigValue?.('configuredCameras', updatedCameras);
-      console.log('Saved configured camera:', configuredCamera);
+      // Camera configuration complete - no longer saving to persistent storage
+      console.log('Camera setup completed successfully');
       
       // Update global camera context
       const globalCameraUpdate = {
@@ -865,110 +825,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       case 0:
         return (
           <Box>
-            {previouslyConfiguredCameras.length > 0 && (
-              <Box mb={3}>
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <AlertTitle>Previously Configured Cameras</AlertTitle>
-                  You can select a camera below to edit its configuration or set up a new camera.
-                </Alert>
-                
-                <List>
-                  {previouslyConfiguredCameras.map((camera: any) => (
-                    <ListItem
-                      key={camera.id}
-                      component="div"
-                      onClick={() => {
-                        // Load the camera's credentials and data
-                        setSelectedCamera(camera);
-                        setCredentials({
-                          username: camera.credentials?.username || 'root',
-                          password: camera.credentials?.password || ''
-                        });
-                        if (camera.speaker) {
-                          setConfigureSpeaker(true);
-                          setSpeakerConfig({
-                            ip: camera.speaker.ip,
-                            username: camera.speaker.username || 'root',
-                            password: camera.speaker.password
-                          });
-                        }
-                        
-                        // Store the license key if available
-                        if (camera.licenseKey) {
-                          setLicenseKey(camera.licenseKey);
-                        }
-                        
-                        // Mark steps as completed based on camera state
-                        const newCompleted: { [key: number]: boolean } = {
-                          0: true, // Credentials are set
-                          1: true, // Camera is already found
-                        };
-                        
-                        // If camera has ACAP installed, mark deploy step as complete
-                        if (camera.hasACAP || camera.isLicensed) {
-                          newCompleted[2] = true;
-                        }
-                        
-                        // If camera has speaker configured, mark that step as complete
-                        if (camera.hasSpeaker) {
-                          newCompleted[3] = true;
-                        }
-                        
-                        setCompleted(newCompleted);
-                        
-                        // Determine which step to show based on what needs attention
-                        let targetStep = 2; // Default to deployment
-                        if (!newCompleted[2]) {
-                          targetStep = 2; // Need to deploy ACAP
-                        } else if (!newCompleted[3] && !camera.hasSpeaker) {
-                          targetStep = 3; // ACAP done, maybe configure speaker
-                        } else {
-                          targetStep = 4; // Everything done, go to complete
-                        }
-                        
-                        setActiveStep(targetStep);
-                      }}
-                      sx={{
-                        border: 1,
-                        borderColor: 'divider',
-                        borderRadius: 1,
-                        mb: 1,
-                        cursor: 'pointer',
-                        '&:hover': {
-                          backgroundColor: 'action.hover'
-                        }
-                      }}
-                    >
-                      <ListItemIcon>
-                        <VideocamIcon />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={camera.name || camera.model || `Camera at ${camera.ip}`}
-                        secondary={
-                          <>
-                            IP: {camera.ip}
-                            {camera.hasSpeaker && ' • Has Speaker'}
-                            {camera.isLicensed && ' • Licensed'}
-                          </>
-                        }
-                      />
-                      <ListItemSecondaryAction>
-                        <IconButton edge="end">
-                          <PlayArrowIcon />
-                        </IconButton>
-                      </ListItemSecondaryAction>
-                    </ListItem>
-                  ))}
-                </List>
-                
-                <Divider sx={{ my: 3 }}>
-                  <Chip label="OR" />
-                </Divider>
-              </Box>
-            )}
-            
             <Typography variant="h6" gutterBottom>
-              {previouslyConfiguredCameras.length > 0 ? 'Set Up New Camera' : 'Camera Credentials'}
+              Camera Credentials
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>
               Enter the username and password for your Axis cameras. These credentials will be used to connect and configure your devices.
@@ -1013,7 +871,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   disabled={!credentials.username || !credentials.password}
                   size="large"
                 >
-                  {previouslyConfiguredCameras.length > 0 ? 'Next: Find New Camera' : 'Continue'}
+                  Continue
                 </Button>
               </Grid>
             </Grid>
@@ -1691,16 +1549,6 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                             }
                           };
                           setSelectedCamera(updatedCamera);
-                          
-                          // Update saved cameras
-                          const configuredCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras') || [];
-                          const cameraIndex = configuredCameras.findIndex((c: any) => c.id === selectedCamera.id);
-                          if (cameraIndex >= 0) {
-                            configuredCameras[cameraIndex] = updatedCamera;
-                          } else {
-                            configuredCameras.push(updatedCamera);
-                          }
-                          await (window.electronAPI as any).setConfigValue?.('configuredCameras', configuredCameras);
                           
                           // Update global camera context with speaker info
                           updateCamera(selectedCamera.id, {
