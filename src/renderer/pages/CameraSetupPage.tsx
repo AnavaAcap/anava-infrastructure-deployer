@@ -565,13 +565,34 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           });
         }, 500);
 
-        await (window.electronAPI as any).activateLicenseKey?.(
-          selectedCamera.ip,
-          credentials.username,
-          credentials.password,
-          licenseKey,
-          'BatonAnalytic'
-        );
+        try {
+          await (window.electronAPI as any).activateLicenseKey?.(
+            selectedCamera.ip,
+            credentials.username,
+            credentials.password,
+            licenseKey,
+            'BatonAnalytic'
+          );
+          console.log('License key activated successfully');
+        } catch (licenseError: any) {
+          clearInterval(licenseInterval);
+          console.error('License activation failed:', licenseError);
+          
+          // Show detailed error message to user
+          const errorMessage = licenseError?.message || 'Failed to activate license';
+          setDeploymentError(
+            `License activation failed: ${errorMessage}\n\n` +
+            `This may be due to:\n` +
+            `• Network connectivity issues\n` +
+            `• Invalid license key\n` +
+            `• Camera compatibility issues\n\n` +
+            `Please check the logs for more details.`
+          );
+          setIsDeploying(false);
+          
+          // Don't continue if license activation fails
+          return;
+        }
         
         clearInterval(licenseInterval);
         setDeploymentProgress(68);
