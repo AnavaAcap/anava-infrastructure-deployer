@@ -12,7 +12,6 @@ import { getCameraBaseUrl } from './cameraProtocolUtils';
 // Dynamic imports for ESM modules
 let PQueue: any;
 let Bonjour: any;
-let SSDPClient: any;
 
 // Initialize ESM modules
 async function initializeModules() {
@@ -25,8 +24,6 @@ async function initializeModules() {
   }
   
   Bonjour = require('bonjour-service').Bonjour || require('bonjour-service');
-  const ssdpModule = require('node-ssdp');
-  SSDPClient = ssdpModule.Client;
 }
 
 export interface Camera {
@@ -402,21 +399,14 @@ export class OptimizedCameraDiscoveryService {
     const cameras: Camera[] = [];
     
     try {
-      // Try mDNS/Bonjour discovery
+      // Use mDNS/Bonjour discovery only (SSDP removed due to security vulnerability)
       const mdnsCameras = await this.discoverViaMDNS();
       cameras.push(...mdnsCameras);
       
-      // Try SSDP/UPnP discovery
-      const ssdpCameras = await this.discoverViaSSDP();
-      cameras.push(...ssdpCameras);
-      
-      // De-duplicate by IP
+      // De-duplicate by IP (in case multiple services advertise same camera)
       const uniqueCameras = new Map<string, Camera>();
       for (const camera of cameras) {
-        const existing = uniqueCameras.get(camera.ip);
-        if (!existing || camera.discoveryMethod === 'mdns') {
-          uniqueCameras.set(camera.ip, camera);
-        }
+        uniqueCameras.set(camera.ip, camera);
       }
       
       return Array.from(uniqueCameras.values());
@@ -480,35 +470,6 @@ export class OptimizedCameraDiscoveryService {
     });
   }
 
-  private async discoverViaSSDP(): Promise<Camera[]> {
-    return new Promise((resolve) => {
-      const cameras: Camera[] = [];
-      const client = new SSDPClient();
-      
-      client.on('response', async (headers: any, _statusCode: number, rinfo: any) => {
-        safeConsole.log(`SSDP: Found device at ${rinfo.address} - ${headers.ST}`);
-        
-        // Check if it might be a camera
-        if (headers.ST?.includes('upnp:rootdevice') || 
-            headers.SERVER?.toLowerCase().includes('axis') ||
-            headers.SERVER?.toLowerCase().includes('camera')) {
-          
-          // Skip SSDP discovered devices without credentials
-          safeConsole.log(`  Found SSDP device but skipping - no credentials provided`);
-        }
-      });
-      
-      // Search for UPnP devices
-      client.search('upnp:rootdevice');
-      client.search('ssdp:all');
-      
-      // Stop after 3 seconds
-      setTimeout(() => {
-        client.stop();
-        resolve(cameras);
-      }, 3000);
-    });
-  }
 
   private async checkIfAxisDevice(ip: string, port: number = 80, protocol: 'http' | 'https' = 'http'): Promise<boolean> {
     try {

@@ -75,6 +75,23 @@ module.exports = {
       testEnvironment: 'node',
       setupFilesAfterEnv: ['<rootDir>/tests/setup/security.setup.ts'],
       testTimeout: 60000 // 1 minute for security tests
+    },
+    {
+      displayName: 'electron-v37',
+      testMatch: [
+        '<rootDir>/tests/electron-v37/**/*.test.ts'
+      ],
+      preset: 'ts-jest',
+      testEnvironment: 'node',
+      moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/src/$1',
+        '^@main/(.*)$': '<rootDir>/src/main/$1',
+        '^@renderer/(.*)$': '<rootDir>/src/renderer/$1',
+        '^@types/(.*)$': '<rootDir>/src/types/$1',
+        '^electron$': '<rootDir>/tests/__mocks__/electron.ts'
+      },
+      setupFilesAfterEnv: ['<rootDir>/tests/setup/electron-v37.setup.ts'],
+      testTimeout: 30000
     }
   ],
   
