@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Script to publish Anava Vision installer assets to AnavaAcap/acap-releases
-# This uploads the installer files to the latest release in the public repo
+# Script to publish Anava Installer assets to AnavaAcap/acap-releases
+# This uploads the installer files to the v3.8.1 release in the public repo
+# Updated for v0.9.177
 
 set -e
 

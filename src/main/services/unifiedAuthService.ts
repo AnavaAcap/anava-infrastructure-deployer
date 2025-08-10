@@ -53,6 +53,7 @@ export class UnifiedAuthService {
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
+          sandbox: true, // Auth window can be sandboxed
           // Use a separate session for auth to ensure clean state
           partition: 'auth-session'
         }
