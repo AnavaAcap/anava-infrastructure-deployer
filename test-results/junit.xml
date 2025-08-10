@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="jest tests" tests="49" failures="8" errors="0" time="17.696">
+  <testsuite name="Performance and Memory Tests - Electron v37" errors="0" failures="2" skipped="0" timestamp="2025-08-10T03:17:37" time="9.524" tests="15">
+    <testcase classname="Performance and Memory Tests - Electron v37 › Memory Management" name="should not leak memory when creating/destroying windows" time="1.014">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Memory Management" name="should properly clean up IPC listeners" time="0">
+      <failure>TypeError: Cannot read properties of undefined (reading &apos;handle&apos;)
+    at /Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/performance-memory.test.ts:97:17
+    at Array.forEach (&lt;anonymous&gt;)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/performance-memory.test.ts:96:16)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Memory Management" name="should handle large data transfers efficiently" time="0.006">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Performance Benchmarks" name="should start app within acceptable time" time="0.001">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Performance Benchmarks" name="should handle camera discovery efficiently" time="0.1">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Performance Benchmarks" name="should efficiently handle Terraform operations" time="0">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Performance Benchmarks" name="should render UI updates efficiently" time="0.001">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Resource Usage" name="should maintain reasonable CPU usage" time="1.009">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Resource Usage" name="should handle file operations efficiently" time="0.001">
+      <failure>SyntaxError: &quot;undefined&quot; is not valid JSON
+    at JSON.parse (&lt;anonymous&gt;)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/performance-memory.test.ts:294:27)</failure>
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Resource Usage" name="should manage network connections efficiently" time="0.042">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Platform-Specific Performance" name="should handle M1/M2/M3 Mac optimization" time="0">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Platform-Specific Performance" name="should handle Windows path operations efficiently" time="0">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Caching and Optimization" name="should cache frequently accessed data" time="0.001">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Caching and Optimization" name="should debounce frequent operations" time="0.312">
+    </testcase>
+    <testcase classname="Performance and Memory Tests - Electron v37 › Caching and Optimization" name="should batch database operations" time="0.102">
+    </testcase>
+  </testsuite>
+  <testsuite name="Electron v37 Compatibility Tests" errors="0" failures="1" skipped="0" timestamp="2025-08-10T03:17:37" time="14.979" tests="18">
+    <testcase classname="Electron v37 Compatibility Tests › Core Electron APIs" name="should correctly report Electron version 37" time="0.002">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Core Electron APIs" name="should handle app lifecycle events" time="0.002">
+      <failure>Error: expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+Expected: &quot;window-all-closed&quot;, Any&lt;Function&gt;
+
+Number of calls: 0
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/electron-compatibility.test.ts:76:22)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)</failure>
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Core Electron APIs" name="should create BrowserWindow with correct sandbox configuration" time="0.002">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Core Electron APIs" name="should not use deprecated remote module" time="0.001">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › IPC Communication" name="should use contextBridge for secure IPC" time="0">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › IPC Communication" name="should handle IPC channels correctly" time="0.003">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › IPC Communication" name="should validate IPC message payloads" time="0.001">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Security Features" name="should enforce context isolation" time="0">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Security Features" name="should validate preload script safety" time="0.001">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Security Features" name="should handle permission requests properly" time="0">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Platform-Specific Features" name="should handle macOS universal binary configuration" time="0">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Platform-Specific Features" name="should handle Windows path normalization" time="0.001">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Platform-Specific Features" name="should verify code signing configuration" time="0.001">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › File System Access" name="should handle file operations through IPC only" time="0">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › File System Access" name="should validate file paths to prevent traversal" time="0.001">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Network Security" name="should enforce CSP headers" time="0.001">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Network Security" name="should validate external URL opening" time="0.002">
+    </testcase>
+    <testcase classname="Electron v37 Compatibility Tests › Auto-Updater Configuration" name="should verify auto-updater security settings" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="Critical Workflow Integration Tests - Electron v37" errors="0" failures="5" skipped="0" timestamp="2025-08-10T03:17:37" time="16.743" tests="16">
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › Authentication Flow" name="should complete Google OAuth flow successfully" time="0.006">
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › Authentication Flow" name="should generate and store API key after authentication" time="0.003">
+      <failure>Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: &quot;AaK8JutQzU4HNv6u3cMk3yX7semNloFx66PQEFYwqOU=&quot;
+Received: &quot;mock-api-key&quot;
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/critical-workflows.test.ts:93:35)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › Authentication Flow" name="should handle token refresh correctly" time="0">
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › Camera Discovery and Configuration" name="should discover cameras via SSDP" time="0.046">
+      <failure>TypeError: Cannot read properties of null (reading &apos;LOCATION&apos;)
+    at /Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/critical-workflows.test.ts:159:29
+    at /Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/critical-workflows.test.ts:149:13
+    at Array.forEach (&lt;anonymous&gt;)
+    at SsdpClient.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/critical-workflows.test.ts:148:23)
+    at /Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-mock/build/index.js:305:39
+    at SsdpClient.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-mock/build/index.js:312:13)
+    at SsdpClient.mockConstructor [as on] (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-mock/build/index.js:62:19)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/critical-workflows.test.ts:157:18)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › Camera Discovery and Configuration" name="should discover cameras via Bonjour" time="0.026">
+      <failure>TypeError: require(...) is not a function
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/critical-workflows.test.ts:174:49)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › Camera Discovery and Configuration" name="should configure camera with VAPIX" time="0.049">
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › Camera Discovery and Configuration" name="should activate camera license" time="0">
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › GCP Deployment" name="should create GCP project and enable APIs" time="0.393">
+      <failure>TypeError: Cannot read properties of undefined (reading &apos;prototype&apos;)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/critical-workflows.test.ts:295:34)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › GCP Deployment" name="should deploy Cloud Functions successfully" time="0.274">
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › GCP Deployment" name="should create API Gateway with proper configuration" time="0.067">
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › GCP Deployment" name="should execute Terraform successfully" time="0.001">
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › Error Handling and Recovery" name="should handle network failures gracefully" time="1.006">
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › Error Handling and Recovery" name="should handle quota exceeded errors" time="0.004">
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › Error Handling and Recovery" name="should clean up resources on failure" time="0">
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › State Management" name="should persist deployment state correctly" time="0.001">
+      <failure>TypeError: Cannot read properties of undefined (reading &apos;functionsDeployed&apos;)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/electron-v37/critical-workflows.test.ts:617:31)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
+    </testcase>
+    <testcase classname="Critical Workflow Integration Tests - Electron v37 › State Management" name="should handle concurrent state updates" time="0.008">
+    </testcase>
+  </testsuite>
+</testsuites>
