@@ -100,17 +100,18 @@
       "target": [
         {
           "target": "dmg",
-          "arch": "universal"
+          "arch": ["universal"]
         },
         {
           "target": "zip",
-          "arch": "universal"
+          "arch": ["universal"]
         }
       ],
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
+      "singleArchFiles": "**/terraform-bin/terraform",
       "extendInfo": {
         "NSLocalNetworkUsageDescription": "Anava Installer needs to access cameras on your local network for configuration and deployment.",
         "NSBonjourServices": [
@@ -141,8 +142,8 @@
     "@vitejs/plugin-react": "^4.7.0",
     "csv-parse": "^6.1.0",
     "dotenv": "^16.3.1",
-    "electron": "^27.3.11",
-    "electron-builder": "^24.13.3",
+    "electron": "^37.2.6",
+    "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
     "eslint": "^9.31.0",
     "eslint-plugin-react": "^7.37.5",
