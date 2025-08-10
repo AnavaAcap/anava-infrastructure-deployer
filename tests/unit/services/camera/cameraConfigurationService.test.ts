@@ -340,6 +340,104 @@ describe('CameraConfigurationService', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('Connection refused');
     });
+
+    // New test for v0.9.177 - ThreadPool error handling
+    it('should treat ThreadPool error (HTTP 500) as success', async () => {
+      // Mock the ThreadPool error that occurs when ACAP restarts
+      service['simpleDigestAuth'] = jest.fn().mockRejectedValue({
+        response: {
+          status: 500,
+          data: {
+            message: 'enqueue on stopped ThreadPool'
+          }
+        }
+      });
+
+      const camera = {
+        ip: '192.168.1.100',
+        credentials: { username: 'root', password: 'pass' }
+      };
+
+      const result = await service['pushConfigurationToCamera'](
+        camera,
+        mockConfig
+      );
+
+      // ThreadPool error should be treated as success since config was saved
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('ACAP restarting');
+      expect(service['simpleDigestAuth']).toHaveBeenCalledWith(
+        camera.ip,
+        'root',
+        'pass',
+        'POST',
+        '/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig',
+        JSON.stringify(mockConfig)
+      );
+    });
+
+    it('should attempt license activation even after ThreadPool error', async () => {
+      // Mock ThreadPool error followed by successful license activation
+      service['simpleDigestAuth'] = jest.fn().mockRejectedValue({
+        response: {
+          status: 500,
+          data: {
+            message: 'Failed to enqueue on stopped ThreadPool'
+          }
+        }
+      });
+
+      service['activateLicenseKey'] = jest.fn().mockResolvedValue({
+        success: true,
+        message: 'License activated'
+      });
+
+      const camera = {
+        ip: '192.168.1.100',
+        credentials: { username: 'root', password: 'pass' }
+      };
+
+      const result = await service['pushConfigurationToCamera'](
+        camera,
+        mockConfig
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.licenseActivated).toBe(true);
+      expect(service['activateLicenseKey']).toHaveBeenCalledWith(
+        camera.ip,
+        'root',
+        'pass',
+        mockConfig.anavaKey,
+        'BatonAnalytic'
+      );
+    });
+
+    it('should differentiate ThreadPool errors from other 500 errors', async () => {
+      // Mock a different 500 error that's not ThreadPool related
+      service['simpleDigestAuth'] = jest.fn().mockRejectedValue({
+        response: {
+          status: 500,
+          data: {
+            message: 'Internal server error: Database connection failed'
+          }
+        }
+      });
+
+      const camera = {
+        ip: '192.168.1.100',
+        credentials: { username: 'root', password: 'pass' }
+      };
+
+      const result = await service['pushConfigurationToCamera'](
+        camera,
+        mockConfig
+      );
+
+      // Non-ThreadPool 500 errors should still be failures
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Database connection failed');
+    });
   });
 
   describe('IP Validation', () => {

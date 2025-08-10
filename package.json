@@ -1,6 +1,6 @@
 {
   "name": "anava-installer",
-  "version": "0.9.176",
+  "version": "0.9.177",
   "description": "Anava Installer - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {

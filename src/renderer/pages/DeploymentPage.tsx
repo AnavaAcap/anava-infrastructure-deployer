@@ -64,12 +64,14 @@ const getDeploymentSteps = (config: DeploymentConfig | null): StepDefinition[] =
     ];
   }
 
-  // Full deployment steps for Vertex AI mode - FIXED ORDER
+  // Full deployment steps for Vertex AI mode - ACTUAL EXECUTION ORDER
   return [
     { key: 'authenticate', label: 'Authentication' },
     { key: 'enableApis', label: 'Enable APIs' },
+    { key: 'createFirebaseWebApp', label: 'Create Firebase Web App' },
     { key: 'createServiceAccounts', label: 'Create Service Accounts' },
     { key: 'assignIamRoles', label: 'Assign IAM Roles' },
+    { key: 'setupFirestore', label: 'Setup Firestore & Authentication' },
     { key: 'deployCloudFunctions', label: 'Deploy Cloud Functions', note: 'This step typically takes 5-7 minutes' },
     { 
       key: 'createApiGateway', 
@@ -82,8 +84,6 @@ const getDeploymentSteps = (config: DeploymentConfig | null): StepDefinition[] =
       ]
     },
     { key: 'configureWorkloadIdentity', label: 'Configure Identity Federation' },
-    { key: 'setupFirestore', label: 'Setup Firestore & Authentication' },
-    { key: 'createFirebaseWebApp', label: 'Create Firebase Web App' },
   ];
 };
 
@@ -137,46 +137,39 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
         setStepStatuses(prev => {
           const updated = { ...prev };
           
-          // Mark all previous steps as completed
-          let foundCurrent = false;
-          deploymentSteps.forEach(step => {
-            if (step.key === prog.currentStep) {
-              foundCurrent = true;
-              updated[step.key] = {
-                status: 'in_progress',
-                progress: prog.stepProgress || 0,
-                message: prog.message || prog.detail,
-                subStep: prog.subStep,
-                lastUpdate: Date.now()
-              };
-              
-              // Start elapsed time tracking
-              if (!stepTimersRef.current[step.key]) {
-                const startTime = Date.now();
-                stepTimersRef.current[step.key] = setInterval(() => {
-                  setStepStatuses(s => ({
-                    ...s,
-                    [step.key]: {
-                      ...s[step.key],
-                      elapsedTime: Math.floor((Date.now() - startTime) / 1000)
-                    }
-                  }));
-                }, 1000);
-              }
-            } else if (!foundCurrent && updated[step.key].status !== 'completed') {
-              // Mark previous steps as completed
-              updated[step.key] = {
-                status: 'completed',
-                progress: 100,
-                message: updated[step.key].message
-              };
-              // Clear timer
-              if (stepTimersRef.current[step.key]) {
-                clearInterval(stepTimersRef.current[step.key]);
-                delete stepTimersRef.current[step.key];
-              }
+          // Update the current step
+          if (updated[prog.currentStep]) {
+            // Check if this step is completing (progress === 100)
+            const isCompleting = prog.stepProgress === 100 && updated[prog.currentStep].status === 'in_progress';
+            
+            updated[prog.currentStep] = {
+              status: prog.stepProgress === 100 ? 'completed' : 'in_progress',
+              progress: prog.stepProgress || 0,
+              message: prog.message || prog.detail,
+              subStep: prog.subStep,
+              lastUpdate: Date.now()
+            };
+            
+            // Start elapsed time tracking for new in-progress steps
+            if (prog.stepProgress < 100 && !stepTimersRef.current[prog.currentStep]) {
+              const startTime = Date.now();
+              stepTimersRef.current[prog.currentStep] = setInterval(() => {
+                setStepStatuses(s => ({
+                  ...s,
+                  [prog.currentStep]: {
+                    ...s[prog.currentStep],
+                    elapsedTime: Math.floor((Date.now() - startTime) / 1000)
+                  }
+                }));
+              }, 1000);
             }
-          });
+            
+            // Clear timer when step completes
+            if (isCompleting && stepTimersRef.current[prog.currentStep]) {
+              clearInterval(stepTimersRef.current[prog.currentStep]);
+              delete stepTimersRef.current[prog.currentStep];
+            }
+          }
           
           return updated;
         });
