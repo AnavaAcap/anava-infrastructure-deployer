@@ -90,42 +90,17 @@ export const CameraProvider: React.FC<CameraProviderProps> = ({ children }) => {
   const [cameras, setCameras] = useState<ManagedCamera[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<ManagedCamera | null>(null);
 
-  // Load cameras from persistent storage on mount
-  useEffect(() => {
-    loadCameras();
-  }, []);
-
-  // Save cameras whenever they change
-  useEffect(() => {
-    if (cameras.length > 0) {
-      saveCameras();
-    }
-  }, [cameras]);
+  // NOTE: Camera state is now ephemeral - rebuilt during runtime only
+  // This prevents caching issues on M1 Macs and ensures fresh state on each app start
 
   const loadCameras = async () => {
-    try {
-      const savedCameras = await (window.electronAPI as any).getConfigValue?.('managedCameras') || [];
-      
-      // Convert saved data to ManagedCamera format
-      const loadedCameras: ManagedCamera[] = savedCameras.map((cam: any) => ({
-        ...cam,
-        lastUpdated: new Date(cam.lastUpdated || Date.now())
-      }));
-      
-      setCameras(loadedCameras);
-      console.log('Loaded managed cameras:', loadedCameras);
-    } catch (error) {
-      console.error('Failed to load managed cameras:', error);
-    }
+    // No-op: cameras are now built during runtime only
+    console.log('Camera loading disabled - using runtime state only');
   };
 
   const saveCameras = async () => {
-    try {
-      await (window.electronAPI as any).setConfigValue?.('managedCameras', cameras);
-      console.log('Saved managed cameras');
-    } catch (error) {
-      console.error('Failed to save managed cameras:', error);
-    }
+    // No-op: cameras are now ephemeral - not persisted
+    console.log('Camera saving disabled - using runtime state only');
   };
 
   const addCamera = (cameraData: Partial<ManagedCamera>) => {

@@ -40,34 +40,42 @@ function App() {
   const [eulaAccepted, setEulaAccepted] = useState(false);
 
   useEffect(() => {
-    // Show UI immediately with minimal initialization
+    console.time('App initialization');
+    
+    // IMMEDIATE: Show UI with no delay
     setIsAppReady(true);
     
-    // Check EULA from localStorage (synchronous, fast)
+    // IMMEDIATE: Check EULA (synchronous, from memory)
     const accepted = localStorage.getItem('eulaAccepted') === 'true';
     setEulaAccepted(accepted);
     
-    // Defer all heavy operations to next tick
-    requestAnimationFrame(() => {
-      // Subscribe to deployment events
+    // DEFERRED: Clear auth and initialize in background
+    // Using setTimeout(0) instead of requestAnimationFrame for faster execution
+    setTimeout(async () => {
+      console.time('Auth cleanup');
+      
+      // Clear auth caches in parallel, don't wait for results
+      const clearPromises = [
+        window.electronAPI.auth.signOut().catch(() => {}),
+        window.electronAPI.license.clearAssignedKey?.().catch(() => {})
+      ];
+      
+      // Clear localStorage items synchronously (fast)
+      localStorage.removeItem('cameraDefaultCredentials');
+      
+      // Don't block on auth cleanup
+      Promise.all(clearPromises).then(() => {
+        console.timeEnd('Auth cleanup');
+      });
+      
+      // Set state immediately, don't wait for cleanup
+      setAuthState('unauthenticated');
+      
+      // Subscribe to deployment events (non-blocking)
       window.electronAPI.deployment.subscribe();
       
-      // Check authentication state asynchronously
-      Promise.all([
-        window.electronAPI.license.getAssignedKey().catch(() => ({ success: false })),
-        window.electronAPI.auth.check().catch(() => ({ authenticated: false }))
-      ]).then(([licenseResult, authResult]) => {
-        if (licenseResult.success && licenseResult.key) {
-          setLicenseKey(licenseResult.key);
-          setAuthState('authenticated');
-        } else {
-          setAuthState(authResult.authenticated ? 'authenticated' : 'unauthenticated');
-        }
-      }).catch(error => {
-        console.error('Failed to initialize auth:', error);
-        setAuthState('unauthenticated');
-      });
-    });
+      console.timeEnd('App initialization');
+    }, 0);
   }, []);
 
   const handleViewChange = (view: NavigationView) => {
