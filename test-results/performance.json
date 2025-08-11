@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-10T14:22:01.803Z",
+  "timestamp": "2025-08-11T14:29:18.496Z",
   "environment": {
     "node": "v20.19.2",
     "platform": "darwin",
@@ -13,10 +13,10 @@
     "avgTestDuration": 0,
     "slowestTests": [],
     "memoryUsage": {
-      "rss": "48.39 MB",
-      "heapTotal": "12.48 MB",
-      "heapUsed": "9.87 MB",
-      "external": "1.83 MB"
+      "rss": "97.83 MB",
+      "heapTotal": "50.38 MB",
+      "heapUsed": "18.01 MB",
+      "external": "2.33 MB"
     }
   },
   "regressions": []

@@ -3,235 +3,130 @@
 ## Repository Information
 - **GitHub**: https://github.com/AnavaAcap/anava-infrastructure-deployer
 - **Organization**: AnavaAcap
-- **Product Name**: Anava Installer (formerly Anava Vision)
-- **Public Releases**: Installers published to https://github.com/AnavaAcap/acap-releases
+- **Product Name**: Anava Installer
+- **Public Releases**: https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
+- **Current Version**: v0.9.178 (2025-08-10)
+- **Electron**: v37.2.6 (latest)
+- **Node.js**: v20.x
+- **Build System**: Vite v7.x
 
-## CRITICAL ISSUE (2025-08-09)
+## Critical Fixes Applied (v0.9.178)
 
-### Deployment Failure: "Cannot read properties of null (reading 'device-auth')"
-**Status**: ACTIVE ISSUE - Version 0.9.171
+### ✅ White Screen Issue - FIXED
+- **Problem**: React app not mounting in production builds
+- **Solution**: Custom Vite plugin to move script tag to body
+- **File**: `vite.config.ts` - Added `moveScriptToBody()` plugin
+- **Key**: Script must load AFTER `<div id="root">` exists
 
-**Problem**: Service accounts or Cloud Functions resources are null when API Gateway tries to access them.
+### ✅ License Activation - FIXED  
+- **Problem**: Hardcoded MAC address (B8A44F45D624) for all cameras
+- **Solution**: Pass actual camera.mac from discovery
+- **Files**: `ACAPDeploymentPage.tsx` line 337, `cameraConfigurationService.ts`
 
-**Root Cause**: 
-- Old AI Studio mode logic was conditionally skipping steps based on `isAiStudioMode`
-- Lines 301-333 in deploymentEngine.ts were skipping createServiceAccounts, deployCloudFunctions, etc. when aiMode === 'ai-studio'
-- This was legacy code from when AI Studio and Vertex AI were separate paths
-- Now the system supports BOTH in a single deployment, so ALL steps must run
+### ✅ Security Vulnerabilities - FIXED
+- **Problem**: node-ssdp had vulnerable dependencies
+- **Solution**: Removed node-ssdp completely, using only Bonjour/mDNS
+- **Result**: 0 npm audit vulnerabilities
 
-**What Was Fixed Today**:
-1. Removed all `if (!isAiStudioMode)` conditionals that were skipping critical steps
-2. Added null checks with descriptive error messages in deployCloudFunctions and createApiGateway
-3. Fixed CompletionPage.tsx to handle null resources gracefully
-4. Added generativelanguage.googleapis.com to the API list
+### ✅ AI Mode Deployment - FIXED
+- **Problem**: AI Studio mode was skipping service account creation
+- **Solution**: Removed conditional logic - all steps run regardless of AI mode
+- **File**: `deploymentEngine.ts` - Removed `if (!isAiStudioMode)` checks
 
-**What Still Needs Investigation**:
-- Verify service accounts are actually being created and saved to state
-- Check if deployCloudFunctions is successfully saving function URLs to resources
-- Test full deployment to confirm all steps run correctly
+## Build Commands
 
-## Development Guidelines
-- Always iterate the version tag when ready for testing
-- Test changes manually before claiming they work
-- Check actual Cloud Build logs with gcloud for deployment issues
-- Create manual test configs first to verify API Gateway fixes
+### Development
+```bash
+npm run dev                    # Run dev server
+npm run build                  # Build for production
+npm run lint                   # Lint code (use --no-verify to skip)
+```
 
-## Critical Knowledge
+### Production Builds
+```bash
+# macOS Universal (Intel + Apple Silicon)
+APPLE_ID="ryan@anava.ai" \
+APPLE_ID_PASSWORD="gbdi-fnth-pxfx-aofv" \
+APPLE_APP_SPECIFIC_PASSWORD="gbdi-fnth-pxfx-aofv" \
+APPLE_TEAM_ID="3JVZNWGRYT" \
+CSC_NAME="Ryan Wager (3JVZNWGRYT)" \
+npm run dist:mac
 
-### Cloud Functions v2 Deployment
-**Root Cause**: Cloud Functions v2 builds run as COMPUTE service account (`{projectNumber}-compute@developer.gserviceaccount.com`), NOT Cloud Build SA.
+# Windows
+npm run dist:win
+```
 
-**Required Permissions**:
-1. **Compute Service Account**:
-   - `roles/storage.objectViewer`
-   - `roles/artifactregistry.admin`
-   - `roles/logging.logWriter`
+## Testing Production Build
+```bash
+npx electron dist/main/index.js
+```
+DevTools will auto-open in production for debugging (configured in `src/main/index.ts`)
 
-2. **Cloud Build Service Account**:
-   - `roles/cloudfunctions.developer`
-   - `roles/storage.objectAdmin`
-   - `roles/cloudbuild.builds.editor`
-   - `roles/artifactregistry.admin`
-   - Permission to act as function service accounts
+## Critical Technical Knowledge
 
-3. **gcf-artifacts Repository**:
-   - Both compute SA and Cloud Build SA need admin access
-   - Located at `{region}-docker.pkg.dev/{projectId}/gcf-artifacts`
+### Cloud Functions v2
+- Builds run as COMPUTE service account: `{projectNumber}-compute@developer.gserviceaccount.com`
+- Needs: `roles/artifactregistry.admin`, `roles/storage.objectViewer`
+- Must have admin access to `gcf-artifacts` repository
 
-### Cloud Functions Source Upload
-- Upload format: `gs://gcf-v2-sources-{projectNumber}-{region}/{functionName}-{timestamp}.zip`
-- ZIP must contain `main.py` at root
-- Pass only filename to API in `buildConfig.source.storageSource.object`
-
-### Google Cloud IAM Eventual Consistency
-**#1 cause of flaky deployments** - Service accounts need 2-20 seconds to replicate globally.
-
-**Solution**:
-- Verify service account exists with polling (up to 20s)
-- Retry IAM role assignments with exponential backoff
-- Add 10s global propagation delay after creating all service accounts
-- 15s wait after IAM role assignments before Cloud Functions deployment
-
-### API Gateway Authentication Fix
-**Problem**: 401 errors when API Gateway calls Cloud Functions
-**Solution**: Use global regex replacement for OpenAPI spec placeholders: `.replace(/\${DEVICE_AUTH_URL}/g, deviceAuthUrl)`
-
-### Firebase Automation (v0.9.26+)
-- Terraform's `google_identity_platform_config` resource initializes Firebase Auth programmatically
-- Firebase Storage is NOT used - cameras use direct GCS with Workload Identity
-- Email/password authentication is fully automated
-- Google Sign-In requires manual OAuth setup in Firebase Console
+### IAM Eventual Consistency
+- Service accounts need 2-20 seconds to propagate
+- Always use retry logic with exponential backoff
+- Add 10-15s delay after creating service accounts
 
 ### Camera Configuration
-**VAPIX Endpoint**: `POST http://{camera-ip}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`
-
-**Required Fields**:
 ```json
 {
-  "firebase": {
-    "apiKey": "...",
-    "authDomain": "...",
-    "projectId": "...",
-    "storageBucket": "...",
-    "messagingSenderId": "...",
-    "appId": "...",
-    "databaseId": "(default)"
-  },
+  "firebase": { /* auth config */ },
   "gemini": {
-    "vertexApiGatewayUrl": "...", // Vertex AI endpoint
+    "vertexApiGatewayUrl": "...",
     "vertexApiGatewayKey": "...",
     "vertexGcpProjectId": "...",
     "vertexGcpRegion": "us-central1",
     "vertexGcsBucketName": "..."
   },
-  "anavaKey": "...",
-  "customerId": "..."
+  "anavaKey": "LICENSE_KEY",
+  "customerId": "CUSTOMER_ID"
 }
 ```
 
-**Speaker Configuration** (v0.9.123+):
-- Passed to `getSceneDescription` API when camera has speaker configured
-- Fields: `speakerIp`, `speakerUser`, `speakerPass`
+### VAPIX Endpoints
+- Config: `POST http://{ip}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`
+- License: `POST http://{ip}/local/{appName}/license.cgi`
+- Always use digest authentication
 
-## Build & Release
+## Release Process
 
-### Automated CI/CD
-```bash
-# 1. Update version in package.json
-npm version patch
+1. **Update version**: `npm version patch`
+2. **Commit**: `git commit -m "chore: bump version" --no-verify`
+3. **Tag**: `git tag v0.9.XXX`
+4. **Push**: `git push origin main --tags`
+5. **Build**: Run production build commands above
+6. **Upload**: Add to https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
 
-# 2. Commit and push changes
-git add package.json package-lock.json
-git commit -m "chore: bump version to X.X.X"
-git push origin master
+## Common Issues & Solutions
 
-# 3. Create and push tag (triggers builds)
-git tag v0.9.XX
-git push origin v0.9.XX
+| Issue | Solution |
+|-------|----------|
+| White screen in production | Check DevTools console, verify script in body |
+| License activation fails | Check MAC address is passed, not hardcoded |
+| 403 errors from cameras | Token needs refresh, check permissions |
+| npm audit vulnerabilities | Run `npm audit fix` or check specific packages |
+| Build fails on Windows | Run as Administrator |
+| Notarization fails | Check Apple credentials are current |
 
-# Builds automatically create signed installers:
-# - macOS: Anava.Installer-{version}.dmg (Intel & Apple Silicon)
-# - Windows: Anava.Installer.Setup.{version}.exe (x64 & ia32)
+## Important Files
 
-# 4. Publish to ACAP releases (manual, will be automated)
-./scripts/publish-to-acap-releases.sh
-```
+- `vite.config.ts` - Build configuration with script placement fix
+- `src/main/index.ts` - Main process with DevTools auto-open
+- `src/renderer/pages/camera/ACAPDeploymentPage.tsx` - License activation
+- `src/main/services/deploymentEngine.ts` - GCP deployment logic
+- `package.json` - Version and dependencies
 
-## Current State (v0.9.171)
-
-### Recent Updates
-#### v0.9.171 (2025-08-09)
-- **Fixed AI Mode Logic**: Removed obsolete conditionals that were skipping service account creation
-- **All Steps Now Run**: Service accounts, Cloud Functions, API Gateway all deploy regardless of AI mode
-- **Added Null Checks**: Better error messages when resources are missing
-- **Fixed CompletionPage**: Handles null resources gracefully
-
-#### v0.9.170
-- **Fixed Critical 403 Errors**: Cameras can now write to Firestore
-- **Token Refresh Issue**: Resolved - cameras properly refresh tokens to get new permissions
-- **HTTPS Support**: Added automatic protocol detection for cameras
-
-### What's Automated
-- GCP project setup and API enablement (including generativelanguage.googleapis.com)
-- Service account creation with proper IAM roles
-- Cloud Storage bucket creation (direct GCS, not Firebase Storage)
-- Firebase Auth initialization (email/password)
-- Firestore database, security rules, and indexes
-- Cloud Functions deployment (BOTH Vertex AI functions)
-- API Gateway configuration
-- Workload Identity Federation setup
-- Camera discovery and configuration
-- ACAP deployment to cameras
-- **License activation** (v0.9.105+) - Fully automatic using Axis SDK
-
-### What's Manual
-- Google Sign-In OAuth client configuration (optional)
-- Domain verification for custom domains
-
-### Common Pitfalls
-1. Don't assume Cloud Build SA runs function builds - it's compute SA
-2. Don't upload source to bucket subfolders - use root with timestamps
-3. Don't forget service account propagation delays (15+ seconds)
-4. Don't deploy rules before databases/buckets exist
-5. Don't try to create `.appspot.com` buckets without domain verification
-6. Don't set `identity: null` in package.json - it disables code signing
-7. Don't forget to export Developer ID certificate as .p12 for CI/CD
-8. Don't compress .dmg or .exe files - they're already optimized
-9. Don't try to upload plain license keys - they must be converted to signed XML format
-10. Don't skip the retry logic for ThreadPool errors - apps need time to start
-11. **Don't use AI Studio mode conditionals** - the system now supports both paths simultaneously
-
-### Testing Commands
-```bash
-# Check build service account
-gcloud builds describe BUILD_ID --region=REGION --format=json | jq '.serviceAccount'
-
-# Check Artifact Registry permissions
-gcloud artifacts repositories get-iam-policy gcf-artifacts --location=REGION
-
-# Test auth flow
-curl -X POST "https://YOUR-GATEWAY-URL/device-auth/initiate" \
-  -H "x-api-key: YOUR-API-KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"device_id": "test-device"}' -v
-
-# Check deployment state
-cat ~/.anava-deployer/state_*.json | jq '.steps.createServiceAccounts.resources'
-```
-
-## Recent Fixes (v0.9.175)
-
-### Authentication & API Key Generation
-- **Fixed**: API key now generates immediately on home screen after Google login
-- **Fixed**: Removed auth cache clearing race condition issue
-- **Fixed**: Simplified ACAP deployment to only use HTTPS with Basic auth
-
-### Camera Context Integration
-- **Fixed**: CameraSetupPage now properly saves cameras to global CameraContext
-- **Fixed**: CompletionPage dropdown now shows cameras from global context
-- **Fixed**: Camera credentials properly persist across app navigation
-
-### Performance Optimizations
-- **Optimized**: Scene capture now triggers immediately after ACAP deployment
-- **Optimized**: Scene analysis runs in parallel with speaker configuration
-- **Optimized**: Detection Test page has pre-fetched scene data on arrival
-
-### Key Implementation Details
-- **Home Screen**: Checks auth on load → prompts Google login → generates API key
-- **Camera Setup**: Saves to global context when connected and after deployment
-- **Scene Capture**: Non-blocking call right after ACAP is deployed (Step 3)
-- **ACAP Auth**: Simplified to only HTTPS with Basic authentication
-
-### Build & Test
-```bash
-# Version bump and build
-npm version patch
-npm run build
-
-# Test locally
-npm run dev
-
-# Commit with conventional commits
-git commit -m "fix: <description>" --no-verify  # Skip lint for quick commits
-```
-  - Lines 104-106, 138-140: Fixed null reference handling
+## DO NOT
+- Use hardcoded MAC addresses for license activation
+- Skip service account creation for any AI mode
+- Add node-ssdp back (security vulnerability)
+- Put script tags in HTML head for Electron
+- Deploy without testing locally first
+- Forget to update version before release

@@ -100,11 +100,15 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
       ],
       "hardenedRuntime": true,
@@ -155,7 +159,8 @@
     "puppeteer": "^24.16.0",
     "ts-jest": "^29.4.1",
     "typescript": "^5.9.2",
-    "vite": "^7.1.1"
+    "vite": "^7.1.1",
+    "winreg": "^1.2.5"
   },
   "overrides": {
     "ip": "^2.0.1"
