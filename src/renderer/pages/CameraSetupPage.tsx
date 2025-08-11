@@ -19,7 +19,6 @@ import {
   StepContent,
   Paper,
   Chip,
-  LinearProgress,
   Collapse,
   List,
   ListItem,
