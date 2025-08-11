@@ -1,4 +1,3 @@
-import { ipcMain } from 'electron';
 import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
@@ -6,6 +5,8 @@ import path from 'path';
 import os from 'os';
 import https from 'https';
 import { Camera } from './cameraDiscoveryService';
+import { registerIPCHandler } from '../../utils/ipcErrorBoundary';
+import { logger } from '../../utils/logger';
 
 export interface DeploymentResult {
   success: boolean;
@@ -16,6 +17,9 @@ export interface DeploymentResult {
   firmwareVersion?: string;
   osVersion?: 'OS11' | 'OS12';
   selectedFile?: string;
+  detectionMethod?: string;
+  architectureDetected?: string;
+  wasUncertain?: boolean;
 }
 
 export class ACAPDeploymentService {
@@ -31,28 +35,46 @@ export class ACAPDeploymentService {
   }
 
   private setupIPC() {
-    ipcMain.handle('deploy-acap', async (_event, camera: Camera, acapPath: string) => {
+    registerIPCHandler('deploy-acap', async (_event, camera: Camera, acapPath: string) => {
       return this.deployACAP(camera, acapPath);
     });
     
-    ipcMain.handle('deploy-acap-auto', async (_event, camera: Camera, availableAcaps: any[]) => {
-      return this.deployACAPAuto(camera, availableAcaps);
+    registerIPCHandler('deploy-acap-auto', async (_event, camera: Camera, availableAcaps: any[]) => {
+      console.log('[IPC] deploy-acap-auto handler called');
+      console.log('[IPC] Camera:', camera?.id, camera?.ip);
+      console.log('[IPC] Available ACAPs:', availableAcaps?.length);
+      logger.info('[IPC] deploy-acap-auto handler called', { 
+        cameraId: camera?.id, 
+        cameraIp: camera?.ip,
+        acapCount: availableAcaps?.length 
+      });
+      
+      try {
+        const result = await this.deployACAPAuto(camera, availableAcaps);
+        console.log('[IPC] deploy-acap-auto result:', result);
+        logger.info('[IPC] deploy-acap-auto completed', { success: result?.success });
+        return result;
+      } catch (error: any) {
+        console.error('[IPC] deploy-acap-auto ERROR:', error);
+        logger.error('[IPC] deploy-acap-auto failed', error);
+        throw error;
+      }
     });
     
-    ipcMain.handle('uninstall-acap', async (_event, camera: Camera, appName: string) => {
+    registerIPCHandler('uninstall-acap', async (_event, camera: Camera, appName: string) => {
       return this.uninstallACAP(camera, appName);
     });
     
-    ipcMain.handle('list-installed-acaps', async (_event, camera: Camera) => {
+    registerIPCHandler('list-installed-acaps', async (_event, camera: Camera) => {
       return this.listInstalledACAPs(camera);
     });
     
-    ipcMain.handle('get-camera-firmware', async (_event, camera: Camera) => {
+    registerIPCHandler('get-camera-firmware', async (_event, camera: Camera) => {
       return this.getCameraFirmwareInfo(camera);
     });
   }
 
-  async getCameraFirmwareInfo(camera: Camera): Promise<{ firmwareVersion: string; osVersion: 'OS11' | 'OS12'; architecture?: string }> {
+  async getCameraFirmwareInfo(camera: Camera): Promise<{ firmwareVersion: string; osVersion: 'OS11' | 'OS12'; architecture?: string; detectionMethod?: string }> {
     try {
       const credentials = camera.credentials;
       if (!credentials || !credentials.username || !credentials.password) {
@@ -62,10 +84,13 @@ export class ACAPDeploymentService {
       const firmwareVersion = await this.getFirmwareVersion(camera.ip, credentials.username, credentials.password);
       const isOS12 = this.isOS12Firmware(firmwareVersion);
       
-      // Try to get architecture info
-      let architecture = 'aarch64'; // Default to most common
+      // Try multiple methods to detect architecture
+      let architecture: string | undefined;
+      let detectionMethod = 'Unknown';
+      
       try {
-        // First try the specific Architecture property
+        // Method 1: Try the specific Architecture property
+        console.log(`[getCameraFirmwareInfo] Attempting to detect architecture for camera ${camera.ip}...`);
         const archResponse = await this.digestAuth(
           camera.ip,
           credentials.username,
@@ -78,13 +103,20 @@ export class ACAPDeploymentService {
           const data = String(archResponse.data);
           const archMatch = data.match(/Properties\.System\.Architecture=([^\r\n]+)/);
           if (archMatch) {
-            architecture = archMatch[1].toLowerCase().trim();
-            console.log(`[getCameraFirmwareInfo] Architecture from Properties.System.Architecture: ${architecture}`);
+            const detectedArch = archMatch[1].toLowerCase().trim();
+            // Normalize architecture names
+            architecture = this.normalizeArchitecture(detectedArch);
+            detectionMethod = 'Properties.System.Architecture';
+            console.log(`[getCameraFirmwareInfo] ✓ Architecture detected via direct property: ${architecture} (raw: ${detectedArch})`);
           }
         }
-        
-        // If not found, try to get from full system properties
-        if (architecture === 'aarch64') {
+      } catch (error) {
+        console.log('[getCameraFirmwareInfo] Architecture property not available, trying alternative methods...');
+      }
+      
+      // Method 2: Try to get from full system properties
+      if (!architecture) {
+        try {
           const response = await this.digestAuth(
             camera.ip,
             credentials.username,
@@ -95,72 +127,296 @@ export class ACAPDeploymentService {
           
           if (response && response.data) {
             const data = String(response.data);
-            // Look for architecture info in system properties
-            if (data.includes('Architecture=')) {
-              const archMatch = data.match(/Architecture=([^\r\n]+)/);
-              if (archMatch) {
-                architecture = archMatch[1].toLowerCase().trim();
-                console.log(`[getCameraFirmwareInfo] Architecture from Properties.System: ${architecture}`);
-              }
+            
+            // Check for Architecture in system properties
+            const archMatch = data.match(/Properties\.System\.Architecture=([^\r\n]+)/);
+            if (archMatch) {
+              const detectedArch = archMatch[1].toLowerCase().trim();
+              architecture = this.normalizeArchitecture(detectedArch);
+              detectionMethod = 'Properties.System';
+              console.log(`[getCameraFirmwareInfo] ✓ Architecture detected via system properties: ${architecture} (raw: ${detectedArch})`);
             }
             
-            // Also check SOC for architecture inference
-            if (data.includes('Soc=')) {
-              const socMatch = data.match(/Soc=([^\r\n]+)/);
+            // Method 3: Infer from SOC if architecture still not found
+            if (!architecture) {
+              const socMatch = data.match(/Properties\.System\.Soc=([^\r\n]+)/);
               if (socMatch) {
-                const soc = socMatch[1];
-                console.log(`[getCameraFirmwareInfo] System on Chip: ${soc}`);
-                // Map known SOCs to architectures
-                if (soc.includes('CV25') || soc.includes('Artpec-8') || soc.includes('ARTPEC-8')) {
+                const soc = socMatch[1].toUpperCase();
+                console.log(`[getCameraFirmwareInfo] System on Chip detected: ${soc}`);
+                
+                // Comprehensive SOC to architecture mapping
+                if (soc.includes('CV25') || soc.includes('ARTPEC-8') || soc.includes('ARTPEC8')) {
                   architecture = 'aarch64';
-                } else if (soc.includes('ARTPEC-7') || soc.includes('Artpec-7')) {
+                  detectionMethod = `Inferred from SOC (${soc})`;
+                } else if (soc.includes('ARTPEC-7') || soc.includes('ARTPEC7')) {
                   architecture = 'armv7hf';
+                  detectionMethod = `Inferred from SOC (${soc})`;
+                } else if (soc.includes('ARTPEC-6') || soc.includes('ARTPEC6')) {
+                  architecture = 'armv7hf';
+                  detectionMethod = `Inferred from SOC (${soc})`;
+                } else if (soc.includes('AMBARELLA') || soc.includes('S5L')) {
+                  architecture = 'aarch64';
+                  detectionMethod = `Inferred from SOC (${soc})`;
+                } else if (soc.includes('HI3516') || soc.includes('HI3519')) {
+                  architecture = 'armv7hf';
+                  detectionMethod = `Inferred from SOC (${soc})`;
+                }
+                
+                if (architecture) {
+                  console.log(`[getCameraFirmwareInfo] ✓ Architecture inferred from SOC: ${architecture}`);
                 }
               }
             }
           }
+        } catch (error) {
+          console.log('[getCameraFirmwareInfo] Could not access system properties');
         }
-      } catch (error) {
-        console.log('[getCameraFirmwareInfo] Could not get architecture, using default: aarch64');
       }
+      
+      // Method 4: Try to infer from model number if available
+      if (!architecture) {
+        try {
+          const brandResponse = await this.digestAuth(
+            camera.ip,
+            credentials.username,
+            credentials.password,
+            'GET',
+            '/axis-cgi/param.cgi?action=list&group=Brand'
+          );
+          
+          if (brandResponse && brandResponse.data) {
+            const data = String(brandResponse.data);
+            const modelMatch = data.match(/Brand\.ProdNbr=([^\r\n]+)/);
+            if (modelMatch) {
+              const model = modelMatch[1].trim();
+              console.log(`[getCameraFirmwareInfo] Camera model: ${model}`);
+              
+              // Model-based architecture inference
+              // Newer models (2020+) typically use aarch64
+              // Older models typically use armv7hf
+              const modelYear = this.inferModelYear(model);
+              if (modelYear >= 2020) {
+                architecture = 'aarch64';
+                detectionMethod = `Inferred from model ${model} (year ${modelYear})`;
+              } else if (modelYear > 0) {
+                architecture = 'armv7hf';
+                detectionMethod = `Inferred from model ${model} (year ${modelYear})`;
+              }
+              
+              if (architecture) {
+                console.log(`[getCameraFirmwareInfo] ✓ Architecture inferred from model: ${architecture}`);
+              }
+            }
+          }
+        } catch (error) {
+          console.log('[getCameraFirmwareInfo] Could not get model information');
+        }
+      }
+      
+      // Final fallback with warning
+      if (!architecture) {
+        architecture = 'aarch64';
+        detectionMethod = 'Default (detection failed)';
+        console.warn(`[getCameraFirmwareInfo] ⚠ WARNING: Could not detect architecture for camera ${camera.ip}, defaulting to ${architecture}`);
+        console.warn(`[getCameraFirmwareInfo] ⚠ This may cause ACAP deployment to fail if incorrect`);
+      }
+      
+      console.log(`[getCameraFirmwareInfo] Final detection result: architecture=${architecture}, method=${detectionMethod}`);
       
       return {
         firmwareVersion,
         osVersion: isOS12 ? 'OS12' : 'OS11',
-        architecture
+        architecture,
+        detectionMethod
       };
     } catch (error: any) {
       throw new Error(`Failed to get firmware info: ${error.message}`);
     }
   }
 
+  private normalizeArchitecture(arch: string): string {
+    const normalized = arch.toLowerCase().trim();
+    
+    // Map various architecture names to standard ones
+    const archMap: { [key: string]: string } = {
+      'aarch64': 'aarch64',
+      'arm64': 'aarch64',
+      'arm64-v8': 'aarch64',
+      'armv8': 'aarch64',
+      'armv8-a': 'aarch64',
+      'armv7hf': 'armv7hf',
+      'armv7l': 'armv7hf',
+      'armv7': 'armv7hf',
+      'armhf': 'armv7hf',
+      'arm': 'armv7hf',
+      'x86_64': 'x86_64',
+      'x64': 'x86_64',
+      'amd64': 'x86_64',
+      'i386': 'i386',
+      'i686': 'i386',
+      'x86': 'i386'
+    };
+    
+    return archMap[normalized] || normalized;
+  }
+
+  private inferModelYear(model: string): number {
+    // Extract potential year from model number
+    // Many Axis models include year indicators
+    const yearPatterns = [
+      /P(\d{2})(\d{2})/, // PXX2X format (e.g., P3245 = 2020)
+      /M(\d{2})(\d{2})/, // MXX2X format
+      /Q(\d{2})(\d{2})/, // QXX2X format
+    ];
+    
+    for (const pattern of yearPatterns) {
+      const match = model.match(pattern);
+      if (match) {
+        const series = parseInt(match[1], 10);
+        const yearIndicator = parseInt(match[2], 10);
+        
+        // Rough estimation based on series and year indicator
+        if (series >= 32) { // 3200+ series
+          if (yearIndicator >= 40) return 2020;
+          if (yearIndicator >= 30) return 2018;
+          if (yearIndicator >= 20) return 2016;
+        }
+      }
+    }
+    
+    // Check for specific known model ranges
+    const modelNum = parseInt(model.replace(/\D/g, ''), 10);
+    if (modelNum >= 3245) return 2020;
+    if (modelNum >= 3225) return 2018;
+    if (modelNum >= 3215) return 2016;
+    
+    return 0; // Unknown year
+  }
+
   async deployACAPAuto(camera: Camera, availableAcaps: any[]): Promise<DeploymentResult> {
     try {
       console.log(`[deployACAPAuto] ========== AUTO DEPLOYMENT STARTING ==========`);
+      console.log(`[deployACAPAuto] Camera:`, { id: camera.id, ip: camera.ip, model: camera.model });
       console.log(`[deployACAPAuto] Available ACAPs:`, availableAcaps.map(a => a.filename));
       
-      // Get camera firmware info
+      logger.info('[deployACAPAuto] Starting auto deployment', {
+        cameraId: camera.id,
+        cameraIp: camera.ip,
+        cameraModel: camera.model,
+        acapCount: availableAcaps.length
+      });
+      
+      // Get camera firmware info with enhanced detection
+      console.log(`[deployACAPAuto] Getting firmware info for ${camera.ip}...`);
+      logger.info('[deployACAPAuto] Getting firmware info', { cameraIp: camera.ip });
+      
       const firmwareInfo = await this.getCameraFirmwareInfo(camera);
+      
+      console.log(`[deployACAPAuto] Firmware info received:`, firmwareInfo);
+      logger.info('[deployACAPAuto] Firmware info received', firmwareInfo);
       console.log(`[deployACAPAuto] Camera firmware: ${firmwareInfo.firmwareVersion} (${firmwareInfo.osVersion})`);
       console.log(`[deployACAPAuto] Camera architecture: ${firmwareInfo.architecture}`);
+      console.log(`[deployACAPAuto] Detection method: ${firmwareInfo.detectionMethod}`);
+      
+      // Check if architecture detection was uncertain
+      const isUncertainDetection = firmwareInfo.detectionMethod?.includes('Default') || 
+                                   firmwareInfo.detectionMethod?.includes('Inferred');
       
       // Find matching ACAP for this camera
       const osVersionLower = firmwareInfo.osVersion.toLowerCase();
-      const matchingAcap = availableAcaps.find(acap => {
+      const architecture = firmwareInfo.architecture || 'aarch64';
+      
+      // First try exact match with flexible patterns
+      let matchingAcap = availableAcaps.find(acap => {
         const filename = acap.filename.toLowerCase();
-        // Check if filename contains the OS version
-        const hasCorrectOS = filename.includes(osVersionLower);
-        // Check if filename contains the architecture (if known)
-        const hasCorrectArch = !firmwareInfo.architecture || 
-                              filename.includes(firmwareInfo.architecture) ||
-                              (firmwareInfo.architecture === 'aarch64' && filename.includes('aarch64'));
+        
+        // Handle different naming patterns:
+        // - signed_Anava_-_Analyze_3_8_1_aarch64_os12.eap
+        // - anava-baton-os12-aarch64.eap
+        // - BatonAnalytic_os12_aarch64.eap
+        
+        // Check for OS version (os11, os12)
+        const hasCorrectOS = filename.includes(osVersionLower) || 
+                            filename.includes(osVersionLower.replace('os', 'os_')) ||
+                            filename.includes(osVersionLower.replace('os', '_os'));
+        
+        // Check for architecture
+        const hasCorrectArch = filename.includes(architecture.toLowerCase()) ||
+                              filename.includes(`_${architecture.toLowerCase()}_`) ||
+                              filename.includes(`_${architecture.toLowerCase()}.`) ||
+                              filename.includes(`-${architecture.toLowerCase()}-`) ||
+                              filename.includes(`-${architecture.toLowerCase()}.`);
         
         console.log(`[deployACAPAuto] Checking ${acap.filename}: OS match=${hasCorrectOS}, Arch match=${hasCorrectArch}`);
         return hasCorrectOS && hasCorrectArch && acap.isDownloaded;
       });
       
+      // If no exact match and detection was uncertain, show warning
+      if (!matchingAcap && isUncertainDetection) {
+        console.warn(`[deployACAPAuto] ⚠ No exact match found and architecture detection was uncertain`);
+        
+        // Try to find any ACAP with matching OS version
+        const osMatchingAcaps = availableAcaps.filter(acap => {
+          const filename = acap.filename.toLowerCase();
+          return filename.includes(osVersionLower) && acap.isDownloaded;
+        });
+        
+        if (osMatchingAcaps.length > 0) {
+          // Create error message with available options
+          const availableArchitectures = osMatchingAcaps.map(a => {
+            const match = a.filename.match(/(aarch64|armv7hf|x86_64|i386)/i);
+            return match ? match[1] : 'unknown';
+          }).filter((v, i, a) => a.indexOf(v) === i); // unique values
+          
+          const errorMsg = `Camera architecture could not be reliably detected.\n` +
+                          `Detected: ${architecture} (${firmwareInfo.detectionMethod})\n` +
+                          `Available architectures for ${firmwareInfo.osVersion}: ${availableArchitectures.join(', ')}\n\n` +
+                          `Please verify your camera's architecture and manually select the correct ACAP file.\n` +
+                          `You can check the architecture by:\n` +
+                          `1. Looking up your camera model specifications\n` +
+                          `2. Checking the camera's web interface system information\n` +
+                          `3. Running the test script: node test-camera-architecture-detection.js ${camera.ip} <username> <password>`;
+          
+          throw new Error(errorMsg);
+        }
+      }
+      
       if (!matchingAcap) {
-        throw new Error(`No suitable ACAP found for ${firmwareInfo.osVersion} (firmware ${firmwareInfo.firmwareVersion}). Please download the correct ACAP version.`);
+        // Try fallback patterns
+        const fallbackPatterns = [
+          // Try without strict architecture match for common cases
+          { os: osVersionLower, arch: 'aarch64' },
+          { os: osVersionLower, arch: 'armv7hf' }
+        ];
+        
+        for (const pattern of fallbackPatterns) {
+          matchingAcap = availableAcaps.find(acap => {
+            const filename = acap.filename.toLowerCase();
+            return filename.includes(pattern.os) && 
+                   filename.includes(pattern.arch) && 
+                   acap.isDownloaded;
+          });
+          
+          if (matchingAcap) {
+            console.warn(`[deployACAPAuto] ⚠ Using fallback match: ${matchingAcap.filename}`);
+            break;
+          }
+        }
+      }
+      
+      if (!matchingAcap) {
+        const errorMsg = `No suitable ACAP found for camera:\n` +
+                        `- Firmware: ${firmwareInfo.firmwareVersion}\n` +
+                        `- OS Version: ${firmwareInfo.osVersion}\n` +
+                        `- Architecture: ${architecture} (${firmwareInfo.detectionMethod})\n\n` +
+                        `Available ACAPs:\n${availableAcaps.map(a => `  - ${a.filename} (${a.isDownloaded ? 'downloaded' : 'not downloaded'})`).join('\n')}\n\n` +
+                        `Please download the correct ACAP version for your camera.`;
+        throw new Error(errorMsg);
+      }
+      
+      // If detection was uncertain, add warning to result
+      if (isUncertainDetection) {
+        console.warn(`[deployACAPAuto] ⚠ Proceeding with ${matchingAcap.filename} but architecture detection was uncertain`);
       }
       
       console.log(`[deployACAPAuto] Selected ACAP: ${matchingAcap.filename}`);
@@ -169,11 +425,14 @@ export class ACAPDeploymentService {
       const acapPath = path.join(os.tmpdir(), 'anava-acaps', matchingAcap.filename);
       const deployResult = await this.deployACAP(camera, acapPath);
       
-      // Add the selected filename to the result
+      // Add the selected filename and detection info to the result
       if (deployResult.success) {
         return {
           ...deployResult,
-          selectedFile: matchingAcap.filename
+          selectedFile: matchingAcap.filename,
+          detectionMethod: firmwareInfo.detectionMethod,
+          architectureDetected: architecture,
+          wasUncertain: isUncertainDetection
         };
       }
       return deployResult;

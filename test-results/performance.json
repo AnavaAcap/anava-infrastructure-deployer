@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-11T14:29:18.496Z",
+  "timestamp": "2025-08-11T21:07:48.981Z",
   "environment": {
     "node": "v20.19.2",
     "platform": "darwin",
@@ -7,16 +7,321 @@
     "cpus": 14,
     "memory": 38654705664
   },
-  "testSuites": [],
+  "testSuites": [
+    {
+      "name": "/src/__tests__/integration-tests.spec.ts",
+      "duration": 5137,
+      "tests": [
+        {
+          "title": "should complete full setup flow from credentials to completion",
+          "fullName": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should complete full setup flow from credentials to completion",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841911928,
+            "external": 5424569,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should persist state between page refreshes",
+          "fullName": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should persist state between page refreshes",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841913864,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should handle network scan with multiple network interfaces",
+          "fullName": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should handle network scan with multiple network interfaces",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841914168,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should properly detect Axis cameras using POST method",
+          "fullName": "Camera Setup Workflow Integration Tests 2. Camera Detection and Configuration should properly detect Axis cameras using POST method",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841914472,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should push configuration to camera via VAPIX",
+          "fullName": "Camera Setup Workflow Integration Tests 2. Camera Detection and Configuration should push configuration to camera via VAPIX",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841914776,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should identify speakers by audio endpoint",
+          "fullName": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should identify speakers by audio endpoint",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841915080,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should store discovered speakers for later configuration",
+          "fullName": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should store discovered speakers for later configuration",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841915384,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should mark step 4 as completed after speaker configuration",
+          "fullName": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should mark step 4 as completed after speaker configuration",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841915688,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should activate license with correct MAC address",
+          "fullName": "Camera Setup Workflow Integration Tests 4. License Activation should activate license with correct MAC address",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841915992,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should not use hardcoded MAC address",
+          "fullName": "Camera Setup Workflow Integration Tests 4. License Activation should not use hardcoded MAC address",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841916296,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should handle pre-fetched audio data on first load",
+          "fullName": "Camera Setup Workflow Integration Tests 5. Audio Playback Integration should handle pre-fetched audio data on first load",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841916552,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should convert PCM audio to WAV format",
+          "fullName": "Camera Setup Workflow Integration Tests 5. Audio Playback Integration should convert PCM audio to WAV format",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841916968,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should handle both MP3 and PCM audio formats",
+          "fullName": "Camera Setup Workflow Integration Tests 5. Audio Playback Integration should handle both MP3 and PCM audio formats",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841917304,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should recover from network scan failures",
+          "fullName": "Camera Setup Workflow Integration Tests 6. Error Recovery and Resilience should recover from network scan failures",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841917640,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should handle corrupted localStorage gracefully",
+          "fullName": "Camera Setup Workflow Integration Tests 6. Error Recovery and Resilience should handle corrupted localStorage gracefully",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841917976,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should handle camera connection failures",
+          "fullName": "Camera Setup Workflow Integration Tests 6. Error Recovery and Resilience should handle camera connection failures",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841918312,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should update state atomically",
+          "fullName": "Camera Setup Workflow Integration Tests 7. State Management and Persistence should update state atomically",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841918648,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should maintain state consistency across components",
+          "fullName": "Camera Setup Workflow Integration Tests 7. State Management and Persistence should maintain state consistency across components",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841918984,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        },
+        {
+          "title": "should clean up state on \"Start Fresh Setup\"",
+          "fullName": "Camera Setup Workflow Integration Tests 7. State Management and Persistence should clean up state on \"Start Fresh Setup\"",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 2059517952,
+            "heapTotal": 1899397120,
+            "heapUsed": 1841919680,
+            "external": 5424609,
+            "arrayBuffers": 2094948
+          }
+        }
+      ]
+    }
+  ],
   "summary": {
-    "totalDuration": 0,
-    "avgTestDuration": 0,
-    "slowestTests": [],
+    "totalDuration": 5137,
+    "avgTestDuration": 270.36842105263156,
+    "slowestTests": [
+      {
+        "name": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should complete full setup flow from credentials to completion",
+        "duration": 1,
+        "suite": "/src/__tests__/integration-tests.spec.ts"
+      },
+      {
+        "name": "Camera Setup Workflow Integration Tests 2. Camera Detection and Configuration should push configuration to camera via VAPIX",
+        "duration": 1,
+        "suite": "/src/__tests__/integration-tests.spec.ts"
+      },
+      {
+        "name": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should mark step 4 as completed after speaker configuration",
+        "duration": 1,
+        "suite": "/src/__tests__/integration-tests.spec.ts"
+      },
+      {
+        "name": "Camera Setup Workflow Integration Tests 4. License Activation should not use hardcoded MAC address",
+        "duration": 1,
+        "suite": "/src/__tests__/integration-tests.spec.ts"
+      },
+      {
+        "name": "Camera Setup Workflow Integration Tests 7. State Management and Persistence should clean up state on \"Start Fresh Setup\"",
+        "duration": 1,
+        "suite": "/src/__tests__/integration-tests.spec.ts"
+      },
+      {
+        "name": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should persist state between page refreshes",
+        "duration": 0,
+        "suite": "/src/__tests__/integration-tests.spec.ts"
+      },
+      {
+        "name": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should handle network scan with multiple network interfaces",
+        "duration": 0,
+        "suite": "/src/__tests__/integration-tests.spec.ts"
+      },
+      {
+        "name": "Camera Setup Workflow Integration Tests 2. Camera Detection and Configuration should properly detect Axis cameras using POST method",
+        "duration": 0,
+        "suite": "/src/__tests__/integration-tests.spec.ts"
+      },
+      {
+        "name": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should identify speakers by audio endpoint",
+        "duration": 0,
+        "suite": "/src/__tests__/integration-tests.spec.ts"
+      },
+      {
+        "name": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should store discovered speakers for later configuration",
+        "duration": 0,
+        "suite": "/src/__tests__/integration-tests.spec.ts"
+      }
+    ],
     "memoryUsage": {
-      "rss": "97.83 MB",
-      "heapTotal": "50.38 MB",
-      "heapUsed": "18.01 MB",
-      "external": "2.33 MB"
+      "rss": "1.92 GB",
+      "heapTotal": "1.77 GB",
+      "heapUsed": "1.72 GB",
+      "external": "5.17 MB"
     }
   },
   "regressions": []

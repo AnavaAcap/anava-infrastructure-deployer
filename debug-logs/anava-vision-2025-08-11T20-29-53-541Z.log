@@ -1,0 +1,32 @@
+[2025-08-11T20:29:53.542Z] [INFO] === Anava Vision Started ===
+[2025-08-11T20:29:53.543Z] [INFO] Version: 0.9.181
+[2025-08-11T20:29:53.543Z] [INFO] Electron: 37.2.6
+[2025-08-11T20:29:53.543Z] [INFO] Platform: darwin arm64
+[2025-08-11T20:29:53.543Z] [INFO] DEBUG Log file: /Users/ryanwager/anava-infrastructure-deployer/debug-logs/anava-vision-2025-08-11T20-29-53-541Z.log
+[2025-08-11T20:29:53.543Z] [INFO] Standard Log file: /Users/ryanwager/Library/Logs/anava-installer/anava-vision-2025-08-11T20-29-53-541Z.log
+[2025-08-11T20:29:53.544Z] [INFO] User data: /Users/ryanwager/Library/Application Support/anava-installer
+[2025-08-11T20:29:53.544Z] [INFO] =========================================
+
+[2025-08-11T20:29:53.604Z] [CONSOLE] [2025-08-11T20:29:53.603Z] [INFO] App ready, starting fast initialization...
+[2025-08-11T20:29:53.603Z] [INFO] App ready, starting fast initialization...
+[2025-08-11T20:29:53.604Z] [CONSOLE] [2025-08-11T20:29:53.604Z] [INFO] Running from Terminal, network access should be available
+[2025-08-11T20:29:53.604Z] [INFO] Running from Terminal, network access should be available
+[2025-08-11T20:29:53.604Z] [CONSOLE] [2025-08-11T20:29:53.604Z] [INFO] Loading core services...
+[2025-08-11T20:29:53.604Z] [INFO] Loading core services...
+[2025-08-11T20:29:54.217Z] [CONSOLE] Searching for OAuth config in multiple locations...
+[2025-08-11T20:29:54.217Z] [CONSOLE] Checking: /Users/ryanwager/anava-infrastructure-deployer/node_modules/electron/dist/Electron.app/Contents/Resources/oauth-config.json
+[2025-08-11T20:29:54.263Z] [CONSOLE] Logged out successfully
+[2025-08-11T20:29:54.295Z] [CONSOLE] [2025-08-11T20:29:54.295Z] [INFO] Core services initialized
+[2025-08-11T20:29:54.295Z] [INFO] Core services initialized
+[2025-08-11T20:29:54.373Z] [CONSOLE] Checking: /Users/ryanwager/anava-infrastructure-deployer/oauth-config.json
+[2025-08-11T20:29:54.374Z] [ERROR] Uncaught exception, cleaning up OAuth server... {"errno":-32,"code":"EPIPE","syscall":"write"}
+[2025-08-11T20:29:54.375Z] [ERROR] Uncaught exception, cleaning up OAuth server... {"errno":-32,"code":"EPIPE","syscall":"write"}
+[2025-08-11T20:29:54.392Z] [CONSOLE] Vite dev server not running, loading built files...
+[2025-08-11T20:29:54.393Z] [ERROR] Uncaught exception, cleaning up OAuth server... {"errno":-32,"code":"EPIPE","syscall":"write"}
+[2025-08-11T20:29:54.393Z] [CONSOLE] Found OAuth config at: /Users/ryanwager/anava-infrastructure-deployer/oauth-config.json
+[2025-08-11T20:29:54.393Z] [ERROR] Uncaught exception, cleaning up OAuth server... {"errno":-32,"code":"EPIPE","syscall":"write"}
+[2025-08-11T20:29:54.395Z] [CONSOLE] Unified auth cache cleared
+[2025-08-11T20:29:54.396Z] [ERROR] Uncaught exception, cleaning up OAuth server... {"errno":-32,"code":"EPIPE","syscall":"write"}
+[2025-08-11T20:29:54.396Z] [CONSOLE] OAuth configuration loaded successfully
+[2025-08-11T20:29:54.396Z] [CONSOLE] Client ID: 392865621461-3332mfp...
+[2025-08-11T20:29:54.396Z] [ERROR] Uncaught exception, cleaning up OAuth server... {"errno":-32,"code":"EPIPE","syscall":"write"}

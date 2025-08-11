@@ -81,6 +81,14 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
           });
           // Auto-play the cached audio
           playAudio(preFetchedData.audioBase64, format);
+        } else if (preFetchedData.audioMP3Base64) {
+          // Handle legacy MP3 format
+          setAudioData({
+            data: preFetchedData.audioMP3Base64,
+            format: 'mp3'
+          });
+          // Auto-play the cached audio
+          playAudio(preFetchedData.audioMP3Base64, 'mp3');
         }
         
         setLoading(false);

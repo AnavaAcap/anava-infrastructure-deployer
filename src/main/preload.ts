@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Camera-related APIs
   camera: {
     getPreDiscoveredCameras: () => ipcRenderer.invoke('get-pre-discovered-cameras'),
+    clearPreDiscoveredCameras: () => ipcRenderer.invoke('clear-pre-discovered-cameras'),
     classifyAxisDevices: (credentials: { username: string; password: string }) => 
       ipcRenderer.invoke('classify-axis-devices', credentials),
   },
@@ -81,6 +82,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     useServiceDiscovery?: boolean;
     credentials?: Array<{ username: string; password: string }>;
   }) => ipcRenderer.invoke('enhanced-scan-network', options),
+  fastNetworkScan: (options: { credentials: { username: string; password: string } }) => 
+    ipcRenderer.invoke('fast-network-scan', options),
+  onScanProgress: (callback: (data: { ip: string; status: string }) => void) => {
+    ipcRenderer.on('scan-progress', (_, data) => callback(data));
+    return () => ipcRenderer.removeAllListeners('scan-progress');
+  },
   discoverServiceCameras: () => ipcRenderer.invoke('discover-service-cameras'),
   onCameraScanProgress: (callback: (data: { ip: string; status: string }) => void) => {
     ipcRenderer.on('camera-scan-progress', (_, data) => callback(data));

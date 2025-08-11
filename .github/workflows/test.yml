@@ -204,7 +204,7 @@ jobs:
       run: npm ci
       
     - name: Run regression tests
-      run: npm test -- tests/regression
+      run: npm run test:regression
       env:
         NODE_ENV: test
         
