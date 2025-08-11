@@ -1,3 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="0" failures="0" errors="0" time="0.001">
+<testsuites name="jest tests" tests="19" failures="0" errors="0" time="5.242">
+  <testsuite name="Camera Setup Workflow Integration Tests" errors="0" failures="0" skipped="0" timestamp="2025-08-11T21:07:49" time="5.137" tests="19">
+    <testcase classname="Camera Setup Workflow Integration Tests › 1. Complete Camera Setup Flow" name="should complete full setup flow from credentials to completion" time="0.001">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 1. Complete Camera Setup Flow" name="should persist state between page refreshes" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 1. Complete Camera Setup Flow" name="should handle network scan with multiple network interfaces" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 2. Camera Detection and Configuration" name="should properly detect Axis cameras using POST method" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 2. Camera Detection and Configuration" name="should push configuration to camera via VAPIX" time="0.001">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 3. Speaker Configuration" name="should identify speakers by audio endpoint" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 3. Speaker Configuration" name="should store discovered speakers for later configuration" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 3. Speaker Configuration" name="should mark step 4 as completed after speaker configuration" time="0.001">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 4. License Activation" name="should activate license with correct MAC address" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 4. License Activation" name="should not use hardcoded MAC address" time="0.001">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 5. Audio Playback Integration" name="should handle pre-fetched audio data on first load" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 5. Audio Playback Integration" name="should convert PCM audio to WAV format" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 5. Audio Playback Integration" name="should handle both MP3 and PCM audio formats" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 6. Error Recovery and Resilience" name="should recover from network scan failures" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 6. Error Recovery and Resilience" name="should handle corrupted localStorage gracefully" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 6. Error Recovery and Resilience" name="should handle camera connection failures" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 7. State Management and Persistence" name="should update state atomically" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 7. State Management and Persistence" name="should maintain state consistency across components" time="0">
+    </testcase>
+    <testcase classname="Camera Setup Workflow Integration Tests › 7. State Management and Persistence" name="should clean up state on &quot;Start Fresh Setup&quot;" time="0.001">
+    </testcase>
+  </testsuite>
 </testsuites>

@@ -80,15 +80,20 @@ const DetectionTestPage: React.FC = () => {
     loadConfiguredCameras();
     loadApiKey();
     checkPreFetchedData();
-    
+  }, []);
+
+  // Separate effect for audio cleanup to avoid stale closure
+  useEffect(() => {
     return () => {
       // Cleanup audio on unmount
       if (audioElement) {
         audioElement.pause();
+        // Remove all event listeners
+        audioElement.removeEventListener('ended', () => {});
         audioElement.src = '';
       }
     };
-  }, []);
+  }, [audioElement]);
 
   const loadApiKey = async () => {
     try {

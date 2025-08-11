@@ -164,7 +164,7 @@ function checkPort(ip: string, port: number, timeout: number): Promise<boolean> 
 /**
  * Properly identify if device is an Axis camera or speaker
  */
-async function identifyCamera(
+export async function identifyCamera(
   ip: string, 
   credentials: { username: string; password: string }
 ): Promise<{ accessible: boolean; authRequired?: boolean; model?: string; manufacturer?: string; deviceType?: 'camera' | 'speaker'; mac?: string }> {

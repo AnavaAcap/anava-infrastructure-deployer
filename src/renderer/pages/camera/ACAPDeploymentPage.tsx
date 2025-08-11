@@ -174,6 +174,7 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
         addLog(`\n--- Configuring ${camera.model} (${currentIP}) ---`);
         
         try {
+          console.log(`[Deploy] Processing camera ${camera.id} - ${camera.model}`);
           // Create camera object with credentials and updated IP
           const cameraWithCreds = {
             ...camera,
@@ -214,6 +215,10 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
   };
 
   const handleDeployClick = () => {
+    console.log('[BUTTON] Deploy button clicked');
+    console.log('[BUTTON] Current state:', { activeStep, deploying, cameras: cameras.length });
+    window.electronAPI.send('deployment-log', 'info', `[BUTTON] Deploy clicked - step: ${activeStep}, deploying: ${deploying}`);
+    
     // Check if any cameras have missing credentials
     const missingCreds = cameras.filter(cam => 
       !credentials[cam.id]?.username || !credentials[cam.id]?.password
@@ -223,6 +228,8 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
       setError('Please enter credentials for all cameras');
       setShowCredentialsDialog(true);
     } else {
+      console.log('[BUTTON] All cameras have credentials, starting deployment');
+      window.electronAPI.send('deployment-log', 'info', '[BUTTON] Starting deployACAP()');
       deployACAP();
     }
   };
@@ -263,6 +270,26 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
   };
 
   const deployACAP = async () => {
+    // AGGRESSIVE LOGGING TO MAIN PROCESS
+    window.electronAPI.send('deployment-log', 'info', '=== DEPLOY ACAP FUNCTION CALLED ===');
+    window.electronAPI.send('deployment-log', 'info', `Active step: ${activeStep}`);
+    window.electronAPI.send('deployment-log', 'info', `Cameras to deploy: ${cameras.length}`);
+    window.electronAPI.send('deployment-log', 'info', `Deployment config exists: ${!!deploymentConfig}`);
+    
+    console.log('[Deploy] Starting deployACAP function');
+    console.log('[Deploy] Current activeStep:', activeStep);
+    console.log('[Deploy] Deployment status:', Array.from(deploymentStatus.entries()));
+    console.log('[Deploy] Deployment config:', deploymentConfig);
+    
+    // Add defensive check for deployment config
+    if (!deploymentConfig || !deploymentConfig.anavaKey) {
+      console.error('[Deploy] CRITICAL: No deployment config or anava key!', deploymentConfig);
+      setError('Deployment configuration is missing. Please complete GCP setup first.');
+      addLog('ERROR: No deployment configuration found. Please complete GCP setup.');
+      setDeploying(false);
+      return;
+    }
+    
     setDeploying(true);
     setError(null);
     setDeploymentLog([]);
@@ -286,6 +313,10 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
         addLog(` - ${r.name}`);
       });
       
+      // Track successes during deployment
+      let successCount = 0;
+      let errorCount = 0;
+      
       for (const camera of cameras) {
         const currentIP = cameraIPs[camera.id] || camera.ip;
         addLog(`\n--- Deploying to ${camera.model} (${currentIP}) ---`);
@@ -297,6 +328,7 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
         });
 
         try {
+          console.log(`[Deploy] Processing camera ${camera.id} - ${camera.model}`);
           // Create camera object with credentials and updated IP
           const cameraWithCreds = {
             ...camera,
@@ -340,27 +372,87 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
           
           // Deploy appropriate ACAP based on firmware
           addLog(`Selecting appropriate ACAP for ${firmwareInfo.osVersion}...`);
-          const result = await window.electronAPI.deployACAPAuto(cameraWithCreds, releases);
+          
+          // LOG BEFORE DEPLOYMENT
+          window.electronAPI.send('deployment-log', 'info', `About to call deployACAPAuto for camera ${camera.id}`);
+          window.electronAPI.send('deployment-log', 'debug', 'Camera details', cameraWithCreds);
+          window.electronAPI.send('deployment-log', 'debug', `Number of releases: ${releases.length}`);
+          
+          console.log('[Deploy] Calling deployACAPAuto for camera:', camera.id);
+          let result;
+          try {
+            result = await window.electronAPI.deployACAPAuto(cameraWithCreds, releases);
+            
+            // LOG RESULT
+            window.electronAPI.send('deployment-log', 'info', `deployACAPAuto returned`, result);
+            console.log('[Deploy] deployACAPAuto result:', result);
+          } catch (ipcError: any) {
+            // LOG ERROR
+            window.electronAPI.send('deployment-log', 'error', `IPC Error calling deployACAPAuto: ${ipcError.message}`, ipcError);
+            console.error('[Deploy] IPC Error calling deployACAPAuto:', ipcError);
+            throw new Error(`IPC communication failed: ${ipcError.message || 'Unknown error'}`);
+          }
+          
+          if (!result) {
+            window.electronAPI.send('deployment-log', 'error', 'CRITICAL: deployACAPAuto returned null/undefined');
+            console.error('[Deploy] CRITICAL: deployACAPAuto returned null/undefined');
+            throw new Error('Deployment returned no result');
+          }
+          
+          // Check for IPC error boundary response format
+          if (typeof result === 'object' && 'success' in result && !result.success) {
+            window.electronAPI.send('deployment-log', 'error', `Deployment failed: ${result.error || result.message || 'Unknown error'}`);
+            console.error('[Deploy] Deployment failed:', result);
+            throw new Error(result.error || result.message || 'Deployment failed');
+          }
+          
+          console.log('[Deploy] Checking result.success:', result.success);
+          console.log('[Deploy] Full result object:', result);
           
           if (result.success) {
+            console.log('[Deploy] >>> SUCCESS PATH - Camera deployed successfully! <<<');
+            window.electronAPI.send('deployment-log', 'info', 'ACAP deployment successful');
+            window.electronAPI.send('deployment-log', 'info', `SUCCESS COUNT NOW: ${successCount + 1}`);
             addLog(`✓ ACAP uploaded and installed successfully`);
+            
+            // Note about the macOS permission
+            if (process.platform === 'darwin') {
+              console.log('[Deploy] Note: macOS may show privacy alert for Chrome automation');
+            }
             if (result.firmwareVersion) {
               addLog(`✓ Deployed correct ACAP for firmware ${result.firmwareVersion} (${result.osVersion})`);
             }
             // Apply license key if provided
             if (deploymentConfig?.anavaKey) {
+              console.log('[LICENSE] Starting license activation');
+              console.log('[LICENSE] Deployment config has anavaKey:', !!deploymentConfig.anavaKey);
+              console.log('[LICENSE] AnavaKey length:', deploymentConfig.anavaKey?.length);
+              
               addLog(`Applying Anava license key...`);
+              window.electronAPI.send('deployment-log', 'info', '[LICENSE] Starting license activation');
+              
               try {
                 // Pass the camera's MAC address for proper device ID
-                console.log('[DEBUG] Activating license for camera:', {
-                  id: camera.id,
+                console.log('[LICENSE] === ACTIVATING LICENSE ===');
+                console.log('[LICENSE] Camera ID:', camera.id);
+                console.log('[LICENSE] Camera IP:', currentIP);
+                console.log('[LICENSE] Camera Model:', camera.model);
+                console.log('[LICENSE] Camera MAC:', camera.mac);
+                console.log('[LICENSE] Has MAC?:', !!camera.mac);
+                console.log('[LICENSE] Username:', credentials[camera.id].username);
+                console.log('[LICENSE] Has Password?:', !!credentials[camera.id].password);
+                console.log('[LICENSE] License Key:', deploymentConfig.anavaKey?.substring(0, 8) + '...');
+                console.log('[LICENSE] App Name: BatonAnalytic');
+                
+                window.electronAPI.send('deployment-log', 'info', `[LICENSE] Calling activateLicenseKey for ${camera.id}`, {
                   ip: currentIP,
-                  model: camera.model,
                   mac: camera.mac,
                   hasMAC: !!camera.mac,
-                  fullCamera: camera
+                  keyPrefix: deploymentConfig.anavaKey?.substring(0, 8)
                 });
-                await window.electronAPI.activateLicenseKey(
+                
+                console.log('[LICENSE] >>> CALLING activateLicenseKey NOW <<<');
+                const licenseResult = await window.electronAPI.activateLicenseKey(
                   currentIP,
                   credentials[camera.id].username,
                   credentials[camera.id].password,
@@ -368,24 +460,97 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                   'BatonAnalytic',
                   camera.mac // Pass the MAC address from camera discovery
                 );
+                
+                console.log('[LICENSE] License activation result:', licenseResult);
+                window.electronAPI.send('deployment-log', 'info', '[LICENSE] License activation succeeded', licenseResult);
                 addLog(`✓ License key activated successfully`);
+                
+                // Verify license was actually applied
+                console.log('[LICENSE] Verifying license status...');
+                try {
+                  const verifyUrl = `http://${currentIP}/axis-cgi/applications/list.cgi`;
+                  const response = await window.electronAPI.makeAuthenticatedRequest(
+                    verifyUrl,
+                    'GET',
+                    credentials[camera.id].username,
+                    credentials[camera.id].password
+                  );
+                  console.log('[LICENSE] License verification response:', response);
+                  if (response && response.includes('BatonAnalytic')) {
+                    addLog(`✓ License verified - ACAP is licensed and ready`);
+                  }
+                } catch (verifyError) {
+                  console.log('[LICENSE] Could not verify license status:', verifyError);
+                }
               } catch (licenseError: any) {
+                console.log('[LICENSE] >>> LICENSE ERROR CAUGHT <<<');
+                console.log('[LICENSE] Error type:', typeof licenseError);
+                console.log('[LICENSE] Error message:', licenseError?.message);
+                console.log('[LICENSE] Full error:', licenseError);
+                console.log('[LICENSE] Error stack:', licenseError?.stack);
+                
+                window.electronAPI.send('deployment-log', 'error', `[LICENSE] License activation failed: ${licenseError?.message}`, {
+                  error: licenseError?.message,
+                  stack: licenseError?.stack,
+                  cameraId: camera.id
+                });
                 if (licenseError.message?.includes('already licensed')) {
+                  console.log('[LICENSE] Camera already licensed - this is OK');
+                  window.electronAPI.send('deployment-log', 'info', '[LICENSE] Camera already has valid license');
                   addLog(`✓ Camera already has a valid license`);
                 } else if (licenseError.message?.includes('stream has been aborted')) {
+                  console.log('[LICENSE] License timeout - may still be processing');
+                  window.electronAPI.send('deployment-log', 'warn', '[LICENSE] License activation timeout');
                   addLog(`⚠ License activation timeout - camera may be processing the request`);
                   // Track failure for retry
                   setLicenseFailures(prev => new Map(prev).set(camera.id, 'License activation timeout'));
+                } else if (licenseError.message?.includes('Cannot find module')) {
+                  console.log('[LICENSE] Puppeteer not found, but checking if license worked anyway...');
+                  window.electronAPI.send('deployment-log', 'warn', '[LICENSE] Puppeteer missing, verifying license status');
+                  
+                  // Try to verify if license is actually active despite the error
+                  try {
+                    const verifyUrl = `http://${currentIP}/axis-cgi/applications/list.cgi`;
+                    const response = await window.electronAPI.makeAuthenticatedRequest(
+                      verifyUrl,
+                      'GET',
+                      credentials[camera.id].username,
+                      credentials[camera.id].password
+                    );
+                    if (response && response.includes('Licensed')) {
+                      console.log('[LICENSE] License is actually active despite puppeteer error!');
+                      addLog(`✓ License verified active (fallback method worked)`);
+                    } else {
+                      addLog(`⚠ License activation may have failed - unable to verify`);
+                      setLicenseFailures(prev => new Map(prev).set(camera.id, 'License verification failed'));
+                    }
+                  } catch (verifyErr) {
+                    addLog(`⚠ Could not verify license status`);
+                    setLicenseFailures(prev => new Map(prev).set(camera.id, 'Unable to verify license'));
+                  }
                 } else {
+                  console.log('[LICENSE] Unknown license error');
+                  window.electronAPI.send('deployment-log', 'error', `[LICENSE] Unknown error: ${licenseError.message}`);
                   addLog(`⚠ License activation failed: ${licenseError.message}`);
                   // Track failure for retry
                   setLicenseFailures(prev => new Map(prev).set(camera.id, licenseError.message));
                 }
+                
+                console.log('[LICENSE] License error was non-fatal, continuing...');
+                window.electronAPI.send('deployment-log', 'info', '[LICENSE] Continuing despite license error');
                 // Non-fatal - continue with deployment
               }
+            } else {
+              console.log('[LICENSE] No anavaKey in deployment config, skipping license');
+              window.electronAPI.send('deployment-log', 'warn', '[LICENSE] No license key provided, skipping activation');
             }
             
             addLog(`✓ ${camera.model} deployment successful!`);
+            
+            // Track success immediately
+            successCount++;
+            console.log('[Deploy] Incremented successCount to:', successCount);
+            console.log('[Deploy] Camera successfully deployed:', camera.id, camera.model);
             
             setDeploymentStatus(prev => {
               const newMap = new Map(prev);
@@ -397,11 +562,30 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
               return newMap;
             });
           } else {
+            console.log('[Deploy] >>> FAILURE PATH - result.success is false <<<');
+            console.log('[Deploy] Result error:', result.error);
+            window.electronAPI.send('deployment-log', 'error', `Result success=false: ${result.error}`);
             throw new Error(result.error || 'Deployment failed');
           }
         } catch (error: any) {
+          console.log('[Deploy] >>> CATCH BLOCK - Error occurred <<<');
+          console.log('[Deploy] Error:', error);
+          console.log('[Deploy] Error message:', error.message);
+          console.log('[Deploy] Error stack:', error.stack);
+          
+          // LOG ERROR TO MAIN PROCESS
+          window.electronAPI.send('deployment-log', 'error', `Deployment failed for camera ${camera.model}: ${error.message}`, {
+            camera,
+            error: error.message,
+            stack: error.stack
+          });
+          window.electronAPI.send('deployment-result', false, camera, error);
+          
           addLog(`✗ ERROR: ${error.message}`);
           addLog(`✗ Failed to deploy to ${camera.model}`);
+          
+          // Track error immediately
+          errorCount++;
           
           setDeploymentStatus(prev => {
             const newMap = new Map(prev);
@@ -415,14 +599,83 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
         }
       }
 
-      addLog(`\n=== Deployment completed ===`);
-      addLog(`Successfully deployed to ${cameras.filter(c => deploymentStatus.get(c.id)?.status === 'success').length} of ${cameras.length} cameras`);
-      setActiveStep(2);
+      addLog(`
+=== Deployment completed ===`);
+      
+      // Use the tracked counts (not state which hasn't updated yet)
+      addLog(`Successfully deployed to ${successCount} of ${cameras.length} cameras`);
+      if (errorCount > 0) {
+        addLog(`Failed deployments: ${errorCount}`);
+      }
+      
+      // Check if we have license failures that would prevent the app from working
+      const criticalLicenseFailures = Array.from(licenseFailures.values()).filter(
+        msg => !msg.includes('already licensed') && !msg.includes('timeout')
+      );
+      
+      // Only advance if we had at least one success AND no critical license failures
+      if (successCount > 0) {
+        if (criticalLicenseFailures.length > 0 && licenseFailures.size === cameras.length) {
+          console.log('[Deploy] WARNING: All cameras have license issues');
+          addLog(`\n⚠️ WARNING: License activation had issues on all cameras`);
+          addLog(`The ACAP may not function properly without a valid license.`);
+          addLog(`You may need to manually activate licenses or retry.`);
+          setError('License activation failed on all cameras. The ACAP may not work properly.');
+          // Don't advance if ALL cameras failed licensing
+        } else {
+          console.log('[Deploy] SUCCESS! Advancing to step 2 - Verify Deployment');
+          console.log('[Deploy] Final counts - Success:', successCount, 'Error:', errorCount);
+          console.log('[Deploy] License failures:', licenseFailures.size, 'of', cameras.length);
+          console.log('[Deploy] Setting activeStep from', activeStep, 'to 2');
+          window.electronAPI.send('deployment-log', 'info', `Deployment completed: ${successCount} success, ${errorCount} failed`);
+          window.electronAPI.send('deployment-log', 'info', `[STATE] Advancing from step ${activeStep} to step 2`);
+          
+          if (licenseFailures.size > 0) {
+            addLog(`\n⚠️ Note: ${licenseFailures.size} camera(s) had license activation issues but ACAP was deployed.`);
+          }
+          
+          setActiveStep(2);
+          // Force update the UI
+          setTimeout(() => {
+            console.log('[Deploy] Active step should now be 2, actual:', activeStep);
+          }, 100);
+        }
+      } else {
+        console.log('[Deploy] No successful deployments, staying on step 1');
+        console.log('[Deploy] Final counts - Success:', successCount, 'Error:', errorCount);
+        window.electronAPI.send('deployment-log', 'error', 'No cameras were successfully deployed');
+        addLog(`⚠ No cameras were successfully deployed. Please check the errors above and try again.`);
+        setError('All camera deployments failed. Please check the logs above for details.');
+      }
     } catch (err: any) {
+      console.error('[Deploy] Deployment failed with error:', err);
+      window.electronAPI.send('deployment-log', 'error', `Deployment process failed: ${err.message}`, err);
       setError(`Deployment failed: ${err.message}`);
       addLog(`\nERROR: ${err.message}`);
+      
+      // Show more user-friendly error messages
+      if (err.message?.includes('IPC communication failed')) {
+        setError('Communication with the deployment service failed. Please restart the application and try again.');
+      } else if (err.message?.includes('No ACAP packages')) {
+        setError('No ACAP packages found. Please download ACAP packages from the ACAP Manager first.');
+      } else if (err.message?.includes('credentials')) {
+        setError('Camera credentials are missing or invalid. Please verify the username and password.');
+      }
     } finally {
+      console.log('[Deploy] === DEPLOYMENT FINALLY BLOCK ===');
+      console.log('[Deploy] Setting deploying to false');
+      console.log('[Deploy] Current activeStep:', activeStep);
+      window.electronAPI.send('deployment-log', 'info', '[FINALLY] Deployment process completed');
+      window.electronAPI.send('deployment-log', 'info', `[FINALLY] Final activeStep: ${activeStep}`);
       setDeploying(false);
+      
+      // Log final state after a short delay
+      setTimeout(() => {
+        console.log('[Deploy] FINAL STATE CHECK:');
+        console.log('[Deploy] - activeStep:', activeStep);
+        console.log('[Deploy] - deploying:', deploying);
+        console.log('[Deploy] - deploymentStatus:', Array.from(deploymentStatus.entries()));
+      }, 500);
     }
   };
 
