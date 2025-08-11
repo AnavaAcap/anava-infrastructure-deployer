@@ -504,8 +504,9 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       );
       if (speakers.length > 0) {
         console.log(`Found ${speakers.length} speaker(s) for later configuration:`, speakers);
-        // Store speakers in localStorage or state for speaker config page
+        // Store speakers in localStorage AND update state for speaker config page
         localStorage.setItem('discoveredSpeakers', JSON.stringify(speakers));
+        setAvailableSpeakers(speakers);  // FIX: Update state immediately
       }
 
       const formattedCameras: CameraInfo[] = camerasOnly.map((cam: any) => ({

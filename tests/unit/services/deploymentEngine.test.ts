@@ -61,7 +61,7 @@ describe('DeploymentEngine', () => {
     });
 
     it('should handle missing OAuth client gracefully', () => {
-      mockGcpAuth.oauth2Client = undefined;
+      mockGcpAuth.oauth2Client = null;
       const engine = new DeploymentEngine(mockStateManager, mockGcpAuth);
       expect(engine).toBeDefined();
     });
@@ -71,18 +71,13 @@ describe('DeploymentEngine', () => {
     const mockConfig: DeploymentConfig = {
       projectId: 'test-project',
       region: 'us-central1',
-      deploymentMode: 'vertex',
-      enabledServices: {
-        auth: true,
-        firestore: true,
-        cloudFunctions: true,
-        apiGateway: true,
-        workloadIdentity: true,
-      },
-      authConfig: {
-        enableEmailPassword: true,
-        enableGoogleSignIn: false,
-      }
+      namePrefix: 'test',
+      apiKeyRestrictions: [],
+      corsOrigins: ['*'],
+      aiMode: 'vertex',
+      adminPassword: 'test-password',
+      anavaKey: 'test-key',
+      customerId: 'test-customer'
     };
 
     it('should start a new deployment with valid config', async () => {
@@ -207,18 +202,13 @@ describe('DeploymentEngine', () => {
       const mockConfig: DeploymentConfig = {
         projectId: 'test-project',
         region: 'us-central1',
-        deploymentMode: 'vertex',
-        enabledServices: {
-          auth: true,
-          firestore: true,
-          cloudFunctions: true,
-          apiGateway: true,
-          workloadIdentity: true,
-        },
-        authConfig: {
-          enableEmailPassword: true,
-          enableGoogleSignIn: false,
-        }
+        namePrefix: 'test',
+        apiKeyRestrictions: [],
+        corsOrigins: ['*'],
+        aiMode: 'vertex',
+        adminPassword: 'test-password',
+        anavaKey: 'test-key',
+        customerId: 'test-customer'
       };
       
       try {
@@ -297,18 +287,13 @@ describe('DeploymentEngine', () => {
       const mockConfig: DeploymentConfig = {
         projectId: 'test-project',
         region: 'us-central1',
-        deploymentMode: 'vertex',
-        enabledServices: {
-          auth: true,
-          firestore: true,
-          cloudFunctions: true,
-          apiGateway: true,
-          workloadIdentity: true,
-        },
-        authConfig: {
-          enableEmailPassword: true,
-          enableGoogleSignIn: false,
-        }
+        namePrefix: 'test',
+        apiKeyRestrictions: [],
+        corsOrigins: ['*'],
+        aiMode: 'vertex',
+        adminPassword: 'test-password',
+        anavaKey: 'test-key',
+        customerId: 'test-customer'
       };
       
       await deploymentEngine.startDeployment(mockConfig);

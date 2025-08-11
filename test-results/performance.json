@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-11T21:07:48.981Z",
+  "timestamp": "2025-08-11T22:09:18.745Z",
   "environment": {
     "node": "v20.19.2",
     "platform": "darwin",
@@ -9,319 +9,272 @@
   },
   "testSuites": [
     {
-      "name": "/src/__tests__/integration-tests.spec.ts",
-      "duration": 5137,
+      "name": "/tests/unit/services/deploymentEngine.test.ts",
+      "duration": 8572,
       "tests": [
         {
-          "title": "should complete full setup flow from credentials to completion",
-          "fullName": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should complete full setup flow from credentials to completion",
+          "title": "should initialize with correct dependencies",
+          "fullName": "DeploymentEngine Constructor and Initialization should initialize with correct dependencies",
+          "duration": 4,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30934040,
+            "external": 2098092,
+            "arrayBuffers": 37276
+          }
+        },
+        {
+          "title": "should initialize deployers when OAuth client is available",
+          "fullName": "DeploymentEngine Constructor and Initialization should initialize deployers when OAuth client is available",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841911928,
-            "external": 5424569,
-            "arrayBuffers": 2094948
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30935960,
+            "external": 2098132,
+            "arrayBuffers": 37276
           }
         },
         {
-          "title": "should persist state between page refreshes",
-          "fullName": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should persist state between page refreshes",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841913864,
-            "external": 5424609,
-            "arrayBuffers": 2094948
-          }
-        },
-        {
-          "title": "should handle network scan with multiple network interfaces",
-          "fullName": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should handle network scan with multiple network interfaces",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841914168,
-            "external": 5424609,
-            "arrayBuffers": 2094948
-          }
-        },
-        {
-          "title": "should properly detect Axis cameras using POST method",
-          "fullName": "Camera Setup Workflow Integration Tests 2. Camera Detection and Configuration should properly detect Axis cameras using POST method",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841914472,
-            "external": 5424609,
-            "arrayBuffers": 2094948
-          }
-        },
-        {
-          "title": "should push configuration to camera via VAPIX",
-          "fullName": "Camera Setup Workflow Integration Tests 2. Camera Detection and Configuration should push configuration to camera via VAPIX",
+          "title": "should handle missing OAuth client gracefully",
+          "fullName": "DeploymentEngine Constructor and Initialization should handle missing OAuth client gracefully",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841914776,
-            "external": 5424609,
-            "arrayBuffers": 2094948
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30936248,
+            "external": 2098132,
+            "arrayBuffers": 37276
           }
         },
         {
-          "title": "should identify speakers by audio endpoint",
-          "fullName": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should identify speakers by audio endpoint",
-          "duration": 0,
+          "title": "should start a new deployment with valid config",
+          "fullName": "DeploymentEngine startDeployment should start a new deployment with valid config",
+          "duration": 2,
           "status": "passed",
           "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841915080,
-            "external": 5424609,
-            "arrayBuffers": 2094948
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30936536,
+            "external": 2098132,
+            "arrayBuffers": 37276
           }
         },
         {
-          "title": "should store discovered speakers for later configuration",
-          "fullName": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should store discovered speakers for later configuration",
-          "duration": 0,
+          "title": "should initialize deployers before starting deployment",
+          "fullName": "DeploymentEngine startDeployment should initialize deployers before starting deployment",
+          "duration": 2,
           "status": "passed",
           "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841915384,
-            "external": 5424609,
-            "arrayBuffers": 2094948
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30936824,
+            "external": 2098132,
+            "arrayBuffers": 37276
           }
         },
         {
-          "title": "should mark step 4 as completed after speaker configuration",
-          "fullName": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should mark step 4 as completed after speaker configuration",
+          "title": "should reset pause state when starting new deployment",
+          "fullName": "DeploymentEngine startDeployment should reset pause state when starting new deployment",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841915688,
-            "external": 5424609,
-            "arrayBuffers": 2094948
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30937112,
+            "external": 2098132,
+            "arrayBuffers": 37276
           }
         },
         {
-          "title": "should activate license with correct MAC address",
-          "fullName": "Camera Setup Workflow Integration Tests 4. License Activation should activate license with correct MAC address",
-          "duration": 0,
+          "title": "should emit progress events during deployment",
+          "fullName": "DeploymentEngine startDeployment should emit progress events during deployment",
+          "duration": 2,
           "status": "passed",
           "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841915992,
-            "external": 5424609,
-            "arrayBuffers": 2094948
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30937400,
+            "external": 2098132,
+            "arrayBuffers": 37276
           }
         },
         {
-          "title": "should not use hardcoded MAC address",
-          "fullName": "Camera Setup Workflow Integration Tests 4. License Activation should not use hardcoded MAC address",
+          "title": "should resume an existing deployment",
+          "fullName": "DeploymentEngine resumeDeployment should resume an existing deployment",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841916296,
-            "external": 5424609,
-            "arrayBuffers": 2094948
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30937688,
+            "external": 2098132,
+            "arrayBuffers": 37276
           }
         },
         {
-          "title": "should handle pre-fetched audio data on first load",
-          "fullName": "Camera Setup Workflow Integration Tests 5. Audio Playback Integration should handle pre-fetched audio data on first load",
-          "duration": 0,
+          "title": "should throw error if deployment not found",
+          "fullName": "DeploymentEngine resumeDeployment should throw error if deployment not found",
+          "duration": 25,
           "status": "passed",
           "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841916552,
-            "external": 5424609,
-            "arrayBuffers": 2094948
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30937976,
+            "external": 2098132,
+            "arrayBuffers": 37276
           }
         },
         {
-          "title": "should convert PCM audio to WAV format",
-          "fullName": "Camera Setup Workflow Integration Tests 5. Audio Playback Integration should convert PCM audio to WAV format",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841916968,
-            "external": 5424609,
-            "arrayBuffers": 2094948
-          }
-        },
-        {
-          "title": "should handle both MP3 and PCM audio formats",
-          "fullName": "Camera Setup Workflow Integration Tests 5. Audio Playback Integration should handle both MP3 and PCM audio formats",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841917304,
-            "external": 5424609,
-            "arrayBuffers": 2094948
-          }
-        },
-        {
-          "title": "should recover from network scan failures",
-          "fullName": "Camera Setup Workflow Integration Tests 6. Error Recovery and Resilience should recover from network scan failures",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841917640,
-            "external": 5424609,
-            "arrayBuffers": 2094948
-          }
-        },
-        {
-          "title": "should handle corrupted localStorage gracefully",
-          "fullName": "Camera Setup Workflow Integration Tests 6. Error Recovery and Resilience should handle corrupted localStorage gracefully",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841917976,
-            "external": 5424609,
-            "arrayBuffers": 2094948
-          }
-        },
-        {
-          "title": "should handle camera connection failures",
-          "fullName": "Camera Setup Workflow Integration Tests 6. Error Recovery and Resilience should handle camera connection failures",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841918312,
-            "external": 5424609,
-            "arrayBuffers": 2094948
-          }
-        },
-        {
-          "title": "should update state atomically",
-          "fullName": "Camera Setup Workflow Integration Tests 7. State Management and Persistence should update state atomically",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841918648,
-            "external": 5424609,
-            "arrayBuffers": 2094948
-          }
-        },
-        {
-          "title": "should maintain state consistency across components",
-          "fullName": "Camera Setup Workflow Integration Tests 7. State Management and Persistence should maintain state consistency across components",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841918984,
-            "external": 5424609,
-            "arrayBuffers": 2094948
-          }
-        },
-        {
-          "title": "should clean up state on \"Start Fresh Setup\"",
-          "fullName": "Camera Setup Workflow Integration Tests 7. State Management and Persistence should clean up state on \"Start Fresh Setup\"",
+          "title": "should throw error if deployment ID does not match",
+          "fullName": "DeploymentEngine resumeDeployment should throw error if deployment ID does not match",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 2059517952,
-            "heapTotal": 1899397120,
-            "heapUsed": 1841919680,
-            "external": 5424609,
-            "arrayBuffers": 2094948
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30938264,
+            "external": 2098132,
+            "arrayBuffers": 37276
+          }
+        },
+        {
+          "title": "should pause deployment and emit progress event",
+          "fullName": "DeploymentEngine pauseDeployment should pause deployment and emit progress event",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30938488,
+            "external": 2098132,
+            "arrayBuffers": 37276
+          }
+        },
+        {
+          "title": "should handle deployment errors gracefully",
+          "fullName": "DeploymentEngine Error Handling should handle deployment errors gracefully",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30938888,
+            "external": 2098132,
+            "arrayBuffers": 37276
+          }
+        },
+        {
+          "title": "should handle OAuth refresh errors",
+          "fullName": "DeploymentEngine Error Handling should handle OAuth refresh errors",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30939208,
+            "external": 2098132,
+            "arrayBuffers": 37276
+          }
+        },
+        {
+          "title": "should emit correct events during deployment lifecycle",
+          "fullName": "DeploymentEngine Event Emissions should emit correct events during deployment lifecycle",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30939528,
+            "external": 2098132,
+            "arrayBuffers": 37276
+          }
+        },
+        {
+          "title": "should handle IAM propagation delays correctly",
+          "fullName": "DeploymentEngine Service Account Propagation Handling should handle IAM propagation delays correctly",
+          "duration": 2,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 65208320,
+            "heapTotal": 33439744,
+            "heapUsed": 30939848,
+            "external": 2098132,
+            "arrayBuffers": 37276
           }
         }
       ]
+    },
+    {
+      "name": "/tests/unit/services/camera/cameraConfigurationService.test.ts",
+      "duration": 0,
+      "tests": []
     }
   ],
   "summary": {
-    "totalDuration": 5137,
-    "avgTestDuration": 270.36842105263156,
+    "totalDuration": 8572,
+    "avgTestDuration": 571.4666666666667,
     "slowestTests": [
       {
-        "name": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should complete full setup flow from credentials to completion",
+        "name": "DeploymentEngine resumeDeployment should throw error if deployment not found",
+        "duration": 25,
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+      },
+      {
+        "name": "DeploymentEngine Constructor and Initialization should initialize with correct dependencies",
+        "duration": 4,
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+      },
+      {
+        "name": "DeploymentEngine startDeployment should start a new deployment with valid config",
+        "duration": 2,
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+      },
+      {
+        "name": "DeploymentEngine startDeployment should initialize deployers before starting deployment",
+        "duration": 2,
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+      },
+      {
+        "name": "DeploymentEngine startDeployment should emit progress events during deployment",
+        "duration": 2,
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+      },
+      {
+        "name": "DeploymentEngine Service Account Propagation Handling should handle IAM propagation delays correctly",
+        "duration": 2,
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+      },
+      {
+        "name": "DeploymentEngine Constructor and Initialization should initialize deployers when OAuth client is available",
         "duration": 1,
-        "suite": "/src/__tests__/integration-tests.spec.ts"
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
       },
       {
-        "name": "Camera Setup Workflow Integration Tests 2. Camera Detection and Configuration should push configuration to camera via VAPIX",
+        "name": "DeploymentEngine Constructor and Initialization should handle missing OAuth client gracefully",
         "duration": 1,
-        "suite": "/src/__tests__/integration-tests.spec.ts"
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
       },
       {
-        "name": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should mark step 4 as completed after speaker configuration",
+        "name": "DeploymentEngine startDeployment should reset pause state when starting new deployment",
         "duration": 1,
-        "suite": "/src/__tests__/integration-tests.spec.ts"
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
       },
       {
-        "name": "Camera Setup Workflow Integration Tests 4. License Activation should not use hardcoded MAC address",
+        "name": "DeploymentEngine resumeDeployment should resume an existing deployment",
         "duration": 1,
-        "suite": "/src/__tests__/integration-tests.spec.ts"
-      },
-      {
-        "name": "Camera Setup Workflow Integration Tests 7. State Management and Persistence should clean up state on \"Start Fresh Setup\"",
-        "duration": 1,
-        "suite": "/src/__tests__/integration-tests.spec.ts"
-      },
-      {
-        "name": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should persist state between page refreshes",
-        "duration": 0,
-        "suite": "/src/__tests__/integration-tests.spec.ts"
-      },
-      {
-        "name": "Camera Setup Workflow Integration Tests 1. Complete Camera Setup Flow should handle network scan with multiple network interfaces",
-        "duration": 0,
-        "suite": "/src/__tests__/integration-tests.spec.ts"
-      },
-      {
-        "name": "Camera Setup Workflow Integration Tests 2. Camera Detection and Configuration should properly detect Axis cameras using POST method",
-        "duration": 0,
-        "suite": "/src/__tests__/integration-tests.spec.ts"
-      },
-      {
-        "name": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should identify speakers by audio endpoint",
-        "duration": 0,
-        "suite": "/src/__tests__/integration-tests.spec.ts"
-      },
-      {
-        "name": "Camera Setup Workflow Integration Tests 3. Speaker Configuration should store discovered speakers for later configuration",
-        "duration": 0,
-        "suite": "/src/__tests__/integration-tests.spec.ts"
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
       }
     ],
     "memoryUsage": {
-      "rss": "1.92 GB",
-      "heapTotal": "1.77 GB",
-      "heapUsed": "1.72 GB",
-      "external": "5.17 MB"
+      "rss": "45.69 MB",
+      "heapTotal": "32.89 MB",
+      "heapUsed": "29.62 MB",
+      "external": "2.00 MB"
     }
   },
   "regressions": []
