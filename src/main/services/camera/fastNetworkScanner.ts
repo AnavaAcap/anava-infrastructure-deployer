@@ -15,6 +15,7 @@ interface ScanResult {
   accessible: boolean;
   model?: string;
   manufacturer?: string;
+  deviceType?: 'camera' | 'speaker';
 }
 
 /**
@@ -77,17 +78,25 @@ export async function fastNetworkScan(
       const isOpen = await checkPort(ip, 443, 500);
       
       if (isOpen) {
-        console.log(`✓ Found device at ${ip}:443`);
-        if (onProgress) onProgress(ip, 'found');
-        
-        // Try to identify if it's an Axis camera
+        // Port is open, but need to verify it's actually an Axis device
         const cameraInfo = await identifyCamera(ip, credentials);
-        return {
-          ip,
-          accessible: cameraInfo.accessible,
-          model: cameraInfo.model,
-          manufacturer: cameraInfo.manufacturer
-        };
+        
+        if (cameraInfo.accessible && cameraInfo.manufacturer === 'Axis') {
+          console.log(`✓ Found Axis device at ${ip}`);
+          if (onProgress) onProgress(ip, 'found');
+          
+          return {
+            ip,
+            accessible: true,
+            model: cameraInfo.model,
+            manufacturer: 'Axis',
+            deviceType: cameraInfo.deviceType
+          };
+        } else {
+          // Port 443 is open but it's not an Axis device
+          if (onProgress) onProgress(ip, 'not_found');
+          return null;
+        }
       } else {
         if (onProgress) onProgress(ip, 'not_found');
         return null;
@@ -144,42 +153,84 @@ function checkPort(ip: string, port: number, timeout: number): Promise<boolean> 
 }
 
 /**
- * Quick camera identification
+ * Properly identify if device is an Axis camera or speaker
  */
 async function identifyCamera(
   ip: string, 
   credentials: { username: string; password: string }
-): Promise<{ accessible: boolean; model?: string; manufacturer?: string }> {
+): Promise<{ accessible: boolean; model?: string; manufacturer?: string; deviceType?: 'camera' | 'speaker' }> {
   try {
-    // Try Axis-specific endpoint
+    // First try the basicdeviceinfo endpoint with proper auth
     const response = await axiosInstance.get(`https://${ip}/axis-cgi/basicdeviceinfo.cgi`, {
       auth: {
         username: credentials.username,
         password: credentials.password
       },
+      timeout: 3000,
       validateStatus: () => true
     });
     
-    if (response.status === 200) {
-      // Parse Axis device info
-      const lines = response.data.split('\n');
-      let model = '';
-      
-      for (const line of lines) {
-        if (line.startsWith('ProdNbr=')) {
-          model = line.split('=')[1].trim();
-        }
-      }
-      
-      return {
-        accessible: true,
-        model: model || 'Axis Camera',
-        manufacturer: 'Axis'
-      };
+    // If we get 401, it might be an Axis device but wrong credentials
+    if (response.status === 401) {
+      console.log(`Device at ${ip} requires authentication (likely Axis)`);
+      return { accessible: false };
     }
     
-    return { accessible: false };
-  } catch {
+    // If not 200, it's not an Axis device
+    if (response.status !== 200) {
+      return { accessible: false };
+    }
+    
+    // Parse the response to get device info
+    const data = response.data.toString();
+    const lines = data.split('\n');
+    let model = '';
+    let deviceType: 'camera' | 'speaker' = 'camera';
+    
+    for (const line of lines) {
+      if (line.startsWith('ProdNbr=')) {
+        model = line.split('=')[1].trim();
+      } else if (line.startsWith('ProdType=')) {
+        const prodType = line.split('=')[1].trim().toLowerCase();
+        // Check if it's a speaker (Audio devices)
+        if (prodType.includes('speaker') || prodType.includes('audio')) {
+          deviceType = 'speaker';
+        }
+      }
+    }
+    
+    // Double-check by trying to access camera-specific endpoint
+    if (deviceType === 'camera') {
+      try {
+        const cameraCheck = await axiosInstance.get(`https://${ip}/axis-cgi/param.cgi?action=list&group=Image`, {
+          auth: {
+            username: credentials.username,
+            password: credentials.password
+          },
+          timeout: 2000,
+          validateStatus: () => true
+        });
+        
+        if (cameraCheck.status !== 200) {
+          // Might be a speaker if this camera endpoint fails
+          deviceType = 'speaker';
+        }
+      } catch {
+        // Ignore, already identified as Axis device
+      }
+    }
+    
+    console.log(`✓ Found Axis ${deviceType} at ${ip}: ${model}`);
+    
+    return {
+      accessible: true,
+      model: model || `Axis ${deviceType}`,
+      manufacturer: 'Axis',
+      deviceType
+    };
+    
+  } catch (error) {
+    // Not an Axis device or network error
     return { accessible: false };
   }
 }
