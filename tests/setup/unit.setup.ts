@@ -6,6 +6,31 @@
 // Import custom matchers
 import './customMatchers';
 
+// Mock logger to prevent filesystem operations during tests
+jest.mock('@main/utils/logger', () => ({
+  Logger: jest.fn().mockImplementation(() => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    verbose: jest.fn()
+  })),
+  getLogger: jest.fn(() => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    verbose: jest.fn()
+  })),
+  default: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    verbose: jest.fn()
+  }
+}));
+
 // Mock electron module
 jest.mock('electron', () => ({
   app: {

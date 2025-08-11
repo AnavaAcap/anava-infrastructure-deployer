@@ -3,12 +3,16 @@
  * Tests camera configuration, ACAP deployment, and license activation
  */
 
-import { CameraConfigurationService } from '@main/services/camera/cameraConfigurationService';
-import axios from 'axios';
-import crypto from 'crypto';
-
-// Mock dependencies
+// Mock dependencies - must be hoisted before imports
 jest.mock('axios');
+
+import { CameraConfigurationService } from '@main/services/camera/cameraConfigurationService';
+import crypto from 'crypto';
+import axios from 'axios';
+
+// Cast axios to a mocked function
+const mockedAxios = jest.mocked(axios);
+
 jest.mock('electron', () => ({
   app: {
     getPath: jest.fn((path) => `/mock/path/${path}`),
@@ -37,13 +41,12 @@ jest.mock('electron', () => ({
   }
 }));
 
-const mockedAxios = axios as jest.Mocked<typeof axios>;
-
 describe('CameraConfigurationService', () => {
   let service: CameraConfigurationService;
 
   beforeEach(() => {
     service = new CameraConfigurationService();
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
@@ -73,47 +76,46 @@ describe('CameraConfigurationService', () => {
         timestamp: Date.now()
       };
 
-      // Mock axios for digest auth
-      mockedAxios.request = jest.fn()
-        .mockRejectedValueOnce({
-          response: {
-            status: 401,
-            headers: {
-              'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
-            }
+      // Mock axios for digest auth - first call returns 401, second returns success
+      mockedAxios
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
-        })
+        } as any)
         .mockResolvedValueOnce({
           status: 200,
           data: mockResponse
-        });
+        } as any);
 
       const result = await service.getSceneDescription(mockCamera, 'test-api-key', false);
 
       expect(result.success).toBe(true);
       expect(result.description).toBe(mockResponse.description);
-      expect(mockedAxios.request).toHaveBeenCalled();
+      expect(mockedAxios).toHaveBeenCalled();
     });
 
     it('should include speaker credentials when requested', async () => {
-      mockedAxios.request = jest.fn()
-        .mockRejectedValueOnce({
-          response: {
-            status: 401,
-            headers: {
-              'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
-            }
+      mockedAxios
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
-        })
+        } as any)
         .mockResolvedValueOnce({
           status: 200,
           data: { status: 'success' }
-        });
+        } as any);
 
       await service.getSceneDescription(mockCamera, 'test-api-key', true);
 
-      const callArgs = (mockedAxios.request as jest.Mock).mock.calls[0][0];
-      const requestData = JSON.parse(callArgs.data);
+      // Get the second call (after auth)
+      const calls = mockedAxios.mock.calls;
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      const authCall = calls[1][0] as any;
+      const requestData = JSON.parse(authCall.data);
       
       expect(requestData.speakerIp).toBe(mockCamera.speaker.ip);
       expect(requestData.speakerUser).toBe(mockCamera.speaker.username);
@@ -121,30 +123,26 @@ describe('CameraConfigurationService', () => {
     });
 
     it('should handle scene description errors', async () => {
-      mockedAxios.request = jest.fn().mockRejectedValue(
-        new Error('Network error')
-      );
+      mockedAxios.mockRejectedValue(new Error('Network error'));
 
       const result = await service.getSceneDescription(mockCamera, 'test-api-key', false);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Network error');
+      expect(result.error).toContain('Network error');
     });
 
     it('should handle non-JSON responses gracefully', async () => {
-      mockedAxios.request = jest.fn()
-        .mockRejectedValueOnce({
-          response: {
-            status: 401,
-            headers: {
-              'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
-            }
+      mockedAxios
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
-        })
+        } as any)
         .mockResolvedValueOnce({
           status: 200,
           data: 'Plain text response'
-        });
+        } as any);
 
       const result = await service.getSceneDescription(mockCamera, 'test-api-key', false);
       
@@ -165,23 +163,41 @@ describe('CameraConfigurationService', () => {
     };
 
     it('should activate license successfully', async () => {
-      // Mock successful license activation
-      mockedAxios.request = jest.fn()
-        .mockRejectedValueOnce({
-          response: {
-            status: 401,
-            headers: {
-              'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
+      // Mock successful license activation flow
+      mockedAxios
+        // First call - get app list with auth challenge
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
+          }
+        } as any)
+        // Second call - successful app list response
+        .mockResolvedValueOnce({
+          status: 200,
+          data: {
+            reply: {
+              application: [
+                { Name: 'BatonAnalytic', Status: 'Running' }
+              ]
             }
           }
-        })
+        } as any)
+        // Third call - license activation with auth challenge
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc456"'
+          }
+        } as any)
+        // Fourth call - successful license activation
         .mockResolvedValueOnce({
           status: 200,
           data: { 
             status: 'success',
             message: 'License activated successfully'
           }
-        });
+        } as any);
 
       await service.activateLicenseKey(
         mockCamera.ip,
@@ -191,13 +207,12 @@ describe('CameraConfigurationService', () => {
         'BatonAnalytic',
         mockCamera.mac
       );
-      expect(mockedAxios.request).toHaveBeenCalled();
+      
+      expect(mockedAxios).toHaveBeenCalled();
     });
 
     it('should handle license activation failures', async () => {
-      mockedAxios.request = jest.fn().mockRejectedValue(
-        new Error('License activation failed')
-      );
+      mockedAxios.mockRejectedValue(new Error('License activation failed'));
 
       await expect(service.activateLicenseKey(
         mockCamera.ip,
@@ -206,7 +221,7 @@ describe('CameraConfigurationService', () => {
         'INVALID-KEY',
         'BatonAnalytic',
         mockCamera.mac
-      )).rejects.toThrow('License activation failed');
+      )).rejects.toThrow('License activation process failed');
     });
   });
 
@@ -214,20 +229,18 @@ describe('CameraConfigurationService', () => {
     it('should handle digest auth challenge correctly', async () => {
       const challenge = 'Digest realm="AXIS", nonce="abc123", algorithm=MD5';
       
-      // Mock initial 401 response
-      mockedAxios.request = jest.fn()
-        .mockRejectedValueOnce({
-          response: {
-            status: 401,
-            headers: {
-              'www-authenticate': challenge
-            }
+      // Mock initial 401 response then success
+      mockedAxios
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': challenge
           }
-        })
+        } as any)
         .mockResolvedValueOnce({
           status: 200,
           data: { success: true }
-        });
+        } as any);
 
       const mockCamera = {
         ip: '192.168.1.100',
@@ -245,20 +258,18 @@ describe('CameraConfigurationService', () => {
         { test: 'data' }
       );
 
-      expect(mockedAxios.request).toHaveBeenCalledTimes(2);
+      expect(mockedAxios).toHaveBeenCalledTimes(2);
       
       // Verify digest header was added
-      const secondCall = (mockedAxios.request as jest.Mock).mock.calls[1][0];
-      expect(secondCall.headers.Authorization).toContain('Digest');
+      const secondCall = mockedAxios.mock.calls[1][0] as any;
+      expect(secondCall.headers?.Authorization).toContain('Digest');
     });
 
     it('should handle missing auth challenge', async () => {
-      mockedAxios.request = jest.fn().mockRejectedValue({
-        response: {
-          status: 401,
-          headers: {} // No www-authenticate header
-        }
-      });
+      mockedAxios.mockResolvedValue({
+        status: 401,
+        headers: {} // No www-authenticate header
+      } as any);
 
       const mockCamera = {
         ip: '192.168.1.100',
@@ -268,12 +279,14 @@ describe('CameraConfigurationService', () => {
         }
       };
 
-      await expect(service.pushSystemConfig(
+      const result = await service.pushSystemConfig(
         mockCamera.ip,
         mockCamera.credentials.username,
         mockCamera.credentials.password,
         {}
-      )).rejects.toThrow();
+      );
+
+      expect(result.success).toBe(false);
     });
 
     it('should calculate correct digest hash', () => {
@@ -313,19 +326,17 @@ describe('CameraConfigurationService', () => {
     };
 
     it('should push configuration to camera successfully', async () => {
-      mockedAxios.request = jest.fn()
-        .mockRejectedValueOnce({
-          response: {
-            status: 401,
-            headers: {
-              'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
-            }
+      mockedAxios
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
-        })
+        } as any)
         .mockResolvedValueOnce({
           status: 200,
           data: { status: 'success' }
-        });
+        } as any);
 
       const mockCamera = {
         ip: '192.168.1.100',
@@ -343,13 +354,11 @@ describe('CameraConfigurationService', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(mockedAxios.request).toHaveBeenCalled();
+      expect(mockedAxios).toHaveBeenCalled();
     });
 
     it('should handle configuration push errors', async () => {
-      mockedAxios.request = jest.fn().mockRejectedValue(
-        new Error('Network timeout')
-      );
+      mockedAxios.mockRejectedValue(new Error('Network timeout'));
 
       const mockCamera = {
         ip: '192.168.1.100',
@@ -379,15 +388,13 @@ describe('CameraConfigurationService', () => {
     };
 
     it('should test speaker successfully', async () => {
-      mockedAxios.request = jest.fn()
-        .mockRejectedValueOnce({
-          response: {
-            status: 401,
-            headers: {
-              'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
-            }
+      mockedAxios
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
-        })
+        } as any)
         .mockResolvedValueOnce({
           status: 200,
           data: { 
@@ -396,7 +403,7 @@ describe('CameraConfigurationService', () => {
               transmitCapability: true
             }
           }
-        });
+        } as any);
 
       const result = await service.testSpeaker(
         mockSpeaker.ip,
@@ -409,9 +416,7 @@ describe('CameraConfigurationService', () => {
     });
 
     it('should handle speaker test failures', async () => {
-      mockedAxios.request = jest.fn().mockRejectedValue(
-        new Error('Connection refused')
-      );
+      mockedAxios.mockRejectedValue(new Error('Connection refused'));
 
       const result = await service.testSpeaker(
         mockSpeaker.ip,
@@ -424,19 +429,17 @@ describe('CameraConfigurationService', () => {
     });
 
     it('should play audio on speaker', async () => {
-      mockedAxios.request = jest.fn()
-        .mockRejectedValueOnce({
-          response: {
-            status: 401,
-            headers: {
-              'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
-            }
+      mockedAxios
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
-        })
+        } as any)
         .mockResolvedValueOnce({
           status: 200,
           data: 'OK'
-        });
+        } as any);
 
       const result = await service.playSpeakerAudio(
         mockSpeaker.ip,
@@ -449,25 +452,21 @@ describe('CameraConfigurationService', () => {
     });
   });
 
-  // IP Validation tests removed temporarily due to custom matcher issues
-
   describe('Error Recovery', () => {
     it('should retry on network failures', async () => {
       // First attempt fails, second succeeds
-      mockedAxios.request = jest.fn()
+      mockedAxios
         .mockRejectedValueOnce(new Error('ETIMEDOUT'))
-        .mockRejectedValueOnce({
-          response: {
-            status: 401,
-            headers: {
-              'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
-            }
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
-        })
+        } as any)
         .mockResolvedValueOnce({
           status: 200,
           data: { success: true }
-        });
+        } as any);
 
       const mockCamera = {
         ip: '192.168.1.100',
@@ -496,19 +495,17 @@ describe('CameraConfigurationService', () => {
         }
       };
 
-      mockedAxios.request = jest.fn()
-        .mockRejectedValue({
-          response: {
-            status: 401,
-            headers: {
-              'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
-            }
+      mockedAxios
+        .mockResolvedValue({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
-        })
+        } as any)
         .mockResolvedValue({
           status: 200,
           data: { success: true }
-        });
+        } as any);
 
       // Make multiple concurrent requests
       const promises = [

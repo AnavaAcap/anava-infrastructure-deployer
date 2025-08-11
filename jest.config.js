@@ -16,7 +16,9 @@ module.exports = {
         '^@renderer/(.*)$': '<rootDir>/src/renderer/$1',
         '^@types/(.*)$': '<rootDir>/src/types/$1',
         // Mock electron in unit tests
-        '^electron$': '<rootDir>/tests/__mocks__/electron.ts'
+        '^electron$': '<rootDir>/tests/__mocks__/electron.ts',
+        // Mock logger to prevent filesystem operations
+        '^@main/utils/logger$': '<rootDir>/tests/__mocks__/logger.ts'
       },
       setupFilesAfterEnv: ['<rootDir>/tests/setup/unit.setup.ts'],
       coveragePathIgnorePatterns: [
@@ -118,7 +120,8 @@ module.exports = {
         '^@main/(.*)$': '<rootDir>/src/main/$1',
         '^@renderer/(.*)$': '<rootDir>/src/renderer/$1',
         '^@types/(.*)$': '<rootDir>/src/types/$1',
-        '^electron$': '<rootDir>/tests/__mocks__/electron.ts'
+        '^electron$': '<rootDir>/tests/__mocks__/electron.ts',
+        '^@main/utils/logger$': '<rootDir>/tests/__mocks__/logger.ts'
       },
       setupFilesAfterEnv: ['<rootDir>/tests/setup/electron-v37.setup.ts'],
       testTimeout: 30000
