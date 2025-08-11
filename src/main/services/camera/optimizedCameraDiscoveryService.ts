@@ -107,40 +107,6 @@ export class OptimizedCameraDiscoveryService {
   private networkPermissionDenied = false;
   private modulesInitialized = false;
 
-  private async initializeDiscovery() {
-    // Initialize modules first
-    if (!this.modulesInitialized) {
-      await initializeModules();
-      this.modulesInitialized = true;
-    }
-    
-    // Platform-specific permission handling
-    if (process.platform === 'darwin') {
-      // macOS 15+ permission handling
-      const version = process.getSystemVersion?.() || '0.0.0';
-      const majorVersion = parseInt(version.split('.')[0]);
-      
-      if (majorVersion >= 15) {
-        // Wait a bit for permission to be granted
-        setTimeout(() => {
-          this.startPreDiscovery();
-        }, 3000);
-        return;
-      }
-    } else if (process.platform === 'win32') {
-      // Windows-specific initialization
-      // Log Windows version for debugging
-      const os = require('os');
-      log.info(`[Windows] Running on ${os.release()} - ${os.version()}`);
-      
-      // CRITICAL: Windows Firewall WILL block network scanning until allowed
-      log.warn('[Windows] IMPORTANT: When Windows Firewall prompts, click "Allow access" or scanning will fail!');
-      log.info('[Windows] If scanning fails, try running as Administrator');
-    }
-    
-    // Start discovery immediately on all platforms
-    this.startPreDiscovery();
-  }
 
   constructor() {
     // Create axios instance that accepts self-signed certificates

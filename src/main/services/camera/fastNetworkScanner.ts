@@ -1,4 +1,3 @@
-import { WebContents } from 'electron';
 import axios from 'axios';
 import https from 'https';
 import os from 'os';
@@ -31,7 +30,7 @@ export async function fastNetworkScan(
   const interfaces = os.networkInterfaces();
   const localRanges: string[] = [];
   
-  for (const [name, addresses] of Object.entries(interfaces)) {
+  for (const addresses of Object.values(interfaces)) {
     if (addresses) {
       for (const addr of addresses) {
         if (addr.family === 'IPv4' && !addr.internal) {
