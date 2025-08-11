@@ -1,0 +1,154 @@
+# Windows-specific Electron Builder Configuration
+# This file contains hardened Windows build settings to prevent installer issues
+
+appId: com.anava.vision
+productName: Anava Installer
+copyright: Copyright © 2025 Anava Inc.
+directories:
+  output: release
+  buildResources: assets
+
+# Critical: Include all necessary files for Windows build
+files:
+  - dist/**/*
+  - node_modules/**/*
+  - assets/**/*
+  - "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  - "!node_modules/**/*.d.ts"
+  - "!node_modules/.bin"
+  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!.editorconfig"
+  - "!**/._*"
+  - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}"
+  - "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}"
+  - "!**/{appveyor.yml,.travis.yml,circle.yml}"
+  - "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+  - "!node_modules/**/*.map"
+  - "!node_modules/**/*.ts"
+  - "!node_modules/**/*.tsx"
+
+# Resources that need to be accessible at runtime
+extraResources:
+  - from: oauth-config.json
+    to: oauth-config.json
+  - from: functions
+    to: functions
+    filter:
+      - "**/*"
+  - from: api-gateway-config.yaml
+    to: api-gateway-config.yaml
+  - from: function-templates
+    to: function-templates
+    filter:
+      - "**/*"
+  - from: firestore-rules
+    to: firestore-rules
+    filter:
+      - "**/*"
+  - from: terraform-bin
+    to: terraform-bin
+    filter:
+      - "**/*"
+  - from: firestore-indexes.json
+    to: firestore-indexes.json
+
+# Files to unpack from ASAR for native modules
+asarUnpack:
+  - node_modules/ping/**/*
+  - node_modules/**/*.node
+  - node_modules/**/*.dll
+
+# Windows-specific configuration
+win:
+  icon: assets/icon.ico
+  legalTrademarks: Anava Inc.
+  publisherName: Anava Inc.
+  # Critical: Use both architectures to prevent path issues
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: nsis
+      arch: 
+        - ia32
+  # Ensure consistent naming
+  artifactName: "${productName}-Setup-${version}-${arch}.${ext}"
+  # Execution level for network operations
+  requestedExecutionLevel: requireAdministrator
+  # Code signing configuration (will be skipped if cert not available)
+  certificateFile: "${env.WIN_CSC_LINK}"
+  certificatePassword: "${env.WIN_CSC_KEY_PASSWORD}"
+  # Additional metadata
+  fileAssociations:
+    - ext: anava
+      name: Anava Configuration
+      description: Anava Configuration File
+      role: Editor
+  # Ensure proper uninstaller behavior
+  forceCodeSigning: false
+  signDlls: false
+  rfc3161TimeStampServer: http://timestamp.digicert.com
+  timeStampServer: http://timestamp.digicert.com
+
+# NSIS installer configuration - CRITICAL FOR FIXING ISSUES
+nsis:
+  # Disable one-click to allow user control
+  oneClick: false
+  # Allow users to change install directory
+  allowToChangeInstallationDirectory: true
+  # Allow elevation when needed
+  allowElevation: true
+  # Create shortcuts properly
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Anava Installer
+  # Icons
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  installerHeaderIcon: assets/icon.ico
+  # Installation mode
+  perMachine: true
+  # Display settings
+  menuCategory: "Anava\\Anava Installer"
+  displayLanguageSelector: false
+  # Critical: Ensure warnings don't fail build
+  warningsAsErrors: false
+  # Unicode for international support
+  unicode: true
+  # Uninstaller settings - FIXES UNINSTALL ISSUES
+  deleteAppDataOnUninstall: true
+  runAfterFinish: false
+  # Custom NSIS script for advanced fixes
+  include: installer-scripts/installer.nsh
+  # Installer/Uninstaller GUIDs for proper Windows registry
+  guid: "3F8B9A2C-4E5D-6F7A-8B9C-0D1E2F3A4B5C"
+  # Compression settings for integrity
+  packElevateHelper: true
+  # Use better compression to prevent corruption
+  compression: maximum
+  # Language
+  language: 1033
+  # Install and uninstall display names
+  installerSidebar: assets/installerSidebar.bmp
+  uninstallerSidebar: assets/installerSidebar.bmp
+
+# macOS configuration (for reference)
+mac:
+  category: public.app-category.developer-tools
+  icon: assets/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: assets/entitlements.mac.plist
+  entitlementsInherit: assets/entitlements.mac.plist
+
+# Linux configuration (for reference)
+linux:
+  icon: assets/icon.png
+  target:
+    - AppImage
+    - deb
+  category: Development
+
+# Publish configuration (null = no auto-update)
+publish: null
