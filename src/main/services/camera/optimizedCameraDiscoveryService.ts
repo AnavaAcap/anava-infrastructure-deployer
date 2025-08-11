@@ -7,6 +7,29 @@ import net from 'net';
 import https from 'https';
 import { macOSNetworkPermission } from '../macOSNetworkPermission';
 import { safeConsole } from '../../utils/safeConsole';
+
+// Enhanced logging for debugging network issues
+const log = {
+  info: (msg: string, ...args: any[]) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] INFO: ${msg}`, ...args);
+    safeConsole.log(msg, ...args);
+  },
+  warn: (msg: string, ...args: any[]) => {
+    const timestamp = new Date().toISOString();
+    console.warn(`[${timestamp}] WARN: ${msg}`, ...args);
+    safeConsole.warn(msg, ...args);
+  },
+  error: (msg: string, ...args: any[]) => {
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] ERROR: ${msg}`, ...args);
+    safeConsole.error(msg, ...args);
+  },
+  debug: (msg: string, ...args: any[]) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] DEBUG: ${msg}`, ...args);
+  }
+};
 import { getCameraBaseUrl } from './cameraProtocolUtils';
 
 // Dynamic imports for ESM modules
@@ -90,8 +113,10 @@ export class OptimizedCameraDiscoveryService {
       await initializeModules();
       this.modulesInitialized = true;
     }
-    // Check if we're on macOS 15+ and need permission
+    
+    // Platform-specific permission handling
     if (process.platform === 'darwin') {
+      // macOS 15+ permission handling
       const version = process.getSystemVersion?.() || '0.0.0';
       const majorVersion = parseInt(version.split('.')[0]);
       
@@ -102,9 +127,18 @@ export class OptimizedCameraDiscoveryService {
         }, 3000);
         return;
       }
+    } else if (process.platform === 'win32') {
+      // Windows-specific initialization
+      // Log Windows version for debugging
+      const os = require('os');
+      log.info(`[Windows] Running on ${os.release()} - ${os.version()}`);
+      
+      // CRITICAL: Windows Firewall WILL block network scanning until allowed
+      log.warn('[Windows] IMPORTANT: When Windows Firewall prompts, click "Allow access" or scanning will fail!');
+      log.info('[Windows] If scanning fails, try running as Administrator');
     }
     
-    // On other platforms or older macOS, start immediately
+    // Start discovery immediately on all platforms
     this.startPreDiscovery();
   }
 
@@ -305,8 +339,21 @@ export class OptimizedCameraDiscoveryService {
 
   async enhancedScanNetwork(sender?: WebContents, options?: DiscoveryOptions): Promise<Camera[]> {
     const startTime = Date.now();
-    console.log('=== Starting enhanced network scan ===');
-    console.log('Options:', options);
+    log.info('=== Starting enhanced network scan ===');
+    log.info('Platform:', process.platform);
+    log.info('Options:', JSON.stringify(options));
+    
+    // Critical: Check if we have network interfaces
+    const testInterfaces = os.networkInterfaces();
+    const hasValidInterface = Object.values(testInterfaces).some(ifaces => 
+      ifaces?.some(i => i.family === 'IPv4' && !i.internal)
+    );
+    
+    if (!hasValidInterface) {
+      log.error('CRITICAL: No valid IPv4 network interfaces found!');
+      log.error('Cannot perform network scan without network connection');
+      return [];
+    }
     
     // Check if we've already detected network permission issues
     // But allow retry after user might have granted permission
@@ -333,13 +380,28 @@ export class OptimizedCameraDiscoveryService {
     
     // Then do active scanning with unified camera/speaker detection
     const networks = this.getNetworksToScan(options?.networkRange);
-    console.log(`Active scanning ${networks.length} networks...`);
     
+    if (networks.length === 0) {
+      log.error('No networks available for scanning!');
+      return cameras;
+    }
+    
+    log.info(`Active scanning ${networks.length} network(s)...`);
     const ports = options?.ports || [...DEFAULT_CAMERA_PORTS.priority, ...DEFAULT_CAMERA_PORTS.common];
+    log.info(`Will scan ports: ${ports.join(', ')}`);
     
     for (const network of networks) {
-      console.log(`Scanning network: ${network.network}`);
+      log.info(`\n--- Scanning network: ${network.network} (${network.interface}) ---`);
       const ips = this.getIPsInRange(network.network);
+      log.info(`Generated ${ips.length} IPs to scan`);
+      
+      if (ips.length === 0) {
+        log.warn(`No IPs generated for network ${network.network} - skipping`);
+        continue;
+      }
+      
+      // Log first few IPs for debugging
+      log.debug(`First 5 IPs: ${ips.slice(0, 5).join(', ')}`);
       
       // Track what we've found on this network
       let networkCamera: Camera | null = null;
@@ -358,7 +420,23 @@ export class OptimizedCameraDiscoveryService {
         
         const credentials = options?.credentials || [];
         if (credentials.length === 0) {
-          console.log(`Skipping ${ip} - no credentials provided`);
+          // Still check if port is open even without credentials
+          log.debug(`No credentials for ${ip}, checking if Axis device...`);
+          
+          // Quick check if it's an Axis device
+          for (const port of ports) {
+            const isOpen = await this.checkTCPConnection(ip, port, 1000);
+            if (isOpen) {
+              log.info(`✓ Found open port ${port} on ${ip} - may be a camera`);
+              discoveredIPs.add(ip);
+              
+              // Store as potential Axis device for later classification
+              if (!this.preDiscoveredAxisDevices.includes(ip)) {
+                this.preDiscoveredAxisDevices.push(ip);
+              }
+              break;
+            }
+          }
           continue;
         }
         const result = await this.scanIP(ip, ports, credentials, sender, networkSpeaker || undefined);
@@ -433,7 +511,25 @@ export class OptimizedCameraDiscoveryService {
   private async discoverViaMDNS(): Promise<Camera[]> {
     return new Promise((resolve) => {
       const cameras: Camera[] = [];
-      const bonjour = new Bonjour();
+      
+      // Check if Bonjour is available (especially important on Windows)
+      if (!Bonjour) {
+        console.log('[mDNS] Bonjour service not available - skipping mDNS discovery');
+        resolve([]);
+        return;
+      }
+      
+      let bonjour: any;
+      try {
+        bonjour = new Bonjour();
+      } catch (error: any) {
+        console.log(`[mDNS] Failed to initialize Bonjour: ${error.message}`);
+        if (process.platform === 'win32') {
+          console.log('[mDNS] Note: On Windows, Apple Bonjour service must be installed for mDNS discovery');
+        }
+        resolve([]);
+        return;
+      }
       
       // Common camera service types
       const serviceTypes = ['_axis-video._tcp', '_http._tcp', '_rtsp._tcp'];
@@ -909,6 +1005,15 @@ export class OptimizedCameraDiscoveryService {
         return { data: null, error: `Cannot connect to ${ip}:${port}` };
       } else if (error.code === 'ETIMEDOUT') {
         return { data: null, error: `Connection timeout to ${ip}:${port}` };
+      } else if (process.platform === 'win32') {
+        // Windows-specific error messages
+        if (error.code === 'EACCES' || error.code === 'EPERM') {
+          return { data: null, error: `Access denied to ${ip}:${port} - check Windows Firewall settings` };
+        } else if (error.code === 'WSAEACCES') {
+          return { data: null, error: `Windows socket access denied - firewall or antivirus may be blocking` };
+        } else if (error.code === 'ENETUNREACH' || error.code === 'WSAENETUNREACH') {
+          return { data: null, error: `Network unreachable to ${ip}:${port} - check network connection` };
+        }
       }
       return { data: null, error: error.message || 'Connection failed' };
     }
@@ -986,6 +1091,7 @@ export class OptimizedCameraDiscoveryService {
     return new Promise((resolve) => {
       const socket = new net.Socket();
       let resolved = false;
+      let connected = false;
 
       const cleanup = () => {
         if (!resolved) {
@@ -994,32 +1100,53 @@ export class OptimizedCameraDiscoveryService {
         }
       };
 
+      // CRITICAL FIX: Set socket-level timeout to prevent Windows Firewall hang
+      // This ensures the socket will emit a 'timeout' event even if firewall blocks it
+      socket.setTimeout(timeout);
+
+      // Backup timer in case socket timeout doesn't fire
       const timer = setTimeout(() => {
-        console.log(`    TCP timeout on ${ip}:${port} after ${timeout}ms`);
-        cleanup();
-        resolve(false);
-      }, timeout);
+        if (!resolved) {
+          console.log(`    [FORCED] TCP timeout on ${ip}:${port} after ${timeout}ms (firewall may be blocking)`);
+          cleanup();
+          resolve(false);
+        }
+      }, timeout + 500); // Give socket timeout a chance to fire first
 
       socket.on('connect', () => {
-        console.log(`    TCP connected to ${ip}:${port}`);
+        connected = true;
+        console.log(`    ✓ TCP connected to ${ip}:${port}`);
         clearTimeout(timer);
         cleanup();
         resolve(true);
       });
 
       socket.on('error', async (err: any) => {
-        console.log(`    TCP error on ${ip}:${port}: ${err.code || err.message}`);
+        console.log(`    ✗ TCP error on ${ip}:${port}: ${err.code || err.message}`);
         
-        // Handle macOS 15 network permission issue
-        if (err.code === 'EHOSTUNREACH' && process.platform === 'darwin' && !this.hasShownNetworkPermissionDialog) {
-          console.log('EHOSTUNREACH detected - macOS 15 network permission may be needed');
-          this.hasShownNetworkPermissionDialog = true;
-          
-          // Trigger the permission dialog
-          await macOSNetworkPermission.showManualInstructions();
-          
-          // Mark that we need permission
-          this.networkPermissionDenied = true;
+        // Platform-specific error handling
+        if (process.platform === 'darwin') {
+          // Handle macOS 15 network permission issue
+          if (err.code === 'EHOSTUNREACH' && !this.hasShownNetworkPermissionDialog) {
+            console.log('EHOSTUNREACH detected - macOS 15 network permission may be needed');
+            this.hasShownNetworkPermissionDialog = true;
+            
+            // Trigger the permission dialog
+            await macOSNetworkPermission.showManualInstructions();
+            
+            // Mark that we need permission
+            this.networkPermissionDenied = true;
+          }
+        } else if (process.platform === 'win32') {
+          // Handle Windows-specific network errors
+          // Let Windows Firewall handle prompts automatically
+          if (err.code === 'EACCES' || err.code === 'EPERM') {
+            console.log('[Windows] Access denied - Windows Firewall will prompt automatically');
+          } else if (err.code === 'WSAEACCES') {
+            console.log('[Windows] Socket access denied - check Windows Firewall');
+          } else if (err.code === 'ENETUNREACH' || err.code === 'WSAENETUNREACH') {
+            console.log('[Windows] Network unreachable');
+          }
         }
         
         clearTimeout(timer);
@@ -1028,17 +1155,35 @@ export class OptimizedCameraDiscoveryService {
       });
 
       socket.on('timeout', () => {
-        console.log(`    TCP socket timeout on ${ip}:${port}`);
-        clearTimeout(timer);
-        cleanup();
-        resolve(false);
+        if (!resolved) {
+          console.log(`    ⏱ TCP socket timeout on ${ip}:${port} (likely firewall blocking)`);
+          clearTimeout(timer);
+          cleanup();
+          resolve(false);
+        }
+      });
+
+      // Add 'close' event handler as additional safeguard
+      socket.on('close', () => {
+        if (!resolved && !connected) {
+          console.log(`    Socket closed unexpectedly for ${ip}:${port}`);
+          clearTimeout(timer);
+          cleanup();
+          resolve(false);
+        }
       });
 
       try {
-        console.log(`    Attempting TCP connection to ${ip}:${port}...`);
-        socket.connect(port, ip);
+        console.log(`    → Attempting TCP connection to ${ip}:${port} (timeout: ${timeout}ms)`);
+        
+        // Use the options form of connect with explicit timeout
+        socket.connect({
+          port: port,
+          host: ip,
+          timeout: timeout // Redundant but explicit
+        });
       } catch (e: any) {
-        console.log(`    TCP connect exception: ${e.message}`);
+        console.log(`    ✗ TCP connect exception: ${e.message}`);
         clearTimeout(timer);
         cleanup();
         resolve(false);
@@ -1132,12 +1277,34 @@ export class OptimizedCameraDiscoveryService {
                 address: address.address
               };
               
-              // Prioritize physical interfaces (en0, eth0, etc) over virtual ones
-              if (name.startsWith('en') || name.startsWith('eth') || name.startsWith('wlan')) {
+              // Prioritize physical interfaces over virtual ones
+              // Windows: 'Ethernet', 'Wi-Fi', 'Local Area Connection'
+              // macOS/Linux: 'en0', 'eth0', 'wlan0'
+              const isPhysical = 
+                name.startsWith('en') || 
+                name.startsWith('eth') || 
+                name.startsWith('wlan') ||
+                name.includes('Ethernet') ||
+                name.includes('Wi-Fi') ||
+                name.includes('Local Area Connection') ||
+                name.includes('Wireless');
+              
+              // Exclude known virtual interfaces
+              const isVirtual = 
+                name.includes('VirtualBox') ||
+                name.includes('VMware') ||
+                name.includes('vEthernet') ||
+                name.includes('Hyper-V') ||
+                name.includes('Docker') ||
+                name.includes('WSL') ||
+                name.includes('Loopback');
+              
+              if (!isVirtual && isPhysical) {
                 physicalFirst.push(networkInfo);
-              } else {
+              } else if (!isVirtual) {
                 virtualLast.push(networkInfo);
               }
+              // Skip virtual interfaces entirely unless no physical found
             }
           }
         }
@@ -1145,7 +1312,17 @@ export class OptimizedCameraDiscoveryService {
       
       // Return physical interfaces first, then virtual ones
       networks.push(...physicalFirst, ...virtualLast);
-      console.log('Network scan order:', networks.map(n => `${n.interface}: ${n.network}`));
+      
+      // Critical debugging info
+      if (networks.length === 0) {
+        log.error('NO NETWORK INTERFACES FOUND! Cannot scan.');
+        log.error('Available interfaces:', JSON.stringify(networkInterfaces, null, 2));
+      } else {
+        log.info(`Found ${networks.length} network(s) to scan:`);
+        networks.forEach(n => {
+          log.info(`  - ${n.interface}: ${n.network} (IP: ${n.address})`);
+        });
+      }
     }
     
     return networks;

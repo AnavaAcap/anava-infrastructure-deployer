@@ -179,11 +179,14 @@ app.whenReady().then(async () => {
   }
   
   // Initialize services immediately
-  // macOS network permissions (only if on macOS)
+  // Platform-specific network permissions
   if (process.platform === 'darwin') {
+    // macOS network permissions
     const { macOSNetworkPermission } = await import('./services/macOSNetworkPermission');
     await macOSNetworkPermission.initialize();
   }
+  // Windows handles firewall prompts automatically - no initialization needed
+  // The OS will prompt once and remember the choice
   
   // Load core services
   logger.info('Loading core services...');
@@ -352,12 +355,14 @@ app.on('will-quit', () => {
 
 // IPC Handlers
 
-// Network permission handler for macOS 15
+// Network permission handler for macOS (Windows handles automatically)
 ipcMain.handle('network:request-permission', async () => {
-  const { macOSNetworkPermission } = await import('./services/macOSNetworkPermission');
-  
-  // Show the manual instructions dialog
-  await macOSNetworkPermission.showManualInstructions();
+  if (process.platform === 'darwin') {
+    const { macOSNetworkPermission } = await import('./services/macOSNetworkPermission');
+    // Show the manual instructions dialog
+    await macOSNetworkPermission.showManualInstructions();
+  }
+  // Windows: Let the OS handle firewall prompts automatically
   
   return { success: true };
 });

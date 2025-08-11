@@ -433,12 +433,32 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       } else {
         setDeploymentStatus('No cameras found on the network. Please check your connection.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Network scan failed:', error);
-      setError('Failed to scan network. Please check your connection and try again.');
-      setDeploymentStatus('Scan failed. Please try again.');
+      
+      // Platform-specific error messages
+      let errorMessage = 'Failed to scan network. ';
+      if (navigator.platform.includes('Win')) {
+        errorMessage += 'Please check Windows Firewall settings and ensure the application has network access. You may need to run as Administrator.';
+      } else if (navigator.platform.includes('Mac')) {
+        errorMessage += 'Please check network permissions in System Settings > Privacy & Security.';
+      } else {
+        errorMessage += 'Please check your connection and firewall settings.';
+      }
+      
+      setError(errorMessage);
+      setDeploymentStatus('Scan failed. Please check permissions and try again.');
     } finally {
       setScanning(false);
+    }
+  };
+
+  // Handle network permission request
+  const handleRequestNetworkPermission = async () => {
+    try {
+      await (window.electronAPI as any).networkRequestPermission?.();
+    } catch (error) {
+      console.error('Failed to request network permission:', error);
     }
   };
 
