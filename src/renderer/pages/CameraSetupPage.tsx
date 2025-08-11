@@ -339,8 +339,12 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const handleNetworkScan = async () => {
     setScanning(true);
     setCameras([]);
+    setError(null);
     
     try {
+      // Show scanning status
+      setDeploymentStatus('Initializing network scan...');
+      
       // First, classify any pre-discovered Axis devices with current credentials
       const classified = await (window.electronAPI as any).camera?.classifyAxisDevices?.(credentials);
       console.log('Classification result:', classified);
@@ -351,6 +355,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       
       if (classified && classified.cameras && classified.cameras.length > 0) {
         console.log('Using classified cameras:', classified.cameras.length);
+        setDeploymentStatus(`Found ${classified.cameras.length} camera(s) from previous scan`);
         
         const formattedCameras: CameraInfo[] = classified.cameras.map((cam: any) => ({
           id: cam.id || `camera-${cam.ip}`,
@@ -368,12 +373,16 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         setCameras(formattedCameras);
         setScanning(false); // Stop scanning animation
         
-        // Auto-select first accessible camera
+        // Auto-select first accessible camera but DON'T auto-advance
         const firstAccessible = formattedCameras.find(cam => cam.accessible);
         if (firstAccessible) {
           setSelectedCamera(firstAccessible);
-          setActiveStep(2);
-          setCompleted(prev => ({ ...prev, 0: true, 1: true }));
+          // Don't auto-advance - let user review cameras and click next
+          // setActiveStep(2);
+          // setCompleted(prev => ({ ...prev, 0: true, 1: true }));
+          setDeploymentStatus(`Found ${formattedCameras.length} camera(s). Select one to continue.`);
+        } else {
+          setDeploymentStatus(`Found ${formattedCameras.length} camera(s) but need authentication.`);
         }
         
         return;
@@ -405,12 +414,16 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
       setCameras(formattedCameras);
       
-      // Auto-select first accessible camera
+      // Auto-select first accessible camera but DON'T auto-advance
       const firstAccessible = formattedCameras.find(cam => cam.accessible);
       if (firstAccessible) {
         setSelectedCamera(firstAccessible);
-        setActiveStep(2);
-        setCompleted(prev => ({ ...prev, 0: true, 1: true }));
+        // Don't auto-advance - let user review and select
+        // setActiveStep(2);
+        // setCompleted(prev => ({ ...prev, 0: true, 1: true }));
+        setDeploymentStatus(`Network scan complete. Found ${formattedCameras.length} camera(s).`);
+      } else {
+        setDeploymentStatus(`Found ${formattedCameras.length} camera(s). Please authenticate to continue.`);
       }
     } catch (error) {
       console.error('Network scan failed:', error);

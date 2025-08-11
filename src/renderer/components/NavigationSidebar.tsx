@@ -60,24 +60,50 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     
     const getLatestCamera = async () => {
       try {
+        // Only show camera UI if we're on camera-setup page
+        if (currentPage !== 'camera-setup') {
+          setLatestCameraIp(null);
+          return;
+        }
+        
         const configuredCameras = await (window.electronAPI as any).getConfigValue?.('configuredCameras');
         if (configuredCameras && configuredCameras.length > 0) {
           // Get the most recently configured camera
           const latestCamera = configuredCameras[configuredCameras.length - 1];
-          setLatestCameraIp(latestCamera.ip);
+          
+          // Only show if camera was configured in this session (check timestamp)
+          const sessionStartTime = window.sessionStorage.getItem('sessionStartTime');
+          if (!sessionStartTime) {
+            window.sessionStorage.setItem('sessionStartTime', Date.now().toString());
+            setLatestCameraIp(null);
+            return;
+          }
+          
+          // If camera was configured after session start, show it
+          const cameraConfigTime = latestCamera.configuredAt || latestCamera.timestamp;
+          if (cameraConfigTime && new Date(cameraConfigTime).getTime() > parseInt(sessionStartTime)) {
+            setLatestCameraIp(latestCamera.ip);
+          } else {
+            setLatestCameraIp(null);
+          }
+        } else {
+          setLatestCameraIp(null);
         }
       } catch (error) {
         console.error('Failed to get configured cameras:', error);
+        setLatestCameraIp(null);
       }
     };
     
     getVersion();
     getLatestCamera();
     
-    // Poll for camera changes every 5 seconds
-    const interval = setInterval(getLatestCamera, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    // Poll for camera changes every 5 seconds only when on camera-setup page
+    const interval = currentPage === 'camera-setup' ? setInterval(getLatestCamera, 5000) : null;
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [currentPage]);
   const menuItems = [
     { 
       id: 'welcome' as NavigationView, 
