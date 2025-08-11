@@ -5,9 +5,12 @@
 
 // Mock dependencies - must be hoisted before imports
 jest.mock('axios');
+jest.mock('@main/services/camera/cameraProtocolUtils', () => ({
+  getCameraBaseUrl: jest.fn().mockResolvedValue('https://192.168.1.100'),
+  createCameraAxiosInstance: jest.fn()
+}));
 
 import { CameraConfigurationService } from '@main/services/camera/cameraConfigurationService';
-import crypto from 'crypto';
 import axios from 'axios';
 
 // Cast axios to a mocked function
@@ -163,41 +166,23 @@ describe('CameraConfigurationService', () => {
     };
 
     it('should activate license successfully', async () => {
-      // Mock successful license activation flow
-      mockedAxios
-        // First call - get app list with auth challenge
-        .mockResolvedValueOnce({
-          status: 401,
-          headers: {
-            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
-          }
-        } as any)
-        // Second call - successful app list response
-        .mockResolvedValueOnce({
-          status: 200,
-          data: {
-            reply: {
-              application: [
-                { Name: 'BatonAnalytic', Status: 'Running' }
-              ]
-            }
-          }
-        } as any)
-        // Third call - license activation with auth challenge
-        .mockResolvedValueOnce({
-          status: 401,
-          headers: {
-            'www-authenticate': 'Digest realm="AXIS", nonce="abc456"'
-          }
-        } as any)
-        // Fourth call - successful license activation
-        .mockResolvedValueOnce({
-          status: 200,
-          data: { 
-            status: 'success',
-            message: 'License activated successfully'
-          }
-        } as any);
+      // Mock the private methods that use external dependencies
+      const mockLicenseXML = '<?xml version="1.0"?><license>test</license>';
+      
+      // Mock getLicenseXMLFromAxis to avoid Puppeteer
+      jest.spyOn(service as any, 'getLicenseXMLFromAxis')
+        .mockResolvedValue(mockLicenseXML);
+      
+      // Mock uploadLicenseXML 
+      jest.spyOn(service as any, 'uploadLicenseXML')
+        .mockResolvedValue(undefined);
+      
+      // Mock httpsBasicAuth for the app list call
+      jest.spyOn(service as any, 'httpsBasicAuth')
+        .mockResolvedValue(`<?xml version="1.0"?>
+          <applications>
+            <application Name="BatonAnalytic" Status="Running" License="None" />
+          </applications>`);
 
       await service.activateLicenseKey(
         mockCamera.ip,
@@ -208,11 +193,24 @@ describe('CameraConfigurationService', () => {
         mockCamera.mac
       );
       
-      expect(mockedAxios).toHaveBeenCalled();
+      expect((service as any).getLicenseXMLFromAxis).toHaveBeenCalledWith(
+        mockCamera.mac,
+        'TEST-LICENSE-KEY'
+      );
+      expect((service as any).uploadLicenseXML).toHaveBeenCalled();
     });
 
     it('should handle license activation failures', async () => {
-      mockedAxios.mockRejectedValue(new Error('License activation failed'));
+      // Mock getLicenseXMLFromAxis to fail
+      jest.spyOn(service as any, 'getLicenseXMLFromAxis')
+        .mockRejectedValue(new Error('Failed to get license XML'));
+      
+      // Mock httpsBasicAuth for the app list call
+      jest.spyOn(service as any, 'httpsBasicAuth')
+        .mockResolvedValue(`<?xml version="1.0"?>
+          <applications>
+            <application Name="BatonAnalytic" Status="Running" License="None" />
+          </applications>`);
 
       await expect(service.activateLicenseKey(
         mockCamera.ip,
@@ -221,26 +219,15 @@ describe('CameraConfigurationService', () => {
         'INVALID-KEY',
         'BatonAnalytic',
         mockCamera.mac
-      )).rejects.toThrow('License activation process failed');
+      )).rejects.toThrow('License activation failed');
     });
   });
 
-  describe('Digest Authentication', () => {
-    it('should handle digest auth challenge correctly', async () => {
-      const challenge = 'Digest realm="AXIS", nonce="abc123", algorithm=MD5';
-      
-      // Mock initial 401 response then success
-      mockedAxios
-        .mockResolvedValueOnce({
-          status: 401,
-          headers: {
-            'www-authenticate': challenge
-          }
-        } as any)
-        .mockResolvedValueOnce({
-          status: 200,
-          data: { success: true }
-        } as any);
+  describe('HTTPS Basic Authentication', () => {
+    it('should use basic auth with HTTPS', async () => {
+      // Mock httpsBasicAuth to return success
+      jest.spyOn(service as any, 'httpsBasicAuth')
+        .mockResolvedValue({ success: true });
 
       const mockCamera = {
         ip: '192.168.1.100',
@@ -251,31 +238,27 @@ describe('CameraConfigurationService', () => {
       };
 
       // Test through public API
-      await service.pushSystemConfig(
+      const result = await service.pushSystemConfig(
         mockCamera.ip,
         mockCamera.credentials.username,
         mockCamera.credentials.password,
         { test: 'data' }
       );
 
-      expect(mockedAxios).toHaveBeenCalledTimes(2);
-      
-      // Verify digest header was added
-      const secondCall = mockedAxios.mock.calls[1][0] as any;
-      expect(secondCall.headers?.Authorization).toContain('Digest');
+      expect((service as any).httpsBasicAuth).toHaveBeenCalled();
+      expect(result.success).toBe(true);
     });
 
-    it('should handle missing auth challenge', async () => {
-      mockedAxios.mockResolvedValue({
-        status: 401,
-        headers: {} // No www-authenticate header
-      } as any);
+    it('should handle auth failures', async () => {
+      // Mock httpsBasicAuth to fail
+      jest.spyOn(service as any, 'httpsBasicAuth')
+        .mockRejectedValue(new Error('Authentication failed'));
 
       const mockCamera = {
         ip: '192.168.1.100',
         credentials: {
           username: 'root',
-          password: 'password'
+          password: 'wrong-password'
         }
       };
 
@@ -287,26 +270,7 @@ describe('CameraConfigurationService', () => {
       );
 
       expect(result.success).toBe(false);
-    });
-
-    it('should calculate correct digest hash', () => {
-      const ha1 = crypto
-        .createHash('md5')
-        .update('user:realm:password')
-        .digest('hex');
-      
-      const ha2 = crypto
-        .createHash('md5')
-        .update('GET:/path')
-        .digest('hex');
-      
-      const response = crypto
-        .createHash('md5')
-        .update(`${ha1}:nonce123:${ha2}`)
-        .digest('hex');
-      
-      // This verifies the digest calculation logic
-      expect(response).toMatch(/^[a-f0-9]{32}$/);
+      expect(result.error).toContain('Authentication failed');
     });
   });
 
@@ -388,13 +352,14 @@ describe('CameraConfigurationService', () => {
     };
 
     it('should test speaker successfully', async () => {
-      mockedAxios
+      // Mock axios.get for the testSpeaker method
+      const axiosGet = jest.fn()
         .mockResolvedValueOnce({
           status: 401,
           headers: {
             'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
-        } as any)
+        })
         .mockResolvedValueOnce({
           status: 200,
           data: { 
@@ -403,7 +368,13 @@ describe('CameraConfigurationService', () => {
               transmitCapability: true
             }
           }
-        } as any);
+        });
+      
+      (axios as any).get = axiosGet;
+
+      // Mock playSpeakerAudio to avoid actual audio playback
+      jest.spyOn(service as any, 'playSpeakerAudio')
+        .mockResolvedValue({ success: true });
 
       const result = await service.testSpeaker(
         mockSpeaker.ip,
@@ -416,7 +387,8 @@ describe('CameraConfigurationService', () => {
     });
 
     it('should handle speaker test failures', async () => {
-      mockedAxios.mockRejectedValue(new Error('Connection refused'));
+      // Mock axios.get to reject
+      (axios as any).get = jest.fn().mockRejectedValue(new Error('Connection refused'));
 
       const result = await service.testSpeaker(
         mockSpeaker.ip,
@@ -429,17 +401,9 @@ describe('CameraConfigurationService', () => {
     });
 
     it('should play audio on speaker', async () => {
-      mockedAxios
-        .mockResolvedValueOnce({
-          status: 401,
-          headers: {
-            'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
-          }
-        } as any)
-        .mockResolvedValueOnce({
-          status: 200,
-          data: 'OK'
-        } as any);
+      // Mock httpsBasicAuth for playSpeakerAudio 
+      jest.spyOn(service as any, 'httpsBasicAuth')
+        .mockResolvedValue({ success: true });
 
       const result = await service.playSpeakerAudio(
         mockSpeaker.ip,

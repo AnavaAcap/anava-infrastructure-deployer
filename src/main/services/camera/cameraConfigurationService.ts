@@ -1,11 +1,9 @@
 import { ipcMain, app } from 'electron';
 import axios from 'axios';
-import crypto from 'crypto';
 import https from 'https';
 import { Camera } from './cameraDiscoveryService';
 import { getCameraBaseUrl } from './cameraProtocolUtils';
 import { logger } from '../../utils/logger';
-// import AxiosDigestAuth from '@mhoc/axios-digest-auth'; // No longer needed, using simpleDigestAuth
 
 export interface ConfigurationResult {
   success: boolean;
@@ -41,7 +39,7 @@ export class CameraConfigurationService {
       console.log('[getSceneDescription] Request payload:', JSON.stringify(requestData, null, 2));
       
       // Use the correct endpoint
-      const response = await this.simpleDigestAuth(
+      const response = await this.httpsBasicAuth(
         camera.ip,
         camera.credentials?.username || 'root',
         camera.credentials?.password || '',
@@ -98,8 +96,8 @@ export class CameraConfigurationService {
     }
   }
 
-  // Simple digest auth implementation for list.cgi
-  private async simpleDigestAuth(
+  // HTTPS with Basic Auth implementation
+  private async httpsBasicAuth(
     ip: string,
     username: string,
     password: string,
@@ -111,7 +109,7 @@ export class CameraConfigurationService {
       const baseUrl = await getCameraBaseUrl(ip, username, password);
       const url = `${baseUrl}${uri}`;
       
-      console.log(`[CameraConfig] simpleDigestAuth: ${method} ${url}`);
+      console.log(`[CameraConfig] httpsBasicAuth: ${method} ${url}`);
       if (data) {
         console.log(`[CameraConfig] Request data type:`, typeof data);
         console.log(`[CameraConfig] Request data length:`, data.length);
@@ -125,167 +123,38 @@ export class CameraConfigurationService {
         }
       }
       
-      // First request to get digest challenge
+      // Use HTTPS with Basic Auth directly
       const isHttps = url.startsWith('https');
-      const response1 = await axios({
+      const response = await axios({
         method,
         url,
         data,
-        validateStatus: () => true,
+        auth: {
+          username,
+          password
+        },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         timeout: 20000,
-        httpsAgent: isHttps ? new (require('https').Agent)({
-          rejectUnauthorized: false // Accept self-signed certificates
+        httpsAgent: isHttps ? new https.Agent({
+          rejectUnauthorized: false
         }) : undefined,
       });
-
-      if (response1.status === 401) {
-        const wwwAuth = response1.headers['www-authenticate'];
-        
-        // Check if it's Basic auth
-        if (wwwAuth && wwwAuth.toLowerCase().includes('basic')) {
-          console.log(`[CameraConfig] Basic auth required for ${uri}`);
-          const auth = Buffer.from(`${username}:${password}`).toString('base64');
-          const response2 = await axios({
-            method,
-            url,
-            data,
-            headers: {
-              'Authorization': `Basic ${auth}`,
-              'Content-Type': 'application/json'
-            },
-            timeout: 20000,
-            httpsAgent: isHttps ? new (require('https').Agent)({
-              rejectUnauthorized: false
-            }) : undefined,
-          });
-          
-          console.log(`[CameraConfig] Basic auth response status:`, response2.status);
-          if (response2.data) {
-            const dataStr = typeof response2.data === 'string' ? response2.data : JSON.stringify(response2.data);
-            console.log(`[CameraConfig] Response data (first 500 chars):`, dataStr.substring(0, 500));
-          }
-          
-          if (response2.status === 200) {
-            return response2;
-          } else {
-            throw new Error(`Request failed with status ${response2.status} after Basic auth`);
-          }
-        } else if (wwwAuth && wwwAuth.includes('Digest')) {
-          // Parse digest parameters
-          const digestData: any = {};
-          const regex = /(\w+)=(?:"([^"]+)"|([^,]+))/g;
-          let match;
-          while ((match = regex.exec(wwwAuth)) !== null) {
-            digestData[match[1]] = match[2] || match[3];
-          }
-
-          console.log(`[CameraConfig] Digest challenge for ${uri}:`, digestData);
-          console.log(`[CameraConfig] Full WWW-Authenticate header:`, wwwAuth);
-
-          // Build digest auth header
-          const nc = '00000001';
-          const cnonce = crypto.randomBytes(8).toString('hex');
-          const qop = digestData.qop;
-
-          // HA1 is the hash of username, realm, and password
-          const ha1 = crypto.createHash('md5')
-            .update(`${username}:${digestData.realm}:${password}`)
-            .digest('hex');
-
-          // HA2 calculation depends on the qop value
-          let ha2;
-          if (qop === 'auth-int') {
-            // auth-int requires hashing the entity body
-            const entityBody = (method === 'POST' || method === 'PUT') && data ? data : '';
-            const bodyHash = crypto.createHash('md5').update(entityBody).digest('hex');
-            ha2 = crypto.createHash('md5')
-              .update(`${method}:${uri}:${bodyHash}`)
-              .digest('hex');
-          } else {
-            // qop="auth" or is not specified (legacy)
-            ha2 = crypto.createHash('md5')
-              .update(`${method}:${uri}`)
-              .digest('hex');
-          }
-
-          // The final response hash
-          const response = crypto.createHash('md5')
-            .update(`${ha1}:${digestData.nonce}:${nc}:${cnonce}:${qop}:${ha2}`)
-            .digest('hex');
-
-          const authHeader = `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", algorithm="${digestData.algorithm || 'MD5'}", response="${response}", qop=${qop}, nc=${nc}, cnonce="${cnonce}"`;
-
-          // Second request with auth
-          const headers: any = {
-            'Authorization': authHeader
-          };
-          
-          // Add content-type for POST requests with form data
-          if (method === 'POST' && typeof data === 'string') {
-            // Check if it's multipart form data
-            if (data.includes('Content-Disposition: form-data')) {
-              const boundaryMatch = data.match(/^-+([A-Za-z0-9]+)/);
-              if (boundaryMatch) {
-                headers['Content-Type'] = `multipart/form-data; boundary=${boundaryMatch[1]}`;
-              }
-            } else if (data.startsWith('{') || data.startsWith('[')) {
-              // JSON data
-              headers['Content-Type'] = 'application/json';
-            } else {
-              headers['Content-Type'] = 'application/x-www-form-urlencoded';
-            }
-            headers['Content-Length'] = Buffer.byteLength(data).toString();
-          }
-          
-          console.log(`[CameraConfig] Sending authenticated request with headers:`, headers);
-          
-          const response2 = await axios({
-            method,
-            url,
-            data,
-            headers,
-            timeout: 20000,
-            // Important: Handle chunked responses that close early
-            validateStatus: () => true,
-            maxRedirects: 0,
-            decompress: false,
-            httpsAgent: isHttps ? new (require('https').Agent)({
-              rejectUnauthorized: false // Accept self-signed certificates
-            }) : undefined,
-          });
-
-          console.log(`[CameraConfig] Response status:`, response2.status);
-          console.log(`[CameraConfig] Response headers:`, response2.headers);
-          if (response2.data) {
-            const dataStr = typeof response2.data === 'string' ? response2.data : JSON.stringify(response2.data);
-            console.log(`[CameraConfig] Response data (first 500 chars):`, dataStr.substring(0, 500));
-            if (dataStr.length > 500) {
-              console.log(`[CameraConfig] Response data (last 200 chars):`, dataStr.substring(dataStr.length - 200));
-            }
-          }
-          
-          return response2;
-        } else {
-          // No recognized auth type, throw error
-          console.error(`[CameraConfig] Unrecognized auth type or no auth header. WWW-Authenticate:`, wwwAuth);
-          throw new Error(`Authentication failed - unrecognized auth type: ${wwwAuth || 'none'}`);
-        }
-      }
       
-      // Only return success if status is 200
-      console.log(`[CameraConfig] Response status:`, response1.status);
-      if (response1.data) {
-        const dataStr = typeof response1.data === 'string' ? response1.data : JSON.stringify(response1.data);
+      console.log(`[CameraConfig] Response status:`, response.status);
+      if (response.data) {
+        const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
         console.log(`[CameraConfig] Response data (first 500 chars):`, dataStr.substring(0, 500));
       }
       
-      if (response1.status === 200) {
-        return response1;
+      if (response.status === 200) {
+        return response;
       } else {
-        throw new Error(`Request failed with status ${response1.status}`);
+        throw new Error(`Request failed with status ${response.status}`);
       }
     } catch (error: any) {
-      console.error(`[CameraConfig] simpleDigestAuth error:`, error.message);
+      console.error(`[CameraConfig] httpsBasicAuth error:`, error.message);
       console.error(`[CameraConfig] Error stack:`, error.stack);
       if (error.response) {
         console.error(`[CameraConfig] Error response status:`, error.response.status);
@@ -436,92 +305,33 @@ export class CameraConfigurationService {
       const url = `${baseUrl}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`;
       const isHttps = url.startsWith('https');
       
-      // First request to get digest challenge
-      const response1 = await axios.post(url, config, {
+      // Use HTTPS with Basic Auth
+      const response = await axios.post(url, config, {
         timeout: 10000,
-        validateStatus: () => true,
+        auth: {
+          username,
+          password
+        },
         headers: {
           'Content-Type': 'application/json'
         },
-        httpsAgent: isHttps ? new (require('https').Agent)({
+        httpsAgent: isHttps ? new https.Agent({
           rejectUnauthorized: false
         }) : undefined
       });
 
-      if (response1.status === 401) {
-        // Handle digest authentication
-        const wwwAuth = response1.headers['www-authenticate'];
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          const authHeader = this.buildDigestAuth(
-            username,
-            password,
-            'POST',
-            '/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig',
-            wwwAuth
-          );
-
-          // Second request with auth
-          const response2 = await axios.post(url, config, {
-            headers: {
-              'Authorization': authHeader,
-              'Content-Type': 'application/json'
-            },
-            timeout: 10000,
-            httpsAgent: isHttps ? new (require('https').Agent)({
-              rejectUnauthorized: false
-            }) : undefined
-          });
-
-          if (response2.status === 200) {
-            console.log('[CameraConfig] Configuration response:', response2.data);
-            return { success: true, data: response2.data };
-          } else {
-            throw new Error(`Configuration failed with status ${response2.status}`);
-          }
-        }
-      } else if (response1.status === 200) {
-        // No auth required
-        console.log('[CameraConfig] Configuration response:', response1.data);
-        return { success: true, data: response1.data };
+      if (response.status === 200) {
+        console.log('[CameraConfig] Configuration response:', response.data);
+        return { success: true, data: response.data };
+      } else {
+        throw new Error(`Configuration failed with status ${response.status}`);
       }
-
-      throw new Error(`Unexpected response: ${response1.status}`);
     } catch (error: any) {
       console.error('[CameraConfig] Error sending configuration:', error);
       return { success: false, error: error.message };
     }
   }
 
-  private buildDigestAuth(
-    username: string,
-    password: string,
-    method: string,
-    uri: string,
-    authHeader: string
-  ): string {
-    // Parse digest parameters
-    const digestData: any = {};
-    const regex = /(\w+)=(?:"([^"]+)"|([^,]+))/g;
-    let match;
-    while ((match = regex.exec(authHeader)) !== null) {
-      digestData[match[1]] = match[2] || match[3];
-    }
-
-    const nc = '00000001';
-    const cnonce = crypto.randomBytes(8).toString('hex');
-    
-    const ha1 = crypto.createHash('md5')
-      .update(`${username}:${digestData.realm}:${password}`)
-      .digest('hex');
-    const ha2 = crypto.createHash('md5')
-      .update(`${method}:${uri}`)
-      .digest('hex');
-    const response = crypto.createHash('md5')
-      .update(`${ha1}:${digestData.nonce}:${nc}:${cnonce}:${digestData.qop}:${ha2}`)
-      .digest('hex');
-    
-    return `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop="${digestData.qop}", nc="${nc}", cnonce="${cnonce}", response="${response}", algorithm="MD5"`;
-  }
 
   async pushSystemConfig(
     ip: string,
@@ -541,7 +351,7 @@ export class CameraConfigurationService {
       
       try {
         // Use our working simpleDigestAuth method
-        const response = await this.simpleDigestAuth(
+        const response = await this.httpsBasicAuth(
           ip,
           username,
           password,
@@ -637,7 +447,7 @@ export class CameraConfigurationService {
       
       try {
         // Use our working simpleDigestAuth method
-        const response = await this.simpleDigestAuth(
+        const response = await this.httpsBasicAuth(
           ip,
           username,
           password,
@@ -673,7 +483,7 @@ export class CameraConfigurationService {
       console.log('[CameraConfig] Getting application list with username:', username);
       let appListData = '';
       try {
-        const listResponse = await this.simpleDigestAuth(
+        const listResponse = await this.httpsBasicAuth(
           ip,
           username,
           password,
@@ -799,44 +609,30 @@ export class CameraConfigurationService {
   private async _startApplication(ip: string, username: string, password: string, applicationName: string): Promise<void> {
     try {
       console.log('[CameraConfig] Starting application:', applicationName);
-      const startUrl = `http://${ip}/axis-cgi/applications/control.cgi`;
+      const baseUrl = await getCameraBaseUrl(ip, username, password);
+      const startUrl = `${baseUrl}/axis-cgi/applications/control.cgi`;
+      const isHttps = startUrl.startsWith('https');
+      
       const startParams = new URLSearchParams();
       startParams.append('action', 'start');
       startParams.append('package', applicationName);
       
-      const startResponse1 = await axios.post(startUrl, startParams.toString(), {
+      const startResponse = await axios.post(startUrl, startParams.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         },
+        auth: {
+          username,
+          password
+        },
         timeout: 10000,
-        validateStatus: () => true
+        httpsAgent: isHttps ? new https.Agent({
+          rejectUnauthorized: false
+        }) : undefined
       });
       
-      if (startResponse1.status === 401) {
-        const wwwAuth = startResponse1.headers['www-authenticate'];
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          const authHeader = this.buildDigestAuth(
-            username,
-            password,
-            'POST',
-            '/axis-cgi/applications/control.cgi',
-            wwwAuth
-          );
-          
-          const startResponse2 = await axios.post(startUrl, startParams.toString(), {
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Authorization': authHeader
-            },
-            timeout: 10000
-          });
-          
-          if (startResponse2.status === 200) {
-            console.log('[CameraConfig] Application started successfully');
-          }
-        }
-      } else if (startResponse1.status === 200) {
-        console.log('[CameraConfig] Application started successfully (no auth)');
+      if (startResponse.status === 200) {
+        console.log('[CameraConfig] Application started successfully');
       }
     } catch (startError: any) {
       console.log('[CameraConfig] Failed to start application:', startError.message);
@@ -853,60 +649,37 @@ export class CameraConfigurationService {
       // Test basic connectivity to speaker
       console.log('[CameraConfig] Testing speaker connectivity:', speakerIp);
       
-      // Try to get device info
-      const infoUrl = `http://${speakerIp}/axis-cgi/basicdeviceinfo.cgi`;
+      // Try to get device info using HTTPS with basic auth
+      const baseUrl = await getCameraBaseUrl(speakerIp, username, password);
+      const infoUrl = `${baseUrl}/axis-cgi/basicdeviceinfo.cgi`;
+      const isHttps = infoUrl.startsWith('https');
       
-      const response1 = await axios.get(infoUrl, {
+      const response = await axios.get(infoUrl, {
         timeout: 5000,
-        validateStatus: () => true
+        auth: {
+          username,
+          password
+        },
+        httpsAgent: isHttps ? new https.Agent({
+          rejectUnauthorized: false
+        }) : undefined
       });
 
-      if (response1.status === 401) {
-        // Handle digest authentication
-        const wwwAuth = response1.headers['www-authenticate'];
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          const authHeader = this.buildDigestAuth(
-            username,
-            password,
-            'GET',
-            '/axis-cgi/basicdeviceinfo.cgi',
-            wwwAuth
-          );
-
-          const response2 = await axios.get(infoUrl, {
-            headers: {
-              'Authorization': authHeader
-            },
-            timeout: 5000
-          });
-
-          if (response2.status === 200) {
-            console.log('[CameraConfig] Speaker test successful');
-            
-            // Play a short test tone
-            await this.playSpeakerAudio(speakerIp, username, password, 'test-tone');
-            
-            return { 
-              success: true, 
-              deviceInfo: response2.data,
-              message: 'Speaker connected successfully'
-            };
-          }
-        }
-      } else if (response1.status === 200) {
-        console.log('[CameraConfig] Speaker test successful (no auth)');
+      if (response.status === 200) {
+        console.log('[CameraConfig] Speaker test successful');
         
         // Play a short test tone
         await this.playSpeakerAudio(speakerIp, username, password, 'test-tone');
         
         return { 
           success: true, 
-          deviceInfo: response1.data,
-          message: 'Speaker connected successfully'
+          deviceInfo: response.data,
+          message: 'Speaker connected successfully',
+          capabilities: response.data
         };
       }
 
-      throw new Error(`Speaker test failed with status ${response1.status}`);
+      throw new Error(`Speaker test failed with status ${response.status}`);
     } catch (error: any) {
       console.error('[CameraConfig] Speaker test error:', error);
       return { success: false, error: error.message };
@@ -960,8 +733,10 @@ export class CameraConfigurationService {
     try {
       console.log(`[CameraConfig] Playing audio on speaker ${speakerIp}`);
       
-      // Use VAPIX audio API to play audio
-      const audioUrl = `http://${speakerIp}/axis-cgi/audio/transmit.cgi`;
+      // Use VAPIX audio API to play audio with HTTPS
+      const baseUrl = await getCameraBaseUrl(speakerIp, username, password);
+      const audioUrl = `${baseUrl}/axis-cgi/audio/transmit.cgi`;
+      const isHttps = audioUrl.startsWith('https');
       
       // Prepare audio data based on file type
       let audioData: Buffer;
@@ -977,48 +752,28 @@ export class CameraConfigurationService {
         contentType = 'audio/mpeg';
       }
       
-      // First request to get digest challenge
-      const response1 = await axios.post(audioUrl, audioData, {
+      // Use HTTPS with basic auth
+      const response = await axios.post(audioUrl, audioData, {
         headers: {
           'Content-Type': contentType,
           'Content-Length': audioData.length.toString()
         },
+        auth: {
+          username,
+          password
+        },
         timeout: 10000,
-        validateStatus: () => true
+        httpsAgent: isHttps ? new https.Agent({
+          rejectUnauthorized: false
+        }) : undefined
       });
 
-      if (response1.status === 401) {
-        // Handle digest authentication
-        const wwwAuth = response1.headers['www-authenticate'];
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          const authHeader = this.buildDigestAuth(
-            username,
-            password,
-            'POST',
-            '/axis-cgi/audio/transmit.cgi',
-            wwwAuth
-          );
-
-          const response2 = await axios.post(audioUrl, audioData, {
-            headers: {
-              'Authorization': authHeader,
-              'Content-Type': contentType,
-              'Content-Length': audioData.length.toString()
-            },
-            timeout: 10000
-          });
-
-          if (response2.status === 200 || response2.status === 204) {
-            console.log('[CameraConfig] Audio played successfully');
-            return { success: true, message: 'Audio played' };
-          }
-        }
-      } else if (response1.status === 200 || response1.status === 204) {
-        console.log('[CameraConfig] Audio played successfully (no auth)');
+      if (response.status === 200 || response.status === 204) {
+        console.log('[CameraConfig] Audio played successfully');
         return { success: true, message: 'Audio played' };
       }
 
-      throw new Error(`Audio playback failed with status ${response1.status}`);
+      throw new Error(`Audio playback failed with status ${response.status}`);
     } catch (error: any) {
       console.error('[CameraConfig] Audio playback error:', error);
       return { success: false, error: error.message };
@@ -1387,7 +1142,7 @@ export class CameraConfigurationService {
       // Use the playclip endpoint to test audio
       // clip=0 plays the first pre-recorded clip
       // audiodeviceid=0 and audiooutputid=0 are default values
-      const response = await this.simpleDigestAuth(
+      const response = await this.httpsBasicAuth(
         speakerIp,
         username,
         password,
