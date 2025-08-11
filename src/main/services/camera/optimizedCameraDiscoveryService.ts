@@ -1176,11 +1176,10 @@ export class OptimizedCameraDiscoveryService {
       try {
         console.log(`    → Attempting TCP connection to ${ip}:${port} (timeout: ${timeout}ms)`);
         
-        // Use the options form of connect with explicit timeout
+        // Connect to the socket (timeout is already set via socket.setTimeout above)
         socket.connect({
           port: port,
-          host: ip,
-          timeout: timeout // Redundant but explicit
+          host: ip
         });
       } catch (e: any) {
         console.log(`    ✗ TCP connect exception: ${e.message}`);
