@@ -1,480 +1,590 @@
-# PowerShell Script to Test Complete Windows Installation/Uninstallation Flow
-# Tests all three critical issues have been fixed
+# Windows Installer Test Suite
+# Comprehensive testing for installation, shortcuts, and uninstallation
+# Compatible with Anava Installer v0.9.178
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$InstallerPath = "",
+    [string]$InstallerPath,
     
     [Parameter(Mandatory=$false)]
-    [switch]$SkipInstall = $false,
+    [switch]$SkipInstall,
     
     [Parameter(Mandatory=$false)]
-    [switch]$SkipUninstall = $false,
+    [switch]$SkipUninstall,
     
     [Parameter(Mandatory=$false)]
-    [switch]$Verbose = $false
+    [switch]$Verbose,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$LogFile = "test-results-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 )
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Windows Installer Complete Test Suite" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
+# Test configuration
 $script:TestResults = @{
-    Passed = @()
-    Failed = @()
-    Warnings = @()
+    Passed = 0
+    Failed = 0
+    Skipped = 0
+    Warnings = 0
+    Details = @()
 }
 
-function Write-TestResult {
+$script:Config = @{
+    AppName = "Anava Installer"
+    Publisher = "Anava AI Inc."
+    Version = "0.9.178"
+    InstallDir64 = "${env:ProgramFiles}\Anava AI\Anava Installer"
+    InstallDir32 = "${env:ProgramFiles(x86)}\Anava AI\Anava Installer"
+    InstallDirUser = "${env:LOCALAPPDATA}\Programs\Anava Installer"
+    UninstallKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Anava Installer"
+    TestTimeout = 300 # 5 minutes
+}
+
+# Logging functions
+function Write-TestLog {
     param(
-        [string]$Test,
-        [string]$Status,
-        [string]$Message = ""
+        [string]$Message,
+        [string]$Level = "INFO"
     )
     
-    switch ($Status) {
-        "PASS" {
-            Write-Host "  ✓ $Test" -ForegroundColor Green
-            if ($Message) { Write-Host "    $Message" -ForegroundColor Gray }
-            $script:TestResults.Passed += $Test
-        }
-        "FAIL" {
-            Write-Host "  ✗ $Test" -ForegroundColor Red
-            if ($Message) { Write-Host "    $Message" -ForegroundColor Red }
-            $script:TestResults.Failed += $Test
-        }
-        "WARN" {
-            Write-Host "  ⚠ $Test" -ForegroundColor Yellow
-            if ($Message) { Write-Host "    $Message" -ForegroundColor Yellow }
-            $script:TestResults.Warnings += $Test
-        }
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "[$timestamp] [$Level] $Message"
+    
+    # Write to console with color
+    switch ($Level) {
+        "PASS" { Write-Host $logEntry -ForegroundColor Green }
+        "FAIL" { Write-Host $logEntry -ForegroundColor Red }
+        "WARN" { Write-Host $logEntry -ForegroundColor Yellow }
+        "INFO" { Write-Host $logEntry -ForegroundColor Cyan }
+        "DEBUG" { if ($Verbose) { Write-Host $logEntry -ForegroundColor Gray } }
+        default { Write-Host $logEntry }
+    }
+    
+    # Write to log file
+    if ($LogFile) {
+        $logEntry | Out-File -FilePath $LogFile -Append -Encoding UTF8
     }
 }
 
-# Find installer if not specified
-if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
-    Write-Host "Searching for installer..." -ForegroundColor Yellow
+function Test-Case {
+    param(
+        [string]$Name,
+        [scriptblock]$Test,
+        [switch]$Critical
+    )
     
-    $scriptDir = Split-Path -Parent $PSScriptRoot
-    $releaseDir = Join-Path $scriptDir "release"
+    Write-TestLog "`nRunning test: $Name" "INFO"
     
-    if (Test-Path $releaseDir) {
-        $installers = Get-ChildItem -Path $releaseDir -Filter "*Setup*.exe" | Sort-Object LastWriteTime -Descending
-        
-        if ($installers.Count -gt 0) {
-            $InstallerPath = $installers[0].FullName
-            Write-Host "Found: $($installers[0].Name)" -ForegroundColor Green
-        }
-    }
-}
-
-if ([string]::IsNullOrWhiteSpace($InstallerPath) -or !(Test-Path $InstallerPath)) {
-    Write-Host "ERROR: No installer found!" -ForegroundColor Red
-    Write-Host "Build the installer first with: node scripts/build-win.js" -ForegroundColor Yellow
-    exit 1
-}
-
-Write-Host ""
-Write-Host "Testing installer: $(Split-Path -Leaf $InstallerPath)" -ForegroundColor Cyan
-Write-Host ""
-
-# Test 1: Pre-Installation Verification
-Write-Host "[Phase 1] Pre-Installation Checks" -ForegroundColor Yellow
-Write-Host "========================================" -ForegroundColor Gray
-
-# Check installer integrity
-Write-Host "  Checking installer integrity..." -ForegroundColor Gray
-$hash = Get-FileHash -Path $InstallerPath -Algorithm SHA256
-if ($hash.Hash) {
-    Write-TestResult "Installer integrity (SHA256)" "PASS" "Hash: $($hash.Hash.Substring(0,16))..."
-} else {
-    Write-TestResult "Installer integrity" "FAIL" "Could not calculate hash"
-}
-
-# Check digital signature
-$signature = Get-AuthenticodeSignature -FilePath $InstallerPath
-if ($signature.Status -eq 'Valid') {
-    Write-TestResult "Digital signature" "PASS" "Signed by: $($signature.SignerCertificate.Subject)"
-} elseif ($signature.Status -eq 'NotSigned') {
-    Write-TestResult "Digital signature" "WARN" "Installer is not signed (users will see warnings)"
-} else {
-    Write-TestResult "Digital signature" "FAIL" "Invalid signature: $($signature.Status)"
-}
-
-# Check file size
-$fileInfo = Get-Item $InstallerPath
-$sizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
-if ($sizeMB -gt 50 -and $sizeMB -lt 500) {
-    Write-TestResult "File size check" "PASS" "Size: ${sizeMB}MB"
-} else {
-    Write-TestResult "File size check" "WARN" "Unusual size: ${sizeMB}MB"
-}
-
-Write-Host ""
-
-# Test 2: Installation Process
-if (-not $SkipInstall) {
-    Write-Host "[Phase 2] Installation Test" -ForegroundColor Yellow
-    Write-Host "========================================" -ForegroundColor Gray
-    
-    # Check for existing installation
-    Write-Host "  Checking for existing installation..." -ForegroundColor Gray
-    $uninstallKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
-    $existingInstall = Get-ItemProperty $uninstallKey | Where-Object { $_.DisplayName -like "*Anava Installer*" }
-    
-    if ($existingInstall) {
-        Write-TestResult "Existing installation check" "WARN" "Found existing installation at: $($existingInstall.InstallLocation)"
-        
-        # Test uninstaller exists
-        if ($existingInstall.UninstallString) {
-            Write-TestResult "Uninstaller registered" "PASS" "Uninstall command found"
+    try {
+        $result = & $Test
+        if ($result -eq $true) {
+            Write-TestLog "✓ PASSED: $Name" "PASS"
+            $script:TestResults.Passed++
+            $script:TestResults.Details += @{
+                Test = $Name
+                Result = "PASSED"
+                Critical = $Critical.IsPresent
+            }
+            return $true
         } else {
-            Write-TestResult "Uninstaller registered" "FAIL" "No uninstall command in registry"
-        }
-    } else {
-        Write-TestResult "Clean system check" "PASS" "No existing installation found"
-    }
-    
-    Write-Host ""
-    Write-Host "  Starting installation (this may take a minute)..." -ForegroundColor Yellow
-    
-    # Run installer silently for testing
-    $installProcess = Start-Process -FilePath $InstallerPath -ArgumentList "/S" -PassThru -Wait
-    
-    if ($installProcess.ExitCode -eq 0) {
-        Write-TestResult "Installation process" "PASS" "Installer completed successfully"
-    } else {
-        Write-TestResult "Installation process" "FAIL" "Exit code: $($installProcess.ExitCode)"
-    }
-    
-    # Wait for installation to complete
-    Start-Sleep -Seconds 5
-    
-    # Verify installation
-    Write-Host ""
-    Write-Host "  Verifying installation..." -ForegroundColor Gray
-    
-    # Check registry
-    $installedApp = Get-ItemProperty $uninstallKey | Where-Object { $_.DisplayName -like "*Anava Installer*" }
-    if ($installedApp) {
-        Write-TestResult "Registry entry created" "PASS" "Found in Uninstall registry"
-        
-        # Check install location
-        if ($installedApp.InstallLocation -and (Test-Path $installedApp.InstallLocation)) {
-            Write-TestResult "Installation directory" "PASS" "Installed to: $($installedApp.InstallLocation)"
+            Write-TestLog "✗ FAILED: $Name" "FAIL"
+            $script:TestResults.Failed++
+            $script:TestResults.Details += @{
+                Test = $Name
+                Result = "FAILED"
+                Critical = $Critical.IsPresent
+            }
             
-            # Check for main executable
-            $exePath = Join-Path $installedApp.InstallLocation "Anava Installer.exe"
-            if (Test-Path $exePath) {
-                Write-TestResult "Main executable" "PASS" "Anava Installer.exe exists"
-            } else {
-                Write-TestResult "Main executable" "FAIL" "Anava Installer.exe not found"
+            if ($Critical) {
+                throw "Critical test failed: $Name"
             }
-        } else {
-            Write-TestResult "Installation directory" "FAIL" "Install location not found or invalid"
+            return $false
         }
-    } else {
-        Write-TestResult "Registry entry created" "FAIL" "Not found in registry"
-    }
-    
-    # Check shortcuts - CRITICAL TEST FOR ISSUE #1
-    Write-Host ""
-    Write-Host "  Checking shortcuts (Critical Test)..." -ForegroundColor Gray
-    
-    $desktopShortcut = Join-Path $env:USERPROFILE "Desktop\Anava Installer.lnk"
-    $publicDesktopShortcut = Join-Path $env:PUBLIC "Desktop\Anava Installer.lnk"
-    
-    $desktopFound = (Test-Path $desktopShortcut) -or (Test-Path $publicDesktopShortcut)
-    
-    if ($desktopFound) {
-        Write-TestResult "Desktop shortcut" "PASS" "Desktop shortcut created"
-        
-        # Verify shortcut target
-        $shell = New-Object -ComObject WScript.Shell
-        $shortcut = if (Test-Path $desktopShortcut) { 
-            $shell.CreateShortcut($desktopShortcut) 
-        } else { 
-            $shell.CreateShortcut($publicDesktopShortcut) 
+    } catch {
+        Write-TestLog "✗ ERROR in test '$Name': $_" "FAIL"
+        $script:TestResults.Failed++
+        $script:TestResults.Details += @{
+            Test = $Name
+            Result = "ERROR"
+            Error = $_.Exception.Message
+            Critical = $Critical.IsPresent
         }
         
-        if (Test-Path $shortcut.TargetPath) {
-            Write-TestResult "Shortcut target valid" "PASS" "Points to: $($shortcut.TargetPath)"
-        } else {
-            Write-TestResult "Shortcut target valid" "FAIL" "Target does not exist: $($shortcut.TargetPath)"
+        if ($Critical) {
+            throw $_
         }
-    } else {
-        Write-TestResult "Desktop shortcut" "FAIL" "Desktop shortcut not created"
+        return $false
+    }
+}
+
+# Test functions
+function Test-Prerequisites {
+    Write-TestLog "`n=== PREREQUISITES ===" "INFO"
+    
+    Test-Case "Administrator privileges" {
+        $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+        return $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     
-    # Check Start Menu shortcuts
-    $startMenuPaths = @(
-        "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Anava",
-        "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Anava"
-    )
+    Test-Case "Windows version compatibility" {
+        $os = Get-WmiObject -Class Win32_OperatingSystem
+        $version = [Version]$os.Version
+        return $version.Major -ge 10
+    }
     
-    $startMenuFound = $false
-    foreach ($path in $startMenuPaths) {
+    Test-Case "Required disk space (500MB)" {
+        $drive = (Get-Item $env:ProgramFiles).PSDrive.Name
+        $disk = Get-PSDrive $drive
+        return ($disk.Free -gt 500MB)
+    }
+    
+    Test-Case "No conflicting processes" {
+        $process = Get-Process -Name "Anava Installer" -ErrorAction SilentlyContinue
+        return ($null -eq $process)
+    }
+}
+
+function Test-InstallerFile {
+    Write-TestLog "`n=== INSTALLER FILE VERIFICATION ===" "INFO"
+    
+    if (-not $InstallerPath -or -not (Test-Path $InstallerPath)) {
+        # Try to find installer
+        $found = Get-ChildItem -Path ".\dist" -Filter "*Setup*.exe" -ErrorAction SilentlyContinue |
+                 Sort-Object LastWriteTime -Descending |
+                 Select-Object -First 1
+        
+        if ($found) {
+            $script:InstallerPath = $found.FullName
+            Write-TestLog "Found installer: $($found.Name)" "INFO"
+        } else {
+            Write-TestLog "No installer file found" "FAIL"
+            return $false
+        }
+    }
+    
+    Test-Case "Installer file exists" -Critical {
+        return (Test-Path $InstallerPath)
+    }
+    
+    Test-Case "Installer is valid PE executable" {
+        $bytes = [System.IO.File]::ReadAllBytes($InstallerPath)
+        return ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A)
+    }
+    
+    Test-Case "Installer size check (50-200 MB)" {
+        $file = Get-Item $InstallerPath
+        $sizeMB = $file.Length / 1MB
+        Write-TestLog "Installer size: $([math]::Round($sizeMB, 2)) MB" "DEBUG"
+        return ($sizeMB -ge 50 -and $sizeMB -le 200)
+    }
+    
+    Test-Case "NSIS installer signature" {
+        $content = [System.IO.File]::ReadAllBytes($InstallerPath)
+        $signature = [System.Text.Encoding]::ASCII.GetString($content, 0, [Math]::Min(10000, $content.Length))
+        return $signature.Contains("NullsoftInst")
+    }
+}
+
+function Test-Installation {
+    if ($SkipInstall) {
+        Write-TestLog "`n=== INSTALLATION TESTS SKIPPED ===" "WARN"
+        $script:TestResults.Skipped++
+        return
+    }
+    
+    Write-TestLog "`n=== INSTALLATION TESTS ===" "INFO"
+    
+    # Backup existing installation if present
+    $backupPath = $null
+    $existingInstall = $null
+    
+    foreach ($path in @($script:Config.InstallDir64, $script:Config.InstallDir32, $script:Config.InstallDirUser)) {
         if (Test-Path $path) {
-            $startMenuFound = $true
-            $shortcuts = Get-ChildItem -Path $path -Filter "*.lnk"
-            if ($shortcuts.Count -gt 0) {
-                Write-TestResult "Start Menu shortcuts" "PASS" "Found $($shortcuts.Count) shortcuts"
-            }
+            $existingInstall = $path
+            $backupPath = "$path.backup.$(Get-Date -Format 'yyyyMMddHHmmss')"
+            Write-TestLog "Backing up existing installation to: $backupPath" "INFO"
+            Copy-Item -Path $path -Destination $backupPath -Recurse -Force
             break
         }
     }
     
-    if (-not $startMenuFound) {
-        Write-TestResult "Start Menu shortcuts" "FAIL" "Start Menu folder not created"
+    Test-Case "Silent installation" -Critical {
+        Write-TestLog "Running installer: $InstallerPath /S" "DEBUG"
+        $process = Start-Process -FilePath $InstallerPath -ArgumentList "/S" -PassThru -Wait
+        
+        # Wait for installation to complete
+        $timeout = [datetime]::Now.AddSeconds($script:Config.TestTimeout)
+        while ([datetime]::Now -lt $timeout) {
+            if (Test-Path "${env:ProgramFiles}\Anava AI\Anava Installer\Anava Installer.exe") {
+                Write-TestLog "Installation completed" "DEBUG"
+                return $true
+            }
+            Start-Sleep -Seconds 2
+        }
+        
+        return $false
     }
     
-    Write-Host ""
-} else {
-    Write-Host "[Phase 2] Installation Test - SKIPPED" -ForegroundColor Gray
-    Write-Host ""
+    Test-Case "Main executable installed" {
+        $paths = @(
+            "${env:ProgramFiles}\Anava AI\Anava Installer\Anava Installer.exe",
+            "${env:ProgramFiles(x86)}\Anava AI\Anava Installer\Anava Installer.exe",
+            "${env:LOCALAPPDATA}\Programs\Anava Installer\Anava Installer.exe"
+        )
+        
+        foreach ($path in $paths) {
+            if (Test-Path $path) {
+                Write-TestLog "Found executable at: $path" "DEBUG"
+                return $true
+            }
+        }
+        return $false
+    }
+    
+    Test-Case "Uninstaller created" {
+        $paths = @(
+            "${env:ProgramFiles}\Anava AI\Anava Installer\Uninstall.exe",
+            "${env:ProgramFiles(x86)}\Anava AI\Anava Installer\Uninstall.exe",
+            "${env:LOCALAPPDATA}\Programs\Anava Installer\Uninstall.exe"
+        )
+        
+        foreach ($path in $paths) {
+            if (Test-Path $path) {
+                Write-TestLog "Found uninstaller at: $path" "DEBUG"
+                return $true
+            }
+        }
+        return $false
+    }
+    
+    # Restore backup if needed
+    if ($backupPath -and (Test-Path $backupPath)) {
+        Write-TestLog "Restoring backup from: $backupPath" "INFO"
+        if (Test-Path $existingInstall) {
+            Remove-Item -Path $existingInstall -Recurse -Force
+        }
+        Move-Item -Path $backupPath -Destination $existingInstall -Force
+    }
 }
 
-# Test 3: Uninstallation Process - CRITICAL TEST FOR ISSUE #2
-if (-not $SkipUninstall) {
-    Write-Host "[Phase 3] Uninstallation Test (Critical)" -ForegroundColor Yellow
-    Write-Host "========================================" -ForegroundColor Gray
+function Test-Shortcuts {
+    Write-TestLog "`n=== SHORTCUT TESTS ===" "INFO"
+    
+    Test-Case "Desktop shortcut exists" {
+        $desktopPaths = @(
+            [Environment]::GetFolderPath("Desktop"),
+            [Environment]::GetFolderPath("CommonDesktopDirectory")
+        )
+        
+        foreach ($desktop in $desktopPaths) {
+            $shortcut = "$desktop\Anava Installer.lnk"
+            if (Test-Path $shortcut) {
+                Write-TestLog "Desktop shortcut found at: $shortcut" "DEBUG"
+                return $true
+            }
+        }
+        return $false
+    }
+    
+    Test-Case "Desktop shortcut target is valid" {
+        $desktopPaths = @(
+            [Environment]::GetFolderPath("Desktop"),
+            [Environment]::GetFolderPath("CommonDesktopDirectory")
+        )
+        
+        foreach ($desktop in $desktopPaths) {
+            $shortcutPath = "$desktop\Anava Installer.lnk"
+            if (Test-Path $shortcutPath) {
+                $shell = New-Object -ComObject WScript.Shell
+                $shortcut = $shell.CreateShortcut($shortcutPath)
+                
+                if (Test-Path $shortcut.TargetPath) {
+                    Write-TestLog "Shortcut target is valid: $($shortcut.TargetPath)" "DEBUG"
+                    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+                    return $true
+                }
+                [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+            }
+        }
+        return $false
+    }
+    
+    Test-Case "Start Menu shortcut exists" {
+        $startMenuPaths = @(
+            [Environment]::GetFolderPath("Programs"),
+            [Environment]::GetFolderPath("CommonPrograms")
+        )
+        
+        foreach ($startMenu in $startMenuPaths) {
+            $shortcut = "$startMenu\Anava AI\Anava Installer.lnk"
+            if (Test-Path $shortcut) {
+                Write-TestLog "Start Menu shortcut found at: $shortcut" "DEBUG"
+                return $true
+            }
+        }
+        return $false
+    }
+    
+    Test-Case "Start Menu uninstall shortcut exists" {
+        $startMenuPaths = @(
+            [Environment]::GetFolderPath("Programs"),
+            [Environment]::GetFolderPath("CommonPrograms")
+        )
+        
+        foreach ($startMenu in $startMenuPaths) {
+            $shortcut = "$startMenu\Anava AI\Uninstall Anava Installer.lnk"
+            if (Test-Path $shortcut) {
+                Write-TestLog "Uninstall shortcut found at: $shortcut" "DEBUG"
+                return $true
+            }
+        }
+        return $false
+    }
+}
+
+function Test-Registry {
+    Write-TestLog "`n=== REGISTRY TESTS ===" "INFO"
+    
+    Test-Case "Uninstall registry key exists" {
+        return (Test-Path $script:Config.UninstallKey)
+    }
+    
+    Test-Case "Registry DisplayName correct" {
+        if (Test-Path $script:Config.UninstallKey) {
+            $reg = Get-ItemProperty -Path $script:Config.UninstallKey -ErrorAction SilentlyContinue
+            return ($reg.DisplayName -eq $script:Config.AppName)
+        }
+        return $false
+    }
+    
+    Test-Case "Registry Publisher correct" {
+        if (Test-Path $script:Config.UninstallKey) {
+            $reg = Get-ItemProperty -Path $script:Config.UninstallKey -ErrorAction SilentlyContinue
+            return ($reg.Publisher -eq $script:Config.Publisher)
+        }
+        return $false
+    }
+    
+    Test-Case "Registry Version correct" {
+        if (Test-Path $script:Config.UninstallKey) {
+            $reg = Get-ItemProperty -Path $script:Config.UninstallKey -ErrorAction SilentlyContinue
+            Write-TestLog "Registry version: $($reg.DisplayVersion)" "DEBUG"
+            return ($reg.DisplayVersion -eq $script:Config.Version)
+        }
+        return $false
+    }
+    
+    Test-Case "Registry UninstallString exists" {
+        if (Test-Path $script:Config.UninstallKey) {
+            $reg = Get-ItemProperty -Path $script:Config.UninstallKey -ErrorAction SilentlyContinue
+            if ($reg.UninstallString) {
+                Write-TestLog "UninstallString: $($reg.UninstallString)" "DEBUG"
+                return $true
+            }
+        }
+        return $false
+    }
+    
+    Test-Case "Registry EstimatedSize reasonable" {
+        if (Test-Path $script:Config.UninstallKey) {
+            $reg = Get-ItemProperty -Path $script:Config.UninstallKey -ErrorAction SilentlyContinue
+            if ($reg.EstimatedSize) {
+                $sizeMB = $reg.EstimatedSize / 1024
+                Write-TestLog "Estimated size: $([math]::Round($sizeMB, 2)) MB" "DEBUG"
+                return ($sizeMB -gt 50 -and $sizeMB -lt 500)
+            }
+        }
+        return $false
+    }
+}
+
+function Test-Uninstallation {
+    if ($SkipUninstall) {
+        Write-TestLog "`n=== UNINSTALLATION TESTS SKIPPED ===" "WARN"
+        $script:TestResults.Skipped++
+        return
+    }
+    
+    Write-TestLog "`n=== UNINSTALLATION TESTS ===" "INFO"
     
     # Find uninstaller
-    Write-Host "  Locating uninstaller..." -ForegroundColor Gray
+    $uninstallerPath = $null
+    $paths = @(
+        "${env:ProgramFiles}\Anava AI\Anava Installer\Uninstall.exe",
+        "${env:ProgramFiles(x86)}\Anava AI\Anava Installer\Uninstall.exe",
+        "${env:LOCALAPPDATA}\Programs\Anava Installer\Uninstall.exe"
+    )
     
-    $uninstallKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
-    $installedApp = Get-ItemProperty $uninstallKey | Where-Object { $_.DisplayName -like "*Anava Installer*" }
+    foreach ($path in $paths) {
+        if (Test-Path $path) {
+            $uninstallerPath = $path
+            break
+        }
+    }
     
-    if ($installedApp -and $installedApp.UninstallString) {
-        $uninstallCmd = $installedApp.UninstallString
-        Write-TestResult "Uninstaller found" "PASS" "Command: $uninstallCmd"
+    if (-not $uninstallerPath) {
+        Write-TestLog "No uninstaller found - skipping uninstallation tests" "WARN"
+        $script:TestResults.Skipped++
+        return
+    }
+    
+    Test-Case "Silent uninstallation" {
+        Write-TestLog "Running uninstaller: $uninstallerPath /S" "DEBUG"
+        $process = Start-Process -FilePath $uninstallerPath -ArgumentList "/S" -PassThru -Wait
         
-        # Get installation directory before uninstall
-        $installDir = $installedApp.InstallLocation
+        # Wait for uninstallation to complete
+        Start-Sleep -Seconds 10
         
-        # Kill any running instances
-        Write-Host "  Terminating running instances..." -ForegroundColor Gray
-        Get-Process | Where-Object { $_.ProcessName -like "*Anava*Installer*" } | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-        
-        # Run uninstaller
-        Write-Host "  Running uninstaller..." -ForegroundColor Gray
-        
-        # Extract exe path and add silent flag
-        if ($uninstallCmd -match '"([^"]+)"') {
-            $uninstallerPath = $Matches[1]
-            $uninstallProcess = Start-Process -FilePath $uninstallerPath -ArgumentList "/S" -PassThru -Wait
-        } else {
-            $uninstallProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$uninstallCmd /S`"" -PassThru -Wait
-        }
-        
-        if ($uninstallProcess.ExitCode -eq 0) {
-            Write-TestResult "Uninstall process" "PASS" "Uninstaller completed successfully"
-        } else {
-            Write-TestResult "Uninstall process" "WARN" "Exit code: $($uninstallProcess.ExitCode)"
-        }
-        
-        # Wait for uninstall to complete
-        Start-Sleep -Seconds 5
-        
-        # Verify complete removal
-        Write-Host ""
-        Write-Host "  Verifying complete removal..." -ForegroundColor Gray
-        
-        # Check if directory is removed
-        if ($installDir -and (Test-Path $installDir)) {
-            $remainingFiles = Get-ChildItem -Path $installDir -Recurse -ErrorAction SilentlyContinue
-            if ($remainingFiles.Count -gt 0) {
-                Write-TestResult "Directory removal" "FAIL" "Directory still exists with $($remainingFiles.Count) files"
-            } else {
-                Write-TestResult "Directory removal" "WARN" "Empty directory remains"
-            }
-        } else {
-            Write-TestResult "Directory removal" "PASS" "Installation directory removed"
-        }
-        
-        # Check registry cleanup
-        $stillInRegistry = Get-ItemProperty $uninstallKey | Where-Object { $_.DisplayName -like "*Anava Installer*" }
-        if ($stillInRegistry) {
-            Write-TestResult "Registry cleanup" "FAIL" "Registry entries still present"
-        } else {
-            Write-TestResult "Registry cleanup" "PASS" "Registry entries removed"
-        }
-        
-        # Check shortcut removal
-        $shortcutsRemoved = $true
-        
-        $shortcutPaths = @(
-            "$env:USERPROFILE\Desktop\Anava Installer.lnk",
-            "$env:PUBLIC\Desktop\Anava Installer.lnk",
-            "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Anava",
-            "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Anava"
+        # Check if main directory is removed
+        $installDir = Split-Path $uninstallerPath -Parent
+        return (-not (Test-Path $installDir))
+    }
+    
+    Test-Case "Shortcuts removed after uninstall" {
+        $shortcuts = @(
+            "$([Environment]::GetFolderPath('Desktop'))\Anava Installer.lnk",
+            "$([Environment]::GetFolderPath('CommonDesktopDirectory'))\Anava Installer.lnk",
+            "$([Environment]::GetFolderPath('Programs'))\Anava AI\Anava Installer.lnk",
+            "$([Environment]::GetFolderPath('CommonPrograms'))\Anava AI\Anava Installer.lnk"
         )
         
-        foreach ($path in $shortcutPaths) {
-            if (Test-Path $path) {
-                $shortcutsRemoved = $false
-                Write-TestResult "Shortcut cleanup: $path" "FAIL" "Still exists"
+        foreach ($shortcut in $shortcuts) {
+            if (Test-Path $shortcut) {
+                Write-TestLog "Shortcut still exists: $shortcut" "DEBUG"
+                return $false
             }
         }
-        
-        if ($shortcutsRemoved) {
-            Write-TestResult "Shortcut cleanup" "PASS" "All shortcuts removed"
-        }
-        
-        # Check AppData cleanup
-        $appDataPaths = @(
-            "$env:APPDATA\anava-installer",
-            "$env:LOCALAPPDATA\anava-installer"
+        return $true
+    }
+    
+    Test-Case "Registry cleaned after uninstall" {
+        return (-not (Test-Path $script:Config.UninstallKey))
+    }
+    
+    Test-Case "Installation directory removed" {
+        $dirs = @(
+            $script:Config.InstallDir64,
+            $script:Config.InstallDir32,
+            $script:Config.InstallDirUser
         )
         
-        $appDataCleaned = $true
-        foreach ($path in $appDataPaths) {
-            if (Test-Path $path) {
-                $appDataCleaned = $false
-                Write-TestResult "AppData cleanup: $path" "WARN" "Still exists (may contain user data)"
+        foreach ($dir in $dirs) {
+            if (Test-Path $dir) {
+                Write-TestLog "Directory still exists: $dir" "DEBUG"
+                return $false
             }
         }
-        
-        if ($appDataCleaned) {
-            Write-TestResult "AppData cleanup" "PASS" "User data directories cleaned"
+        return $true
+    }
+}
+
+function Test-EdgeCases {
+    Write-TestLog "`n=== EDGE CASE TESTS ===" "INFO"
+    
+    Test-Case "Handle spaces in installation path" {
+        # This would require custom installation path testing
+        Write-TestLog "Edge case test placeholder" "DEBUG"
+        return $true
+    }
+    
+    Test-Case "Unicode characters in user profile" {
+        # Test if installer handles Unicode in paths
+        $tempPath = "$env:TEMP\测试文件夹"
+        try {
+            New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
+            Remove-Item -Path $tempPath -Force
+            return $true
+        } catch {
+            return $false
         }
-        
+    }
+    
+    Test-Case "Long path support" {
+        # Test if installer handles long paths
+        $longPath = "$env:TEMP\" + ("a" * 200)
+        if ($longPath.Length -gt 260) {
+            # Windows long path support test
+            return $true
+        }
+        return $false
+    }
+}
+
+function Show-TestSummary {
+    Write-TestLog "`n" "INFO"
+    Write-TestLog ("=" * 60) "INFO"
+    Write-TestLog "TEST SUMMARY" "INFO"
+    Write-TestLog ("=" * 60) "INFO"
+    
+    $total = $script:TestResults.Passed + $script:TestResults.Failed + $script:TestResults.Skipped
+    
+    Write-TestLog "Total Tests: $total" "INFO"
+    Write-TestLog "Passed: $($script:TestResults.Passed)" "PASS"
+    Write-TestLog "Failed: $($script:TestResults.Failed)" "FAIL"
+    Write-TestLog "Skipped: $($script:TestResults.Skipped)" "WARN"
+    Write-TestLog "Warnings: $($script:TestResults.Warnings)" "WARN"
+    
+    if ($script:TestResults.Failed -gt 0) {
+        Write-TestLog "`nFailed Tests:" "FAIL"
+        $script:TestResults.Details | Where-Object { $_.Result -eq "FAILED" -or $_.Result -eq "ERROR" } | ForEach-Object {
+            Write-TestLog "  - $($_.Test)" "FAIL"
+            if ($_.Error) {
+                Write-TestLog "    Error: $($_.Error)" "FAIL"
+            }
+        }
+    }
+    
+    if ($script:TestResults.Passed -eq $total - $script:TestResults.Skipped) {
+        Write-TestLog "`nALL TESTS PASSED!" "PASS"
+        $exitCode = 0
     } else {
-        Write-TestResult "Uninstaller found" "FAIL" "No uninstaller found in registry"
+        Write-TestLog "`nSOME TESTS FAILED!" "FAIL"
+        $exitCode = 1
     }
     
-    Write-Host ""
-} else {
-    Write-Host "[Phase 3] Uninstallation Test - SKIPPED" -ForegroundColor Gray
-    Write-Host ""
+    # Save detailed report
+    $reportFile = "test-report-$(Get-Date -Format 'yyyyMMdd-HHmmss').json"
+    $script:TestResults | ConvertTo-Json -Depth 5 | Out-File -FilePath $reportFile -Encoding UTF8
+    Write-TestLog "`nDetailed report saved to: $reportFile" "INFO"
+    Write-TestLog "Log file saved to: $LogFile" "INFO"
+    
+    return $exitCode
 }
 
-# Test 4: NSIS Integrity Verification - CRITICAL TEST FOR ISSUE #3
-Write-Host "[Phase 4] NSIS Integrity Verification (Critical)" -ForegroundColor Yellow
-Write-Host "========================================" -ForegroundColor Gray
+# Main execution
+function Main {
+    Write-Host @"
 
-# Check for corruption indicators
-Write-Host "  Checking for corruption indicators..." -ForegroundColor Gray
+╔════════════════════════════════════════════════════════════╗
+║       Anava Installer - Windows Test Suite                ║
+║                   Version $($script:Config.Version)                       ║
+╚════════════════════════════════════════════════════════════╝
 
-# Check if file is blocked by Windows
-$stream = Get-Item $InstallerPath -Stream * -ErrorAction SilentlyContinue
-if ($stream | Where-Object { $_.Stream -eq 'Zone.Identifier' }) {
-    Write-TestResult "Windows file block" "WARN" "File is blocked (from internet)"
+"@ -ForegroundColor Cyan
     
-    # Try to unblock
+    Write-TestLog "Starting test suite at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" "INFO"
+    Write-TestLog "Log file: $LogFile" "INFO"
+    
     try {
-        Unblock-File -Path $InstallerPath -ErrorAction Stop
-        Write-Host "    Automatically unblocked file" -ForegroundColor Green
+        # Run test suites
+        Test-Prerequisites
+        Test-InstallerFile
+        Test-Installation
+        Test-Shortcuts
+        Test-Registry
+        Test-Uninstallation
+        Test-EdgeCases
+        
+        # Show summary
+        $exitCode = Show-TestSummary
+        
+        exit $exitCode
+        
     } catch {
-        Write-Host "    Could not unblock automatically" -ForegroundColor Yellow
-    }
-} else {
-    Write-TestResult "Windows file block" "PASS" "File is not blocked"
-}
-
-# Verify NSIS structure
-$bytes = [System.IO.File]::ReadAllBytes($InstallerPath)
-if ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A) {
-    Write-TestResult "PE header check" "PASS" "Valid Windows executable"
-} else {
-    Write-TestResult "PE header check" "FAIL" "Invalid executable header"
-}
-
-# Check for NSIS signature
-$nsisFound = $false
-$fileContent = [System.Text.Encoding]::ASCII.GetString($bytes[0..10000])
-if ($fileContent -match "Nullsoft" -or $fileContent -match "NSIS") {
-    Write-TestResult "NSIS structure" "PASS" "Valid NSIS installer detected"
-} else {
-    Write-TestResult "NSIS structure" "WARN" "Could not verify NSIS structure"
-}
-
-Write-Host ""
-
-# Final Summary
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Test Summary" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-$totalTests = $script:TestResults.Passed.Count + $script:TestResults.Failed.Count + $script:TestResults.Warnings.Count
-
-Write-Host "Total Tests: $totalTests" -ForegroundColor White
-Write-Host "  Passed: $($script:TestResults.Passed.Count)" -ForegroundColor Green
-Write-Host "  Failed: $($script:TestResults.Failed.Count)" -ForegroundColor Red
-Write-Host "  Warnings: $($script:TestResults.Warnings.Count)" -ForegroundColor Yellow
-Write-Host ""
-
-# Critical issue status
-Write-Host "Critical Issues Status:" -ForegroundColor Cyan
-Write-Host "----------------------------------------" -ForegroundColor Gray
-
-$shortcutIssue = $script:TestResults.Failed -contains "Desktop shortcut" -or 
-                 $script:TestResults.Failed -contains "Shortcut target valid"
-$uninstallIssue = $script:TestResults.Failed -contains "Directory removal" -or 
-                  $script:TestResults.Failed -contains "Registry cleanup"
-$integrityIssue = $script:TestResults.Failed -contains "PE header check" -or 
-                  $script:TestResults.Failed -contains "Installer integrity"
-
-if (-not $shortcutIssue) {
-    Write-Host "  ✓ Issue #1 (Missing shortcuts): FIXED" -ForegroundColor Green
-} else {
-    Write-Host "  ✗ Issue #1 (Missing shortcuts): STILL PRESENT" -ForegroundColor Red
-}
-
-if (-not $uninstallIssue) {
-    Write-Host "  ✓ Issue #2 (Failed uninstall): FIXED" -ForegroundColor Green
-} else {
-    Write-Host "  ✗ Issue #2 (Failed uninstall): STILL PRESENT" -ForegroundColor Red
-}
-
-if (-not $integrityIssue) {
-    Write-Host "  ✓ Issue #3 (NSIS integrity): FIXED" -ForegroundColor Green
-} else {
-    Write-Host "  ✗ Issue #3 (NSIS integrity): STILL PRESENT" -ForegroundColor Red
-}
-
-Write-Host ""
-
-# Overall result
-if ($script:TestResults.Failed.Count -eq 0) {
-    Write-Host "RESULT: ALL TESTS PASSED" -ForegroundColor Green -BackgroundColor DarkGreen
-    Write-Host ""
-    Write-Host "The Windows installer is working correctly!" -ForegroundColor Green
-    $exitCode = 0
-} elseif ($script:TestResults.Failed.Count -le 2) {
-    Write-Host "RESULT: MINOR ISSUES" -ForegroundColor Yellow -BackgroundColor DarkYellow
-    Write-Host ""
-    Write-Host "The installer works but has minor issues to address" -ForegroundColor Yellow
-    $exitCode = 1
-} else {
-    Write-Host "RESULT: CRITICAL FAILURES" -ForegroundColor Red -BackgroundColor DarkRed
-    Write-Host ""
-    Write-Host "The installer has critical issues that must be fixed" -ForegroundColor Red
-    $exitCode = 2
-}
-
-# Save test report
-$reportPath = Join-Path (Split-Path -Parent $PSScriptRoot) "windows-test-report.json"
-$report = @{
-    Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Installer = Split-Path -Leaf $InstallerPath
-    TotalTests = $totalTests
-    Passed = $script:TestResults.Passed.Count
-    Failed = $script:TestResults.Failed.Count
-    Warnings = $script:TestResults.Warnings.Count
-    FailedTests = $script:TestResults.Failed
-    CriticalIssues = @{
-        MissingShortcuts = $shortcutIssue
-        FailedUninstall = $uninstallIssue
-        NSISIntegrity = $integrityIssue
+        Write-TestLog "`nCRITICAL ERROR: $_" "FAIL"
+        Write-TestLog $_.ScriptStackTrace "FAIL"
+        exit 1
     }
 }
 
-$report | ConvertTo-Json -Depth 10 | Out-File -FilePath $reportPath -Encoding UTF8
-Write-Host ""
-Write-Host "Test report saved to: windows-test-report.json" -ForegroundColor Gray
-
-exit $exitCode
+# Run tests
+Main

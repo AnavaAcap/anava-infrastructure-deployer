@@ -1,154 +1,108 @@
-# Windows-specific Electron Builder Configuration
-# This file contains hardened Windows build settings to prevent installer issues
+# Hardened Windows Build Configuration for Electron v37.2.6
+# Fixes: Missing shortcuts, uninstallation failures, NSIS integrity issues
 
-appId: com.anava.vision
+appId: com.anava.installer
 productName: Anava Installer
-copyright: Copyright © 2025 Anava Inc.
 directories:
-  output: release
-  buildResources: assets
+  output: dist
+  buildResources: build
 
-# Critical: Include all necessary files for Windows build
-files:
-  - dist/**/*
-  - node_modules/**/*
-  - assets/**/*
-  - "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
-  - "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
-  - "!node_modules/**/*.d.ts"
-  - "!node_modules/.bin"
-  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
-  - "!.editorconfig"
-  - "!**/._*"
-  - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}"
-  - "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}"
-  - "!**/{appveyor.yml,.travis.yml,circle.yml}"
-  - "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
-  - "!node_modules/**/*.map"
-  - "!node_modules/**/*.ts"
-  - "!node_modules/**/*.tsx"
-
-# Resources that need to be accessible at runtime
-extraResources:
-  - from: oauth-config.json
-    to: oauth-config.json
-  - from: functions
-    to: functions
-    filter:
-      - "**/*"
-  - from: api-gateway-config.yaml
-    to: api-gateway-config.yaml
-  - from: function-templates
-    to: function-templates
-    filter:
-      - "**/*"
-  - from: firestore-rules
-    to: firestore-rules
-    filter:
-      - "**/*"
-  - from: terraform-bin
-    to: terraform-bin
-    filter:
-      - "**/*"
-  - from: firestore-indexes.json
-    to: firestore-indexes.json
-
-# Files to unpack from ASAR for native modules
-asarUnpack:
-  - node_modules/ping/**/*
-  - node_modules/**/*.node
-  - node_modules/**/*.dll
-
-# Windows-specific configuration
 win:
-  icon: assets/icon.ico
-  legalTrademarks: Anava Inc.
-  publisherName: Anava Inc.
-  # Critical: Use both architectures to prevent path issues
   target:
     - target: nsis
       arch:
         - x64
-    - target: nsis
-      arch: 
         - ia32
-  # Ensure consistent naming
-  artifactName: "${productName}-Setup-${version}-${arch}.${ext}"
-  # Execution level for network operations
-  requestedExecutionLevel: requireAdministrator
-  # Code signing configuration (will be skipped if cert not available)
-  certificateFile: "${env.WIN_CSC_LINK}"
-  certificatePassword: "${env.WIN_CSC_KEY_PASSWORD}"
-  # Additional metadata
+  
+  # Code signing configuration
+  certificateFile: ${env.WIN_CSC_LINK}
+  certificatePassword: ${env.WIN_CSC_KEY_PASSWORD}
+  signingHashAlgorithms: 
+    - sha256
+  signDlls: true
+  verifyUpdateCodeSignature: true
+  
+  # Application metadata
+  legalTrademarks: "© 2025 Anava AI"
+  publisherName: "Anava AI Inc."
+  
+  # Icon and visual assets
+  icon: build/icon.ico
+  
+  # File associations
   fileAssociations:
     - ext: anava
-      name: Anava Configuration
-      description: Anava Configuration File
-      role: Editor
-  # Ensure proper uninstaller behavior
-  forceCodeSigning: false
-  signDlls: false
-  rfc3161TimeStampServer: http://timestamp.digicert.com
-  timeStampServer: http://timestamp.digicert.com
+      name: Anava Configuration File
+      description: Anava Infrastructure Configuration
+      icon: build/icon.ico
 
-# NSIS installer configuration - CRITICAL FOR FIXING ISSUES
 nsis:
-  # Disable one-click to allow user control
   oneClick: false
-  # Allow users to change install directory
+  perMachine: false
   allowToChangeInstallationDirectory: true
-  # Allow elevation when needed
   allowElevation: true
-  # Create shortcuts properly
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
-  shortcutName: Anava Installer
-  # Icons
-  installerIcon: assets/icon.ico
-  uninstallerIcon: assets/icon.ico
-  installerHeaderIcon: assets/icon.ico
-  # Installation mode
-  perMachine: true
-  # Display settings
-  menuCategory: "Anava\\Anava Installer"
-  displayLanguageSelector: false
-  # Critical: Ensure warnings don't fail build
-  warningsAsErrors: false
-  # Unicode for international support
-  unicode: true
-  # Uninstaller settings - FIXES UNINSTALL ISSUES
-  deleteAppDataOnUninstall: true
-  runAfterFinish: false
-  # Custom NSIS script for advanced fixes
+  
+  # Custom NSIS script with fixes
   include: installer-scripts/installer.nsh
-  # Installer/Uninstaller GUIDs for proper Windows registry
-  guid: "3F8B9A2C-4E5D-6F7A-8B9C-0D1E2F3A4B5C"
-  # Compression settings for integrity
+  script: installer-scripts/installer.nsh
+  
+  # Installer metadata
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeader: build/installerHeader.bmp
+  installerSidebar: build/installerSidebar.bmp
+  
+  # License and documentation
+  license: LICENSE.txt
+  
+  # Shortcut configuration - CRITICAL FOR FIX
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: "Anava Installer"
+  menuCategory: "Anava AI"
+  
+  # Uninstaller configuration - CRITICAL FOR FIX
+  deleteAppDataOnUninstall: false
+  removeDefaultUninstallWelcomePage: false
+  uninstallDisplayName: "Anava Installer"
+  
+  # NSIS specific settings for integrity
+  unicode: true
+  warningsAsErrors: true
   packElevateHelper: true
-  # Use better compression to prevent corruption
-  compression: maximum
-  # Language
-  language: 1033
-  # Install and uninstall display names
-  installerSidebar: assets/installerSidebar.bmp
-  uninstallerSidebar: assets/installerSidebar.bmp
+  
+  # Installation modes
+  differentialPackage: false
+  
+  # Language support
+  language: 1033 # English
+  multiLanguageInstaller: false
+  
+  # GUID for consistent uninstallation
+  guid: "6B3E5A7C-9D4F-4E2A-8C1B-F9E8D3A2C5B7"
+  
+  # Additional installer options
+  runAfterFinish: true
+  displayLanguageSelector: false
+  installerLanguages:
+    - en-US
+  
+  # Artifact naming
+  artifactName: ${productName}-Setup-${version}-${arch}.exe
 
-# macOS configuration (for reference)
-mac:
-  category: public.app-category.developer-tools
-  icon: assets/icon.icns
-  hardenedRuntime: true
-  gatekeeperAssess: false
-  entitlements: assets/entitlements.mac.plist
-  entitlementsInherit: assets/entitlements.mac.plist
+# Compression settings for better integrity
+compression: maximum
+compressionLevel: 9
 
-# Linux configuration (for reference)
-linux:
-  icon: assets/icon.png
-  target:
-    - AppImage
-    - deb
-  category: Development
+# Publishing configuration (optional)
+publish:
+  - provider: generic
+    url: https://github.com/AnavaAcap/acap-releases/releases/download/v3.8.1/
 
-# Publish configuration (null = no auto-update)
-publish: null
+# Extra metadata for Windows
+extraMetadata:
+  name: anava-installer
+  version: 0.9.178
+  description: "Anava Infrastructure Deployer - Enterprise AI Video Analytics"
+  author: "Anava AI Inc."
+  main: dist/main/index.js
