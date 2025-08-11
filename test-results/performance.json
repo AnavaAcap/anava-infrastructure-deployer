@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-11T22:09:18.745Z",
+  "timestamp": "2025-08-11T22:49:17.188Z",
   "environment": {
     "node": "v20.19.2",
     "platform": "darwin",
@@ -10,58 +10,58 @@
   "testSuites": [
     {
       "name": "/tests/unit/services/deploymentEngine.test.ts",
-      "duration": 8572,
+      "duration": 7836,
       "tests": [
         {
           "title": "should initialize with correct dependencies",
           "fullName": "DeploymentEngine Constructor and Initialization should initialize with correct dependencies",
-          "duration": 4,
+          "duration": 6,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30934040,
-            "external": 2098092,
-            "arrayBuffers": 37276
+            "rss": 65437696,
+            "heapTotal": 35012608,
+            "heapUsed": 30802952,
+            "external": 2090559,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should initialize deployers when OAuth client is available",
           "fullName": "DeploymentEngine Constructor and Initialization should initialize deployers when OAuth client is available",
-          "duration": 1,
+          "duration": 4,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30935960,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30807424,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should handle missing OAuth client gracefully",
           "fullName": "DeploymentEngine Constructor and Initialization should handle missing OAuth client gracefully",
-          "duration": 1,
+          "duration": 3,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30936248,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30807712,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should start a new deployment with valid config",
           "fullName": "DeploymentEngine startDeployment should start a new deployment with valid config",
-          "duration": 2,
+          "duration": 4,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30936536,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30808000,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
@@ -70,211 +70,407 @@
           "duration": 2,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30936824,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30808288,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should reset pause state when starting new deployment",
           "fullName": "DeploymentEngine startDeployment should reset pause state when starting new deployment",
-          "duration": 1,
+          "duration": 4,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30937112,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30808576,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should emit progress events during deployment",
           "fullName": "DeploymentEngine startDeployment should emit progress events during deployment",
-          "duration": 2,
+          "duration": 11,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30937400,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30808864,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should resume an existing deployment",
           "fullName": "DeploymentEngine resumeDeployment should resume an existing deployment",
-          "duration": 1,
+          "duration": 2,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30937688,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30809152,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should throw error if deployment not found",
           "fullName": "DeploymentEngine resumeDeployment should throw error if deployment not found",
-          "duration": 25,
+          "duration": 33,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30937976,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30809440,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should throw error if deployment ID does not match",
           "fullName": "DeploymentEngine resumeDeployment should throw error if deployment ID does not match",
-          "duration": 1,
+          "duration": 2,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30938264,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30809728,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should pause deployment and emit progress event",
           "fullName": "DeploymentEngine pauseDeployment should pause deployment and emit progress event",
-          "duration": 1,
+          "duration": 3,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30938488,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30809952,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should handle deployment errors gracefully",
           "fullName": "DeploymentEngine Error Handling should handle deployment errors gracefully",
-          "duration": 1,
+          "duration": 3,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30938888,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30810352,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should handle OAuth refresh errors",
           "fullName": "DeploymentEngine Error Handling should handle OAuth refresh errors",
-          "duration": 1,
+          "duration": 2,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30939208,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30810672,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should emit correct events during deployment lifecycle",
           "fullName": "DeploymentEngine Event Emissions should emit correct events during deployment lifecycle",
-          "duration": 1,
+          "duration": 11,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30939528,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30810992,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         },
         {
           "title": "should handle IAM propagation delays correctly",
           "fullName": "DeploymentEngine Service Account Propagation Handling should handle IAM propagation delays correctly",
-          "duration": 2,
+          "duration": 4,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30939848,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 65454080,
+            "heapTotal": 35012608,
+            "heapUsed": 30811312,
+            "external": 2090599,
+            "arrayBuffers": 29743
           }
         }
       ]
     },
     {
       "name": "/tests/unit/services/camera/cameraConfigurationService.test.ts",
-      "duration": 0,
-      "tests": []
+      "duration": 12284,
+      "tests": [
+        {
+          "title": "should get scene description successfully",
+          "fullName": "CameraConfigurationService Scene Description API should get scene description successfully",
+          "duration": 42,
+          "status": "failed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30892248,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should include speaker credentials when requested",
+          "fullName": "CameraConfigurationService Scene Description API should include speaker credentials when requested",
+          "duration": 3,
+          "status": "failed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30892720,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should handle scene description errors",
+          "fullName": "CameraConfigurationService Scene Description API should handle scene description errors",
+          "duration": 3,
+          "status": "failed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30893040,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should handle non-JSON responses gracefully",
+          "fullName": "CameraConfigurationService Scene Description API should handle non-JSON responses gracefully",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30893360,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should activate license successfully",
+          "fullName": "CameraConfigurationService License Activation should activate license successfully",
+          "duration": 0,
+          "status": "failed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30893680,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should handle license activation failures",
+          "fullName": "CameraConfigurationService License Activation should handle license activation failures",
+          "duration": 0,
+          "status": "failed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30894000,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should use basic auth with HTTPS",
+          "fullName": "CameraConfigurationService HTTPS Basic Authentication should use basic auth with HTTPS",
+          "duration": 2,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30894320,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should handle auth failures",
+          "fullName": "CameraConfigurationService HTTPS Basic Authentication should handle auth failures",
+          "duration": 5,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30894640,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should push configuration to camera successfully",
+          "fullName": "CameraConfigurationService Configuration Push should push configuration to camera successfully",
+          "duration": 4,
+          "status": "failed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30894960,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should handle configuration push errors",
+          "fullName": "CameraConfigurationService Configuration Push should handle configuration push errors",
+          "duration": 12,
+          "status": "failed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30895280,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should test speaker successfully",
+          "fullName": "CameraConfigurationService Speaker Configuration should test speaker successfully",
+          "duration": 1,
+          "status": "failed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30895600,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should handle speaker test failures",
+          "fullName": "CameraConfigurationService Speaker Configuration should handle speaker test failures",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30895920,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should play audio on speaker",
+          "fullName": "CameraConfigurationService Speaker Configuration should play audio on speaker",
+          "duration": 0,
+          "status": "failed",
+          "memoryUsage": {
+            "rss": 53460992,
+            "heapTotal": 36061184,
+            "heapUsed": 30896240,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should retry on network failures",
+          "fullName": "CameraConfigurationService Error Recovery should retry on network failures",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 53477376,
+            "heapTotal": 36061184,
+            "heapUsed": 30896560,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        },
+        {
+          "title": "should handle concurrent requests",
+          "fullName": "CameraConfigurationService Error Recovery should handle concurrent requests",
+          "duration": 5,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 53477376,
+            "heapTotal": 36061184,
+            "heapUsed": 30896880,
+            "external": 2191405,
+            "arrayBuffers": 39271
+          }
+        }
+      ]
     }
   ],
   "summary": {
-    "totalDuration": 8572,
-    "avgTestDuration": 571.4666666666667,
+    "totalDuration": 20120,
+    "avgTestDuration": 670.6666666666666,
     "slowestTests": [
       {
+        "name": "CameraConfigurationService Scene Description API should get scene description successfully",
+        "duration": 42,
+        "suite": "/tests/unit/services/camera/cameraConfigurationService.test.ts"
+      },
+      {
         "name": "DeploymentEngine resumeDeployment should throw error if deployment not found",
-        "duration": 25,
+        "duration": 33,
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+      },
+      {
+        "name": "CameraConfigurationService Configuration Push should handle configuration push errors",
+        "duration": 12,
+        "suite": "/tests/unit/services/camera/cameraConfigurationService.test.ts"
+      },
+      {
+        "name": "DeploymentEngine startDeployment should emit progress events during deployment",
+        "duration": 11,
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+      },
+      {
+        "name": "DeploymentEngine Event Emissions should emit correct events during deployment lifecycle",
+        "duration": 11,
         "suite": "/tests/unit/services/deploymentEngine.test.ts"
       },
       {
         "name": "DeploymentEngine Constructor and Initialization should initialize with correct dependencies",
+        "duration": 6,
+        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+      },
+      {
+        "name": "CameraConfigurationService HTTPS Basic Authentication should handle auth failures",
+        "duration": 5,
+        "suite": "/tests/unit/services/camera/cameraConfigurationService.test.ts"
+      },
+      {
+        "name": "CameraConfigurationService Error Recovery should handle concurrent requests",
+        "duration": 5,
+        "suite": "/tests/unit/services/camera/cameraConfigurationService.test.ts"
+      },
+      {
+        "name": "DeploymentEngine Constructor and Initialization should initialize deployers when OAuth client is available",
         "duration": 4,
         "suite": "/tests/unit/services/deploymentEngine.test.ts"
       },
       {
         "name": "DeploymentEngine startDeployment should start a new deployment with valid config",
-        "duration": 2,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
-      },
-      {
-        "name": "DeploymentEngine startDeployment should initialize deployers before starting deployment",
-        "duration": 2,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
-      },
-      {
-        "name": "DeploymentEngine startDeployment should emit progress events during deployment",
-        "duration": 2,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
-      },
-      {
-        "name": "DeploymentEngine Service Account Propagation Handling should handle IAM propagation delays correctly",
-        "duration": 2,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
-      },
-      {
-        "name": "DeploymentEngine Constructor and Initialization should initialize deployers when OAuth client is available",
-        "duration": 1,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
-      },
-      {
-        "name": "DeploymentEngine Constructor and Initialization should handle missing OAuth client gracefully",
-        "duration": 1,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
-      },
-      {
-        "name": "DeploymentEngine startDeployment should reset pause state when starting new deployment",
-        "duration": 1,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
-      },
-      {
-        "name": "DeploymentEngine resumeDeployment should resume an existing deployment",
-        "duration": 1,
+        "duration": 4,
         "suite": "/tests/unit/services/deploymentEngine.test.ts"
       }
     ],
     "memoryUsage": {
-      "rss": "45.69 MB",
-      "heapTotal": "32.89 MB",
-      "heapUsed": "29.62 MB",
-      "external": "2.00 MB"
+      "rss": "53.97 MB",
+      "heapTotal": "34.39 MB",
+      "heapUsed": "30.28 MB",
+      "external": "2.09 MB"
     }
   },
   "regressions": []

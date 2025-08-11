@@ -1,35 +1,157 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="15" failures="0" errors="0" time="14.305">
-  <testsuite name="DeploymentEngine" errors="0" failures="0" skipped="0" timestamp="2025-08-11T22:09:19" time="8.572" tests="15">
-    <testcase classname="DeploymentEngine › Constructor and Initialization" name="should initialize with correct dependencies" time="0.004">
+<testsuites name="jest tests" tests="30" failures="9" errors="0" time="12.803">
+  <testsuite name="DeploymentEngine" errors="0" failures="0" skipped="0" timestamp="2025-08-11T22:49:17" time="7.836" tests="15">
+    <testcase classname="DeploymentEngine › Constructor and Initialization" name="should initialize with correct dependencies" time="0.006">
     </testcase>
-    <testcase classname="DeploymentEngine › Constructor and Initialization" name="should initialize deployers when OAuth client is available" time="0.001">
+    <testcase classname="DeploymentEngine › Constructor and Initialization" name="should initialize deployers when OAuth client is available" time="0.004">
     </testcase>
-    <testcase classname="DeploymentEngine › Constructor and Initialization" name="should handle missing OAuth client gracefully" time="0.001">
+    <testcase classname="DeploymentEngine › Constructor and Initialization" name="should handle missing OAuth client gracefully" time="0.003">
     </testcase>
-    <testcase classname="DeploymentEngine › startDeployment" name="should start a new deployment with valid config" time="0.002">
+    <testcase classname="DeploymentEngine › startDeployment" name="should start a new deployment with valid config" time="0.004">
     </testcase>
     <testcase classname="DeploymentEngine › startDeployment" name="should initialize deployers before starting deployment" time="0.002">
     </testcase>
-    <testcase classname="DeploymentEngine › startDeployment" name="should reset pause state when starting new deployment" time="0.001">
+    <testcase classname="DeploymentEngine › startDeployment" name="should reset pause state when starting new deployment" time="0.004">
     </testcase>
-    <testcase classname="DeploymentEngine › startDeployment" name="should emit progress events during deployment" time="0.002">
+    <testcase classname="DeploymentEngine › startDeployment" name="should emit progress events during deployment" time="0.011">
     </testcase>
-    <testcase classname="DeploymentEngine › resumeDeployment" name="should resume an existing deployment" time="0.001">
+    <testcase classname="DeploymentEngine › resumeDeployment" name="should resume an existing deployment" time="0.002">
     </testcase>
-    <testcase classname="DeploymentEngine › resumeDeployment" name="should throw error if deployment not found" time="0.025">
+    <testcase classname="DeploymentEngine › resumeDeployment" name="should throw error if deployment not found" time="0.033">
     </testcase>
-    <testcase classname="DeploymentEngine › resumeDeployment" name="should throw error if deployment ID does not match" time="0.001">
+    <testcase classname="DeploymentEngine › resumeDeployment" name="should throw error if deployment ID does not match" time="0.002">
     </testcase>
-    <testcase classname="DeploymentEngine › pauseDeployment" name="should pause deployment and emit progress event" time="0.001">
+    <testcase classname="DeploymentEngine › pauseDeployment" name="should pause deployment and emit progress event" time="0.003">
     </testcase>
-    <testcase classname="DeploymentEngine › Error Handling" name="should handle deployment errors gracefully" time="0.001">
+    <testcase classname="DeploymentEngine › Error Handling" name="should handle deployment errors gracefully" time="0.003">
     </testcase>
-    <testcase classname="DeploymentEngine › Error Handling" name="should handle OAuth refresh errors" time="0.001">
+    <testcase classname="DeploymentEngine › Error Handling" name="should handle OAuth refresh errors" time="0.002">
     </testcase>
-    <testcase classname="DeploymentEngine › Event Emissions" name="should emit correct events during deployment lifecycle" time="0.001">
+    <testcase classname="DeploymentEngine › Event Emissions" name="should emit correct events during deployment lifecycle" time="0.011">
     </testcase>
-    <testcase classname="DeploymentEngine › Service Account Propagation Handling" name="should handle IAM propagation delays correctly" time="0.002">
+    <testcase classname="DeploymentEngine › Service Account Propagation Handling" name="should handle IAM propagation delays correctly" time="0.004">
+    </testcase>
+  </testsuite>
+  <testsuite name="CameraConfigurationService" errors="0" failures="9" skipped="0" timestamp="2025-08-11T22:49:17" time="12.284" tests="15">
+    <testcase classname="CameraConfigurationService › Scene Description API" name="should get scene description successfully" time="0.042">
+      <failure>Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: true
+Received: false
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/unit/services/camera/cameraConfigurationService.test.ts:97:30)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)</failure>
+    </testcase>
+    <testcase classname="CameraConfigurationService › Scene Description API" name="should include speaker credentials when requested" time="0.003">
+      <failure>Error: expect(received).toBeGreaterThanOrEqual(expected)
+
+Expected: &gt;= 2
+Received:    1
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/unit/services/camera/cameraConfigurationService.test.ts:119:28)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)</failure>
+    </testcase>
+    <testcase classname="CameraConfigurationService › Scene Description API" name="should handle scene description errors" time="0.003">
+      <failure>Error: expect(received).toContain(expected) // indexOf
+
+Expected substring: &quot;Network error&quot;
+Received string:    &quot;Request failed with status 401&quot;
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/unit/services/camera/cameraConfigurationService.test.ts:134:28)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)</failure>
+    </testcase>
+    <testcase classname="CameraConfigurationService › Scene Description API" name="should handle non-JSON responses gracefully" time="0.001">
+    </testcase>
+    <testcase classname="CameraConfigurationService › License Activation" name="should activate license successfully" time="0">
+      <failure>Error: Property `simpleDigestAuth` does not exist in the provided object
+    at ModuleMocker.spyOn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-mock/build/index.js:593:13)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/unit/services/camera/cameraConfigurationService.test.ts:181:12)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
+    </testcase>
+    <testcase classname="CameraConfigurationService › License Activation" name="should handle license activation failures" time="0">
+      <failure>Error: Property `simpleDigestAuth` does not exist in the provided object
+    at ModuleMocker.spyOn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-mock/build/index.js:593:13)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/unit/services/camera/cameraConfigurationService.test.ts:209:12)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
+    </testcase>
+    <testcase classname="CameraConfigurationService › HTTPS Basic Authentication" name="should use basic auth with HTTPS" time="0.002">
+    </testcase>
+    <testcase classname="CameraConfigurationService › HTTPS Basic Authentication" name="should handle auth failures" time="0.005">
+    </testcase>
+    <testcase classname="CameraConfigurationService › Configuration Push" name="should push configuration to camera successfully" time="0.004">
+      <failure>Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: true
+Received: false
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/unit/services/camera/cameraConfigurationService.test.ts:320:30)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)</failure>
+    </testcase>
+    <testcase classname="CameraConfigurationService › Configuration Push" name="should handle configuration push errors" time="0.012">
+      <failure>Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: false
+Received: true
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/unit/services/camera/cameraConfigurationService.test.ts:342:30)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)</failure>
+    </testcase>
+    <testcase classname="CameraConfigurationService › Speaker Configuration" name="should test speaker successfully" time="0.001">
+      <failure>Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: true
+Received: false
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/unit/services/camera/cameraConfigurationService.test.ts:385:30)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)</failure>
+    </testcase>
+    <testcase classname="CameraConfigurationService › Speaker Configuration" name="should handle speaker test failures" time="0.001">
+    </testcase>
+    <testcase classname="CameraConfigurationService › Speaker Configuration" name="should play audio on speaker" time="0">
+      <failure>Error: Property `simpleDigestAuth` does not exist in the provided object
+    at ModuleMocker.spyOn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-mock/build/index.js:593:13)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/unit/services/camera/cameraConfigurationService.test.ts:405:12)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
+    </testcase>
+    <testcase classname="CameraConfigurationService › Error Recovery" name="should retry on network failures" time="0.001">
+    </testcase>
+    <testcase classname="CameraConfigurationService › Error Recovery" name="should handle concurrent requests" time="0.005">
     </testcase>
   </testsuite>
 </testsuites>
