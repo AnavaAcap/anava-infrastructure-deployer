@@ -351,14 +351,56 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       // This ensures we get the latest camera state on the network
       console.log('Starting fresh network scan - ignoring any cached results...');
       
-      const results = await (window.electronAPI as any).enhancedScanNetwork?.({
-        credentials: [{
-          username: credentials.username,
-          password: credentials.password,
-        }],
-        concurrent: 50,
-        timeout: 2000,
-      });
+      // Add timeout handling for permission case
+      let results = [];
+      let scanAttempts = 0;
+      const maxAttempts = 2;
+      
+      while (scanAttempts < maxAttempts) {
+        scanAttempts++;
+        
+        try {
+          // Set a reasonable timeout for the scan
+          const scanPromise = (window.electronAPI as any).enhancedScanNetwork?.({
+            credentials: [{
+              username: credentials.username,
+              password: credentials.password,
+            }],
+            concurrent: 50,
+            timeout: 2000,
+          });
+          
+          // Create a timeout promise
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Scan timeout')), 30000); // 30 second timeout
+          });
+          
+          // Race between scan and timeout
+          results = await Promise.race([scanPromise, timeoutPromise]);
+          
+          // If we got results (even empty array), break the loop
+          if (Array.isArray(results)) {
+            break;
+          }
+        } catch (timeoutError) {
+          console.log(`Scan attempt ${scanAttempts} failed or timed out`);
+          
+          if (scanAttempts === 1) {
+            // First attempt failed, might be permission issue
+            setDeploymentStatus('Network scan requires permission. Please grant permission and scanning will continue...');
+            // Wait a bit for user to grant permission
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            setDeploymentStatus('Retrying network scan...');
+          } else {
+            // Second attempt also failed
+            throw new Error('Network scan failed after retries');
+          }
+        }
+      }
+      
+      if (!Array.isArray(results)) {
+        results = [];
+      }
 
       const formattedCameras: CameraInfo[] = results.map((cam: any) => ({
         id: cam.id || `camera-${cam.ip}`,

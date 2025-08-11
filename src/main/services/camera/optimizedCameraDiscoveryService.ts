@@ -139,6 +139,17 @@ export class OptimizedCameraDiscoveryService {
       };
     });
     
+    // Clear pre-discovered cache for fresh scans
+    ipcMain.handle('clear-pre-discovered-cameras', async () => {
+      console.log('[Pre-Discovery] Clearing pre-discovered cache');
+      this.preDiscoveredCameras = [];
+      this.preDiscoveredSpeakers = [];
+      this.preDiscoveredAxisDevices = [];
+      this.networkPermissionDenied = false;
+      this.hasShownNetworkPermissionDialog = false;
+      return { success: true };
+    });
+    
     ipcMain.handle('get-pre-discovered-speakers', async () => {
       console.log('[Pre-Discovery] Returning pre-discovered speakers:', this.preDiscoveredSpeakers.length);
       return {
@@ -298,9 +309,12 @@ export class OptimizedCameraDiscoveryService {
     console.log('Options:', options);
     
     // Check if we've already detected network permission issues
+    // But allow retry after user might have granted permission
     if (this.networkPermissionDenied && process.platform === 'darwin') {
-      console.log('Network permission was denied - returning empty result');
-      return [];
+      console.log('Network permission was previously denied - retrying in case user granted it...');
+      // Reset the flag to allow this scan attempt
+      this.networkPermissionDenied = false;
+      this.hasShownNetworkPermissionDialog = false;
     }
     
     const cameras: Camera[] = [];

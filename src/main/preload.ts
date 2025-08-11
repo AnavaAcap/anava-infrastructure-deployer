@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Camera-related APIs
   camera: {
     getPreDiscoveredCameras: () => ipcRenderer.invoke('get-pre-discovered-cameras'),
+    clearPreDiscoveredCameras: () => ipcRenderer.invoke('clear-pre-discovered-cameras'),
     classifyAxisDevices: (credentials: { username: string; password: string }) => 
       ipcRenderer.invoke('classify-axis-devices', credentials),
   },
