@@ -350,15 +350,20 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
     setScanProgress({ current: 0, total: 254, foundCount: 0 });
     
     // Set up progress listener
-    const unsubscribe = (window.electronAPI as any).onScanProgress?.((data: { ip: string; status: string }) => {
-      setScanProgress(prev => ({
-        ...prev,
-        current: prev.current + 1,
-        foundCount: data.status === 'found' ? prev.foundCount + 1 : prev.foundCount
-      }));
-      
-      if (data.status === 'found') {
-        setDeploymentStatus(`Found camera at ${data.ip}`);
+    const unsubscribe = (window.electronAPI as any).onScanProgress?.((data: { ip: string; status: string; total?: number }) => {
+      if (data.status === 'total' && data.total) {
+        // Set the actual total number of IPs to scan
+        setScanProgress(prev => ({ ...prev, total: data.total }));
+      } else {
+        setScanProgress(prev => ({
+          ...prev,
+          current: prev.current + 1,
+          foundCount: data.status === 'found' ? prev.foundCount + 1 : prev.foundCount
+        }));
+        
+        if (data.status === 'found') {
+          setDeploymentStatus(`Found camera at ${data.ip}`);
+        }
       }
     });
     

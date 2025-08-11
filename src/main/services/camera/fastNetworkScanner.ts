@@ -23,7 +23,7 @@ interface ScanResult {
  */
 export async function fastNetworkScan(
   credentials: { username: string; password: string },
-  onProgress?: (ip: string, status: 'scanning' | 'found' | 'not_found') => void
+  onProgress?: (ip: string, status: 'scanning' | 'found' | 'not_found' | 'total', total?: number) => void
 ): Promise<ScanResult[]> {
   console.log('🚀 Starting FAST parallel network scan...');
   
@@ -62,6 +62,11 @@ export async function fastNetworkScan(
   }
   
   console.log(`Scanning ${ipsToScan.length} IPs on port 443...`);
+  
+  // Report the total number of IPs to scan
+  if (onProgress) {
+    onProgress('', 'total', ipsToScan.length);
+  }
   
   // Scan all IPs in parallel with a reasonable concurrency limit
   const results: ScanResult[] = [];
