@@ -81,6 +81,9 @@
 npm run dev                    # Run dev server
 npm run build                  # Build for production
 npm run lint                   # Lint code (use --no-verify to skip)
+npm run test:regression        # Run regression tests (18/18 passing)
+npm run test:security          # Run security tests (18/20 passing)
+npm run test:integration       # Run integration tests (19/19 passing)
 ```
 
 ### Production Builds
@@ -204,10 +207,31 @@ See `CAMERA_DETECTION_TROUBLESHOOTING.md` for detailed debugging guide.
 - `src/main/index.ts` - Main process with DevTools auto-open
 - `src/renderer/pages/camera/ACAPDeploymentPage.tsx` - License activation (line 369)
 - `src/renderer/pages/CameraSetupPage.tsx` - Camera discovery UI (MAC pass at line 337)
-- `src/main/services/camera/fastNetworkScanner.ts` - Device detection logic
+- `src/main/services/camera/fastNetworkScanner.ts` - Device detection logic (identifyCamera exported)
 - `src/main/services/deploymentEngine.ts` - GCP deployment logic
 - `package.json` - Version and dependencies
+- `src/__tests__/regression-tests-fixed.spec.ts` - Working regression tests
+- `src/__tests__/security-tests.spec.ts` - Security test suite
+- `src/__tests__/integration-tests.spec.ts` - Integration tests
+- `.github/workflows/test.yml` - CI/CD test configuration
 - `src/__tests__/regression-tests.spec.ts` - Regression tests for camera detection
+
+## Test Suite Status
+
+### Current Test Coverage (v0.9.182)
+- **Regression Tests**: 18/18 passing ✅
+- **Security Tests**: 18/20 passing (2 minor XSS test issues)
+- **Integration Tests**: 19/19 passing ✅
+- **GitHub Actions**: Configured and operational ✅
+
+### Test Commands
+```bash
+npm test                       # Run all tests
+npm run test:regression        # Regression tests only
+npm run test:security          # Security tests only
+npm run test:integration       # Integration tests only
+npm run test:coverage          # With coverage report
+```
 
 ## DO NOT
 - Use hardcoded MAC addresses for license activation
@@ -220,3 +244,4 @@ See `CAMERA_DETECTION_TROUBLESHOOTING.md` for detailed debugging guide.
 - Show speakers in "Found Cameras" list
 - Use GET for newer Axis devices (they require POST)
 - Forget to run `npm run build:renderer` after UI changes
+- Ship without running regression tests
