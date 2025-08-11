@@ -83,7 +83,8 @@ module.exports = {
       displayName: 'regression',
       testMatch: [
         '<rootDir>/src/__tests__/regression-tests.spec.ts',
-        '<rootDir>/src/__tests__/regression-tests-fixed.spec.ts'
+        '<rootDir>/src/__tests__/regression-tests-fixed.spec.ts',
+        '<rootDir>/src/__tests__/windows-installer-regression.spec.ts'
       ],
       preset: 'ts-jest',
       testEnvironment: 'node',
