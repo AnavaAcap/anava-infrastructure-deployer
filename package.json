@@ -24,7 +24,7 @@
     "test:integration": "jest --selectProjects=integration",
     "test:e2e": "jest --selectProjects=e2e",
     "test:security": "jest --selectProjects=security",
-    "test:regression": "jest tests/regression",
+    "test:regression": "jest --selectProjects=regression",
     "test:performance": "jest tests/performance --runInBand",
     "test:coverage": "jest --coverage --selectProjects=unit,integration",
     "test:watch": "jest --watch",
