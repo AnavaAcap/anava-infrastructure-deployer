@@ -38,7 +38,7 @@ export class UnifiedAuthService {
    * Authenticate user using embedded secure webview
    */
   async authenticate(parentWindow: BrowserWindow): Promise<AuthResult> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       // Generate PKCE parameters for enhanced security
       const codeVerifier = this.generateCodeVerifier();
       const codeChallenge = this.generateCodeChallenge(codeVerifier);
