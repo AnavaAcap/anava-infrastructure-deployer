@@ -310,8 +310,20 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
           addLog(`Detecting camera firmware version...`);
           const firmwareInfo = await window.electronAPI.getCameraFirmware(cameraWithCreds);
           addLog(`Camera firmware: ${firmwareInfo.firmwareVersion} (${firmwareInfo.osVersion})`);
+          
           if (firmwareInfo.architecture) {
             addLog(`Camera architecture: ${firmwareInfo.architecture}`);
+            if (firmwareInfo.detectionMethod) {
+              addLog(`Detection method: ${firmwareInfo.detectionMethod}`);
+              
+              // Show warning if detection was uncertain
+              if (firmwareInfo.detectionMethod.includes('Default') || firmwareInfo.detectionMethod.includes('Inferred')) {
+                addLog(`⚠️ WARNING: Architecture detection was uncertain. Please verify this is correct.`);
+                // Don't stop deployment but warn the user
+              }
+            }
+          } else {
+            addLog(`⚠️ Could not detect camera architecture, using default: aarch64`);
           }
           
           // Deploy appropriate ACAP based on firmware

@@ -80,7 +80,7 @@ async function preBuildChecks() {
     'vite.config.ts',
     'electron-builder-win.yml',
     'src/main/index.ts',
-    'src/renderer/main.tsx'
+    'src/renderer/index.tsx'
   ];
   
   for (const file of requiredFiles) {
