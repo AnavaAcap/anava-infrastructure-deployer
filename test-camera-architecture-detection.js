@@ -193,8 +193,16 @@ class CameraArchitectureDetector {
         console.log(colors.yellow(`\n⚠ Using default architecture: ${results.architecture}`));
       }
 
+      // Fetch available releases from GitHub
+      console.log(colors.yellow('\n6. Checking available ACAP releases...'));
+      const availableAcaps = await this.fetchGitHubReleases();
+      if (availableAcaps.length > 0) {
+        console.log(colors.green(`   ✓ Found ${availableAcaps.length} ACAP files in latest release`));
+      }
+
       // Recommend ACAP file
-      results.recommendedAcap = this.recommendAcapFile(results);
+      results.recommendedAcap = this.recommendAcapFile(results, availableAcaps);
+      results.availableAcaps = availableAcaps;
 
       // Display summary
       this.displaySummary(results);
@@ -215,7 +223,39 @@ class CameraArchitectureDetector {
     }
   }
 
-  recommendAcapFile(results) {
+  async fetchGitHubReleases() {
+    try {
+      console.log(colors.gray('Fetching available releases from GitHub...'));
+      const response = await axios({
+        method: 'GET',
+        url: 'https://api.github.com/repos/AnavaAcap/acap-releases/releases/latest',
+        headers: {
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        timeout: 10000
+      });
+      
+      const release = response.data;
+      const acapFiles = [];
+      
+      for (const asset of release.assets) {
+        if (asset.name.endsWith('.eap')) {
+          acapFiles.push({
+            name: asset.name,
+            url: asset.browser_download_url,
+            size: asset.size
+          });
+        }
+      }
+      
+      return acapFiles;
+    } catch (error) {
+      console.log(colors.yellow('Could not fetch GitHub releases'));
+      return [];
+    }
+  }
+  
+  recommendAcapFile(results, availableAcaps = []) {
     const osVersion = results.osVersion?.toLowerCase() || 'os11';
     const arch = results.architecture || 'aarch64';
     
@@ -232,7 +272,34 @@ class CameraArchitectureDetector {
     
     const normalizedArch = archMap[arch] || arch;
     
-    return `anava-baton-${osVersion}-${normalizedArch}.eap`;
+    // If we have actual releases, try to find exact match
+    if (availableAcaps.length > 0) {
+      // Try exact match first
+      const exactMatch = availableAcaps.find(acap => {
+        const filename = acap.name.toLowerCase();
+        return filename.includes(normalizedArch) && filename.includes(osVersion);
+      });
+      
+      if (exactMatch) {
+        return exactMatch.name;
+      }
+      
+      // Show available options if no exact match
+      const osMatches = availableAcaps.filter(acap => {
+        const filename = acap.name.toLowerCase();
+        return filename.includes(osVersion);
+      });
+      
+      if (osMatches.length > 0) {
+        console.log(colors.yellow('\nAvailable files for ' + osVersion + ':'));
+        osMatches.forEach(acap => {
+          console.log(colors.gray('  - ' + acap.name));
+        });
+      }
+    }
+    
+    // Return pattern if no GitHub data available
+    return `Pattern: *${normalizedArch}*${osVersion}*.eap (e.g., signed_Anava_-_Analyze_*_${normalizedArch}_${osVersion}.eap)`;
   }
 
   displaySummary(results) {
@@ -267,6 +334,20 @@ class CameraArchitectureDetector {
     if (results.detectionMethod === 'Default (most common)') {
       console.log(colors.yellow('\n⚠ WARNING: Architecture was not detected and defaulted to aarch64.'));
       console.log(colors.yellow('  Please verify this is correct for your camera model.'));
+    }
+    
+    // Show all available ACAPs if fetched
+    if (results.availableAcaps && results.availableAcaps.length > 0) {
+      console.log(colors.cyan('\n=== ALL AVAILABLE ACAP FILES ===\n'));
+      results.availableAcaps.forEach(acap => {
+        const size = (acap.size / 1024 / 1024).toFixed(2) + ' MB';
+        const isRecommended = acap.name === results.recommendedAcap;
+        if (isRecommended) {
+          console.log(colors.green.bold(`  ➜ ${acap.name} (${size}) [RECOMMENDED]`));
+        } else {
+          console.log(colors.gray(`    ${acap.name} (${size})`));
+        }
+      });
     }
   }
 
