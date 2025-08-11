@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, Notification, dialog } from 'electron';
 import path from 'path';
+import { spawn } from 'child_process';
 // Lazy load heavy services to improve startup performance
 import { getLogger } from './utils/logger';
 import type { DeploymentEngine } from './services/deploymentEngine';
@@ -36,6 +37,10 @@ let deploymentEngine: DeploymentEngine;
 let stateManager: StateManager;
 let gcpOAuthService: GCPOAuthService;
 let unifiedAuthService: UnifiedAuthService;
+
+// Track all spawned child processes for cleanup
+const childProcesses = new Set<any>();
+let isQuitting = false;
 
 // Lazy initialization function for camera services
 const initializeCameraServices = async () => {
@@ -176,18 +181,29 @@ function createWindow() {
   }
 
   // Clear camera setup state when window is about to close
-  mainWindow.on('close', () => {
-    // Clear camera setup state before closing
-    mainWindow?.webContents.executeJavaScript(`
-      try {
-        localStorage.removeItem('cameraSetupState');
-        localStorage.removeItem('discoveredSpeakers');
-      } catch (error) {
-        console.error('[Main] Failed to clear localStorage on close:', error);
-      }
-    `).catch(() => {
-      // Ignore errors on close
-    });
+  mainWindow.on('close', (event) => {
+    // On Windows, prevent default close to ensure cleanup
+    if (process.platform === 'win32' && !isQuitting) {
+      event.preventDefault();
+      isQuitting = true;
+      
+      // Perform cleanup
+      performWindowsCleanup().then(() => {
+        mainWindow?.destroy();
+      });
+    } else {
+      // Clear camera setup state before closing
+      mainWindow?.webContents.executeJavaScript(`
+        try {
+          localStorage.removeItem('cameraSetupState');
+          localStorage.removeItem('discoveredSpeakers');
+        } catch (error) {
+          console.error('[Main] Failed to clear localStorage on close:', error);
+        }
+      `).catch(() => {
+        // Ignore errors on close
+      });
+    }
   });
   
   mainWindow.on('closed', () => {
@@ -392,9 +408,89 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on('window-all-closed', () => {
-  // Cleanup OAuth server before quitting
-  if (gcpOAuthService) {
+// Enhanced Windows process cleanup
+async function performWindowsCleanup() {
+  logger.info('Performing Windows cleanup...');
+  
+  try {
+    // Kill all tracked child processes
+    for (const proc of childProcesses) {
+      try {
+        if (proc && !proc.killed) {
+          proc.kill('SIGTERM');
+          // Give it time to terminate gracefully
+          await new Promise(resolve => setTimeout(resolve, 100));
+          if (!proc.killed) {
+            proc.kill('SIGKILL');
+          }
+        }
+      } catch (err) {
+        logger.debug('Error killing child process:', err);
+      }
+    }
+    childProcesses.clear();
+    
+    // Windows-specific: Kill any orphaned Electron/Chrome processes
+    if (process.platform === 'win32') {
+      const execName = path.basename(process.execPath);
+      const pid = process.pid;
+      
+      // Kill child processes using Windows tools
+      try {
+        // Use wmic to find and kill child processes
+        await new Promise<void>((resolve) => {
+          const killCmd = spawn('wmic', [
+            'process', 'where',
+            `(ParentProcessId=${pid})`,
+            'delete'
+          ], { shell: true, windowsHide: true });
+          
+          killCmd.on('exit', () => resolve());
+          killCmd.on('error', () => resolve());
+          
+          // Timeout after 2 seconds
+          setTimeout(() => resolve(), 2000);
+        });
+      } catch (err) {
+        logger.debug('WMIC cleanup error:', err);
+      }
+      
+      // Additional cleanup for Puppeteer Chrome instances
+      try {
+        await new Promise<void>((resolve) => {
+          const killChrome = spawn('taskkill', [
+            '/F', '/FI', '"IMAGENAME eq chrome.exe"',
+            '/FI', `"PID ne ${pid}"`
+          ], { shell: true, windowsHide: true });
+          
+          killChrome.on('exit', () => resolve());
+          killChrome.on('error', () => resolve());
+          
+          setTimeout(() => resolve(), 1000);
+        });
+      } catch (err) {
+        logger.debug('Chrome cleanup error:', err);
+      }
+    }
+    
+    // Cleanup services
+    if (gcpOAuthService) {
+      gcpOAuthService.cleanup();
+    }
+    
+    // Clear IPC handlers
+    ipcMain.removeAllListeners();
+    
+  } catch (error) {
+    logger.error('Error during Windows cleanup:', error);
+  }
+}
+
+app.on('window-all-closed', async () => {
+  // Perform cleanup before quitting
+  if (process.platform === 'win32') {
+    await performWindowsCleanup();
+  } else if (gcpOAuthService) {
     gcpOAuthService.cleanup();
   }
   
@@ -403,19 +499,54 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
-  // Ensure cleanup happens before quit
-  if (gcpOAuthService) {
+app.on('before-quit', async (event) => {
+  if (process.platform === 'win32' && !isQuitting) {
+    event.preventDefault();
+    isQuitting = true;
+    
+    await performWindowsCleanup();
+    app.quit();
+  } else if (gcpOAuthService) {
     gcpOAuthService.cleanup();
   }
 });
 
-app.on('will-quit', () => {
+app.on('will-quit', async (event) => {
   // Final cleanup attempt
-  if (gcpOAuthService) {
+  if (process.platform === 'win32' && !isQuitting) {
+    event.preventDefault();
+    await performWindowsCleanup();
+  } else if (gcpOAuthService) {
     gcpOAuthService.cleanup();
   }
 });
+
+// Track child processes spawned by the app
+const originalSpawn = spawn;
+(global as any).spawn = function(...args: any[]) {
+  const proc = originalSpawn.apply(null, args as any);
+  childProcesses.add(proc);
+  
+  proc.on('exit', () => {
+    childProcesses.delete(proc);
+  });
+  
+  return proc;
+};
+
+// Handle uncaught exceptions on Windows
+if (process.platform === 'win32') {
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught exception:', error);
+    performWindowsCleanup().then(() => {
+      process.exit(1);
+    });
+  });
+  
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled rejection at:', promise, 'reason:', reason);
+  });
+}
 
 // IPC Handlers
 
