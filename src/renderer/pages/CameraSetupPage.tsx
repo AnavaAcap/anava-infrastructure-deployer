@@ -87,15 +87,22 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   
   // Load saved state from localStorage
   const loadSavedState = () => {
-    const savedState = localStorage.getItem('cameraSetupState');
-    if (savedState) {
-      try {
-        const state = JSON.parse(savedState);
-        console.log('Restoring camera setup state from localStorage');
-        return state;
-      } catch (error) {
-        console.error('Failed to parse saved camera setup state:', error);
+    try {
+      const savedState = localStorage.getItem('cameraSetupState');
+      if (savedState) {
+        try {
+          const state = JSON.parse(savedState);
+          console.log('Restoring camera setup state from localStorage');
+          return state;
+        } catch (error) {
+          console.error('Failed to parse saved camera setup state:', error);
+          // Clear corrupted state
+          localStorage.removeItem('cameraSetupState');
+        }
       }
+    } catch (error) {
+      console.error('Failed to access localStorage:', error);
+      // localStorage might be disabled or throw in some environments
     }
     return null;
   };
@@ -151,28 +158,33 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
   // Save state to localStorage whenever key values change
   useEffect(() => {
-    const stateToSave = {
-      activeStep,
-      completed,
-      mode,
-      credentials,
-      manualIP,
-      cameras,
-      selectedCamera,
-      selectedACAPFile,
-      licenseKey,
-      sceneDescription,
-      sceneImage,
-      licenseMode,
-      manualLicenseKey,
-      configureSpeaker,
-      speakerConfig,
-      availableSpeakers,
-    };
-    
-    // Don't save state during initial load from savedState
-    if (savedState === null || JSON.stringify(stateToSave) !== JSON.stringify(savedState)) {
-      localStorage.setItem('cameraSetupState', JSON.stringify(stateToSave));
+    try {
+      const stateToSave = {
+        activeStep,
+        completed,
+        mode,
+        credentials,
+        manualIP,
+        cameras,
+        selectedCamera,
+        selectedACAPFile,
+        licenseKey,
+        sceneDescription,
+        sceneImage,
+        licenseMode,
+        manualLicenseKey,
+        configureSpeaker,
+        speakerConfig,
+        availableSpeakers,
+      };
+      
+      // Don't save state during initial load from savedState
+      if (savedState === null || JSON.stringify(stateToSave) !== JSON.stringify(savedState)) {
+        localStorage.setItem('cameraSetupState', JSON.stringify(stateToSave));
+      }
+    } catch (error) {
+      console.error('Failed to save state to localStorage:', error);
+      // Continue without saving - localStorage might be disabled
     }
   }, [
     activeStep,
@@ -778,6 +790,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           }
         }).catch(error => {
           console.error('Background scene capture error:', error);
+          // Report error to user
+          setError(`Background scene capture failed: ${error.message || 'Unknown error'}`);
         });
       } else {
         console.log('No API key available for background scene capture');

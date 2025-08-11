@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, Notification } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, Notification, dialog } from 'electron';
 import path from 'path';
 // Lazy load heavy services to improve startup performance
 import { getLogger } from './utils/logger';
@@ -103,6 +103,21 @@ function createWindow() {
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+    
+    // Clear camera setup state from localStorage on app startup
+    // This ensures users always start fresh when reopening the app
+    mainWindow?.webContents.executeJavaScript(`
+      try {
+        console.log('[Main] Clearing camera setup state from localStorage');
+        localStorage.removeItem('cameraSetupState');
+        localStorage.removeItem('discoveredSpeakers');
+        console.log('[Main] Camera setup state cleared successfully');
+      } catch (error) {
+        console.error('[Main] Failed to clear localStorage:', error);
+      }
+    `).catch(err => {
+      logger.error('Failed to clear localStorage on startup:', err);
+    });
   });
 
   // Configure Content Security Policy for Google Sign-In and Firebase Auth
@@ -124,6 +139,23 @@ function createWindow() {
     });
   });
 
+  // Add event listener to clear localStorage when page loads
+  mainWindow.webContents.once('dom-ready', () => {
+    // Clear camera setup state when DOM is ready
+    mainWindow?.webContents.executeJavaScript(`
+      try {
+        console.log('[Main] DOM Ready - Clearing camera setup state from localStorage');
+        localStorage.removeItem('cameraSetupState');
+        localStorage.removeItem('discoveredSpeakers');
+        console.log('[Main] Camera setup state cleared on DOM ready');
+      } catch (error) {
+        console.error('[Main] Failed to clear localStorage on DOM ready:', error);
+      }
+    `).catch(err => {
+      logger.error('Failed to clear localStorage on DOM ready:', err);
+    });
+  });
+  
   if (isDevelopment) {
     // In development, try to connect to Vite dev server
     mainWindow.loadURL('http://localhost:5173').catch(() => {
@@ -143,6 +175,21 @@ function createWindow() {
     // mainWindow.webContents.openDevTools();
   }
 
+  // Clear camera setup state when window is about to close
+  mainWindow.on('close', () => {
+    // Clear camera setup state before closing
+    mainWindow?.webContents.executeJavaScript(`
+      try {
+        localStorage.removeItem('cameraSetupState');
+        localStorage.removeItem('discoveredSpeakers');
+      } catch (error) {
+        console.error('[Main] Failed to clear localStorage on close:', error);
+      }
+    `).catch(() => {
+      // Ignore errors on close
+    });
+  });
+  
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -201,6 +248,10 @@ app.whenReady().then(async () => {
   gcpOAuthService = new GCPOAuthServiceClass();
   unifiedAuthService = new UnifiedAuthServiceClass();
   
+  // Initialize deployment logger FIRST to capture all events
+  await import('./services/deploymentLogger');
+  logger.info('Deployment logger initialized');
+  
   // Initialize camera services inline
   const { OptimizedCameraDiscoveryService } = await import('./services/camera/optimizedCameraDiscoveryService');
   const { ACAPDeploymentService } = await import('./services/camera/acapDeploymentService');
@@ -216,11 +267,24 @@ app.whenReady().then(async () => {
   new ProjectCreatorService(gcpOAuthService);
   new AuthTestService();
   
-  // Clear auth cache asynchronously (non-blocking)
+  // Clear auth cache asynchronously (non-blocking) with proper error handling
   Promise.all([
-    gcpOAuthService.logout().catch(err => logger.warn('Auth logout failed:', err)),
-    unifiedAuthService.clearAuthCache().catch(err => logger.warn('Clear auth cache failed:', err))
-  ]);
+    gcpOAuthService.logout().catch(err => {
+      logger.error('Critical: Auth logout failed:', err);
+      // Log error but continue
+      return null;
+    }),
+    unifiedAuthService.clearAuthCache().catch(err => {
+      logger.error('Critical: Clear auth cache failed:', err);
+      // Log error but continue
+      return null;
+    })
+  ]).catch(err => {
+    logger.error('Critical initialization error:', err);
+    // Show user notification
+    dialog.showErrorBox('Initialization Error', 
+      'The application encountered an error during startup. Some features may not work correctly.');
+  });
   
   logger.info('Core services initialized');
   

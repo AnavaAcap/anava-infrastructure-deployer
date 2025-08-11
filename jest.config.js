@@ -70,7 +70,7 @@ module.exports = {
       displayName: 'security',
       testMatch: [
         '<rootDir>/tests/security/**/*.test.ts',
-        '<rootDir>/test-suite/security-tests.spec.js'
+        '<rootDir>/src/__tests__/security-tests.spec.ts'
       ],
       preset: 'ts-jest',
       testEnvironment: 'node',
@@ -80,16 +80,29 @@ module.exports = {
     {
       displayName: 'regression',
       testMatch: [
-        '<rootDir>/test-suite/regression-tests.spec.js'
+        '<rootDir>/src/__tests__/regression-tests.spec.ts',
+        '<rootDir>/src/__tests__/regression-tests-fixed.spec.ts'
       ],
+      preset: 'ts-jest',
       testEnvironment: 'node',
-      testTimeout: 30000
+      testTimeout: 30000,
+      globals: {
+        'ts-jest': {
+          isolatedModules: true,
+          tsconfig: {
+            allowJs: true,
+            esModuleInterop: true,
+            skipLibCheck: true
+          }
+        }
+      }
     },
     {
       displayName: 'integration-v178',
       testMatch: [
-        '<rootDir>/test-suite/integration-tests.spec.js'
+        '<rootDir>/src/__tests__/integration-tests.spec.ts'
       ],
+      preset: 'ts-jest',
       testEnvironment: 'node',
       testTimeout: 60000
     },

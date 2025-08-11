@@ -57,6 +57,23 @@
 - **Files**: `CameraSetupPage.tsx` lines 771-773, `DetectionTestModal.tsx` lines 76-92
 - **Key**: Support both legacy MP3 and new PCM audio formats
 
+### ✅ Puppeteer Missing in Production - FIXED (v0.9.181)
+- **Problem**: License activation silently fails with "Cannot find module 'puppeteer'"
+- **Solution**: Add puppeteer to asarUnpack in electron-builder.yml
+- **File**: `electron-builder.yml` - Added puppeteer modules to asarUnpack
+- **Key**: Puppeteer needs to be unpacked from asar to work in production
+
+### ✅ Windows Uninstall Issues - FIXED (v0.9.178)
+- **Problem**: "Failed to uninstall old application files: 2" error during reinstall
+- **Solution**: Comprehensive NSIS installer fixes with process termination and retry logic
+- **Files**: `installer.nsh`, `electron-builder-win.yml`
+- **Key Features**:
+  - Process termination before uninstall (`taskkill /F /IM "Anava Installer.exe"`)
+  - 5-attempt retry logic with delays for locked files
+  - Admin rights verification for proper permissions
+  - Safe cleanup routines with registry verification
+- **Note**: Users experiencing this issue likely tested versions before v0.9.178
+
 ## Build Commands
 
 ### Development
@@ -85,6 +102,24 @@ npm run dist:win
 npx electron dist/main/index.js
 ```
 DevTools will NOT auto-open in production builds (disabled for release)
+
+## Production Logs Location
+**CRITICAL FOR DEBUGGING**: Production logs are now written to TWO locations:
+1. **DEBUG LOGS (ACCESSIBLE)**: `~/anava-debug-logs/anava-vision-{timestamp}.log`
+2. **Standard Location**: 
+   - **macOS**: `/Users/{username}/Library/Logs/anava-installer/anava-vision-{timestamp}.log`
+   - **Windows**: `%USERPROFILE%\AppData\Roaming\anava-installer\logs\anava-vision-{timestamp}.log`
+
+To find and read the most recent log:
+```bash
+# READ DEBUG LOGS FROM HOME DIRECTORY
+ls -lt ~/anava-debug-logs/*.log | head -1
+tail -1000 ~/anava-debug-logs/anava-vision-*.log | grep -A5 -B5 "ERROR\|Failed\|deploy"
+
+# Get most recent log file
+LATEST_LOG=$(ls -t ~/anava-debug-logs/*.log 2>/dev/null | head -1)
+tail -f "$LATEST_LOG"  # Follow log in real-time
+```
 
 ## Critical Technical Knowledge
 

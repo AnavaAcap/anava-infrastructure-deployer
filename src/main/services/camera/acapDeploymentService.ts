@@ -1,4 +1,3 @@
-import { ipcMain } from 'electron';
 import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
@@ -6,6 +5,8 @@ import path from 'path';
 import os from 'os';
 import https from 'https';
 import { Camera } from './cameraDiscoveryService';
+import { registerIPCHandler } from '../../utils/ipcErrorBoundary';
+import { logger } from '../../utils/logger';
 
 export interface DeploymentResult {
   success: boolean;
@@ -34,23 +35,41 @@ export class ACAPDeploymentService {
   }
 
   private setupIPC() {
-    ipcMain.handle('deploy-acap', async (_event, camera: Camera, acapPath: string) => {
+    registerIPCHandler('deploy-acap', async (_event, camera: Camera, acapPath: string) => {
       return this.deployACAP(camera, acapPath);
     });
     
-    ipcMain.handle('deploy-acap-auto', async (_event, camera: Camera, availableAcaps: any[]) => {
-      return this.deployACAPAuto(camera, availableAcaps);
+    registerIPCHandler('deploy-acap-auto', async (_event, camera: Camera, availableAcaps: any[]) => {
+      console.log('[IPC] deploy-acap-auto handler called');
+      console.log('[IPC] Camera:', camera?.id, camera?.ip);
+      console.log('[IPC] Available ACAPs:', availableAcaps?.length);
+      logger.info('[IPC] deploy-acap-auto handler called', { 
+        cameraId: camera?.id, 
+        cameraIp: camera?.ip,
+        acapCount: availableAcaps?.length 
+      });
+      
+      try {
+        const result = await this.deployACAPAuto(camera, availableAcaps);
+        console.log('[IPC] deploy-acap-auto result:', result);
+        logger.info('[IPC] deploy-acap-auto completed', { success: result?.success });
+        return result;
+      } catch (error: any) {
+        console.error('[IPC] deploy-acap-auto ERROR:', error);
+        logger.error('[IPC] deploy-acap-auto failed', error);
+        throw error;
+      }
     });
     
-    ipcMain.handle('uninstall-acap', async (_event, camera: Camera, appName: string) => {
+    registerIPCHandler('uninstall-acap', async (_event, camera: Camera, appName: string) => {
       return this.uninstallACAP(camera, appName);
     });
     
-    ipcMain.handle('list-installed-acaps', async (_event, camera: Camera) => {
+    registerIPCHandler('list-installed-acaps', async (_event, camera: Camera) => {
       return this.listInstalledACAPs(camera);
     });
     
-    ipcMain.handle('get-camera-firmware', async (_event, camera: Camera) => {
+    registerIPCHandler('get-camera-firmware', async (_event, camera: Camera) => {
       return this.getCameraFirmwareInfo(camera);
     });
   }
@@ -277,10 +296,24 @@ export class ACAPDeploymentService {
   async deployACAPAuto(camera: Camera, availableAcaps: any[]): Promise<DeploymentResult> {
     try {
       console.log(`[deployACAPAuto] ========== AUTO DEPLOYMENT STARTING ==========`);
+      console.log(`[deployACAPAuto] Camera:`, { id: camera.id, ip: camera.ip, model: camera.model });
       console.log(`[deployACAPAuto] Available ACAPs:`, availableAcaps.map(a => a.filename));
       
+      logger.info('[deployACAPAuto] Starting auto deployment', {
+        cameraId: camera.id,
+        cameraIp: camera.ip,
+        cameraModel: camera.model,
+        acapCount: availableAcaps.length
+      });
+      
       // Get camera firmware info with enhanced detection
+      console.log(`[deployACAPAuto] Getting firmware info for ${camera.ip}...`);
+      logger.info('[deployACAPAuto] Getting firmware info', { cameraIp: camera.ip });
+      
       const firmwareInfo = await this.getCameraFirmwareInfo(camera);
+      
+      console.log(`[deployACAPAuto] Firmware info received:`, firmwareInfo);
+      logger.info('[deployACAPAuto] Firmware info received', firmwareInfo);
       console.log(`[deployACAPAuto] Camera firmware: ${firmwareInfo.firmwareVersion} (${firmwareInfo.osVersion})`);
       console.log(`[deployACAPAuto] Camera architecture: ${firmwareInfo.architecture}`);
       console.log(`[deployACAPAuto] Detection method: ${firmwareInfo.detectionMethod}`);

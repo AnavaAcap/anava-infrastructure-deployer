@@ -11,6 +11,7 @@
  * - State persistence across steps
  */
 
+// @ts-nocheck
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import axios from 'axios';
 import EventEmitter from 'events';

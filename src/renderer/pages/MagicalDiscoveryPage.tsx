@@ -164,6 +164,24 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
         const firstCamera = result.cameras[0];
         const apiKey = (window as any).__magicalApiKey;
         
+        // Add retry logic for race condition
+        if (!apiKey) {
+          console.warn('API key not yet available, waiting...');
+          let retries = 0;
+          const waitForApiKey = setInterval(() => {
+            const key = (window as any).__magicalApiKey;
+            if (key || retries++ > 10) {
+              clearInterval(waitForApiKey);
+              if (!key) {
+                console.error('API key never became available');
+                setError('Failed to initialize. Please refresh and try again.');
+                return;
+              }
+            }
+          }, 200);
+          return;
+        }
+        
         if (apiKey && !isConnecting) {
           isConnecting = true; // Mark as connecting
           
