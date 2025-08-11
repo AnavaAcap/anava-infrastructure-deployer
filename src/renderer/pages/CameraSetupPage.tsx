@@ -111,7 +111,6 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [sceneImage, setSceneImage] = useState('');
   const [licenseMode, setLicenseMode] = useState<'trial' | 'manual'>('trial');
   const [manualLicenseKey, setManualLicenseKey] = useState('');
-  const [hasPreDiscoveredCameras, setHasPreDiscoveredCameras] = useState(false);
   
   // Speaker configuration state
   const [configureSpeaker, setConfigureSpeaker] = useState(false);
@@ -923,46 +922,6 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               </Button>
             </Box>
 
-            {/* Show dropdown if cameras were pre-discovered, otherwise show "No Cameras" message */}
-            {hasPreDiscoveredCameras ? (
-              <Box sx={{ mb: 3 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Select Camera from Network</InputLabel>
-                  <Select
-                    value={selectedCamera?.id || ''}
-                    label="Select Camera from Network"
-                    onChange={async (e: any) => {
-                      const cameraId = e.target.value;
-                      const camera = cameras.find(c => c.id === cameraId);
-                      if (camera) {
-                        setSelectedCamera(camera);
-                      }
-                    }}
-                  >
-                    {cameras.map((camera) => (
-                      <MenuItem key={camera.id} value={camera.id}>
-                        {camera.name} - {camera.ip} ({camera.model})
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                {cameras.length > 0 && (
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                    {cameras.length} camera{cameras.length !== 1 ? 's' : ''} discovered on your network
-                  </Typography>
-                )}
-              </Box>
-            ) : (
-              <Box sx={{ mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: 1, borderColor: 'divider' }}>
-                <Typography variant="body2" color="text.secondary" textAlign="center">
-                  No Cameras Automatically Discovered
-                </Typography>
-              </Box>
-            )}
-
-            <Divider sx={{ my: 3 }}>
-              <Typography variant="caption" color="text.secondary">OR</Typography>
-            </Divider>
 
             <RadioGroup value={mode} onChange={(e) => setMode(e.target.value as any)}>
               <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
