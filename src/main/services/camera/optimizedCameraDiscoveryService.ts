@@ -248,9 +248,9 @@ export class OptimizedCameraDiscoveryService {
       const { fastNetworkScan } = require('./fastNetworkScanner');
       
       // Send progress updates to renderer
-      return fastNetworkScan(options.credentials, (ip: string, status: string) => {
+      return fastNetworkScan(options.credentials, (ip: string, status: string, total?: number) => {
         if (event.sender && !event.sender.isDestroyed()) {
-          event.sender.send('scan-progress', { ip, status });
+          event.sender.send('scan-progress', { ip, status, total });
         }
       });
     });
