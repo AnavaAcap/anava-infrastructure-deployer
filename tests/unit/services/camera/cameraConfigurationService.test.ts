@@ -9,7 +9,33 @@ import crypto from 'crypto';
 
 // Mock dependencies
 jest.mock('axios');
-jest.mock('electron', () => require('../../../__mocks__/electron'));
+jest.mock('electron', () => ({
+  app: {
+    getPath: jest.fn((path) => `/mock/path/${path}`),
+    getVersion: jest.fn(() => '1.0.0'),
+    getName: jest.fn(() => 'anava-installer'),
+    on: jest.fn(),
+    whenReady: jest.fn(() => Promise.resolve())
+  },
+  ipcMain: {
+    handle: jest.fn(),
+    on: jest.fn(),
+    removeHandler: jest.fn()
+  },
+  BrowserWindow: jest.fn().mockImplementation(() => ({
+    loadURL: jest.fn(),
+    on: jest.fn(),
+    webContents: {
+      send: jest.fn(),
+      on: jest.fn()
+    }
+  })),
+  dialog: {
+    showMessageBox: jest.fn(),
+    showOpenDialog: jest.fn(),
+    showSaveDialog: jest.fn()
+  }
+}));
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
