@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-11T22:09:18.745Z",
+  "timestamp": "2025-08-11T23:12:57.704Z",
   "environment": {
     "node": "v20.19.2",
     "platform": "darwin",
@@ -9,272 +9,342 @@
   },
   "testSuites": [
     {
-      "name": "/tests/unit/services/deploymentEngine.test.ts",
-      "duration": 8572,
+      "name": "/tests/security/vulnerabilityScanning.test.ts",
+      "duration": 0,
+      "tests": []
+    },
+    {
+      "name": "/tests/security/cameraCredentials.test.ts",
+      "duration": 0,
+      "tests": []
+    },
+    {
+      "name": "/src/__tests__/security-tests.spec.ts",
+      "duration": 12629,
       "tests": [
         {
-          "title": "should initialize with correct dependencies",
-          "fullName": "DeploymentEngine Constructor and Initialization should initialize with correct dependencies",
-          "duration": 4,
-          "status": "passed",
+          "title": "should sanitize XSS payloads before storing in localStorage",
+          "fullName": "Security Test Suite 1. localStorage Data Sanitization should sanitize XSS payloads before storing in localStorage",
+          "duration": 3,
+          "status": "failed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30934040,
-            "external": 2098092,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31240520,
+            "external": 2117944,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should initialize deployers when OAuth client is available",
-          "fullName": "DeploymentEngine Constructor and Initialization should initialize deployers when OAuth client is available",
+          "title": "should validate JSON structure before parsing from localStorage",
+          "fullName": "Security Test Suite 1. localStorage Data Sanitization should validate JSON structure before parsing from localStorage",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31242440,
+            "external": 2117984,
+            "arrayBuffers": 57128
+          }
+        },
+        {
+          "title": "should limit localStorage data size to prevent DoS",
+          "fullName": "Security Test Suite 1. localStorage Data Sanitization should limit localStorage data size to prevent DoS",
+          "duration": 9,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31242728,
+            "external": 2117984,
+            "arrayBuffers": 57128
+          }
+        },
+        {
+          "title": "should encrypt sensitive data in localStorage",
+          "fullName": "Security Test Suite 1. localStorage Data Sanitization should encrypt sensitive data in localStorage",
+          "duration": 55,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31243016,
+            "external": 2117984,
+            "arrayBuffers": 57128
+          }
+        },
+        {
+          "title": "should not log credentials in plaintext",
+          "fullName": "Security Test Suite 2. Credential Handling Security should not log credentials in plaintext",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30935960,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31243304,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should handle missing OAuth client gracefully",
-          "fullName": "DeploymentEngine Constructor and Initialization should handle missing OAuth client gracefully",
+          "title": "should clear credentials from memory after use",
+          "fullName": "Security Test Suite 2. Credential Handling Security should clear credentials from memory after use",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31243592,
+            "external": 2117984,
+            "arrayBuffers": 57128
+          }
+        },
+        {
+          "title": "should use secure random tokens for session management",
+          "fullName": "Security Test Suite 2. Credential Handling Security should use secure random tokens for session management",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30936248,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31243880,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should start a new deployment with valid config",
-          "fullName": "DeploymentEngine startDeployment should start a new deployment with valid config",
-          "duration": 2,
+          "title": "should reject SQL injection attempts in camera IP inputs",
+          "fullName": "Security Test Suite 3. Input Validation & Injection Prevention should reject SQL injection attempts in camera IP inputs",
+          "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30936536,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31244168,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should initialize deployers before starting deployment",
-          "fullName": "DeploymentEngine startDeployment should initialize deployers before starting deployment",
-          "duration": 2,
+          "title": "should reject command injection in network range inputs",
+          "fullName": "Security Test Suite 3. Input Validation & Injection Prevention should reject command injection in network range inputs",
+          "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30936824,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31244456,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should reset pause state when starting new deployment",
-          "fullName": "DeploymentEngine startDeployment should reset pause state when starting new deployment",
+          "title": "should sanitize file paths to prevent path traversal",
+          "fullName": "Security Test Suite 3. Input Validation & Injection Prevention should sanitize file paths to prevent path traversal",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30937112,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31246776,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should emit progress events during deployment",
-          "fullName": "DeploymentEngine startDeployment should emit progress events during deployment",
-          "duration": 2,
+          "title": "should validate port numbers are within valid range",
+          "fullName": "Security Test Suite 3. Input Validation & Injection Prevention should validate port numbers are within valid range",
+          "duration": 10,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30937400,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31247000,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should resume an existing deployment",
-          "fullName": "DeploymentEngine resumeDeployment should resume an existing deployment",
+          "title": "should limit concurrent network connections to prevent DoS",
+          "fullName": "Security Test Suite 4. Network Scanning Boundaries & Limits should limit concurrent network connections to prevent DoS",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30937688,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31247400,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should throw error if deployment not found",
-          "fullName": "DeploymentEngine resumeDeployment should throw error if deployment not found",
-          "duration": 25,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30937976,
-            "external": 2098132,
-            "arrayBuffers": 37276
-          }
-        },
-        {
-          "title": "should throw error if deployment ID does not match",
-          "fullName": "DeploymentEngine resumeDeployment should throw error if deployment ID does not match",
+          "title": "should enforce timeout on network scans",
+          "fullName": "Security Test Suite 4. Network Scanning Boundaries & Limits should enforce timeout on network scans",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30938264,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31247720,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should pause deployment and emit progress event",
-          "fullName": "DeploymentEngine pauseDeployment should pause deployment and emit progress event",
+          "title": "should only scan private IP ranges",
+          "fullName": "Security Test Suite 4. Network Scanning Boundaries & Limits should only scan private IP ranges",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31248040,
+            "external": 2117984,
+            "arrayBuffers": 57128
+          }
+        },
+        {
+          "title": "should rate limit scan requests from same source",
+          "fullName": "Security Test Suite 4. Network Scanning Boundaries & Limits should rate limit scan requests from same source",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31248360,
+            "external": 2117984,
+            "arrayBuffers": 57128
+          }
+        },
+        {
+          "title": "should verify camera credentials before operations",
+          "fullName": "Security Test Suite 5. Authorization Checks should verify camera credentials before operations",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31248680,
+            "external": 2117984,
+            "arrayBuffers": 57128
+          }
+        },
+        {
+          "title": "should implement session timeout for idle connections",
+          "fullName": "Security Test Suite 5. Authorization Checks should implement session timeout for idle connections",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30938488,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31249000,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should handle deployment errors gracefully",
-          "fullName": "DeploymentEngine Error Handling should handle deployment errors gracefully",
-          "duration": 1,
+          "title": "should generate and validate CSRF tokens",
+          "fullName": "Security Test Suite 6. CSRF Protection should generate and validate CSRF tokens",
+          "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30938888,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31249320,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should handle OAuth refresh errors",
-          "fullName": "DeploymentEngine Error Handling should handle OAuth refresh errors",
-          "duration": 1,
+          "title": "should encrypt API keys before storage",
+          "fullName": "Security Test Suite 7. Sensitive Data Encryption should encrypt API keys before storage",
+          "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30939208,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31250000,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         },
         {
-          "title": "should emit correct events during deployment lifecycle",
-          "fullName": "DeploymentEngine Event Emissions should emit correct events during deployment lifecycle",
-          "duration": 1,
+          "title": "should use secure key derivation for passwords",
+          "fullName": "Security Test Suite 7. Sensitive Data Encryption should use secure key derivation for passwords",
+          "duration": 31,
           "status": "passed",
           "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30939528,
-            "external": 2098132,
-            "arrayBuffers": 37276
-          }
-        },
-        {
-          "title": "should handle IAM propagation delays correctly",
-          "fullName": "DeploymentEngine Service Account Propagation Handling should handle IAM propagation delays correctly",
-          "duration": 2,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 65208320,
-            "heapTotal": 33439744,
-            "heapUsed": 30939848,
-            "external": 2098132,
-            "arrayBuffers": 37276
+            "rss": 63930368,
+            "heapTotal": 33177600,
+            "heapUsed": 31250320,
+            "external": 2117984,
+            "arrayBuffers": 57128
           }
         }
       ]
-    },
-    {
-      "name": "/tests/unit/services/camera/cameraConfigurationService.test.ts",
-      "duration": 0,
-      "tests": []
     }
   ],
   "summary": {
-    "totalDuration": 8572,
-    "avgTestDuration": 571.4666666666667,
+    "totalDuration": 12629,
+    "avgTestDuration": 631.45,
     "slowestTests": [
       {
-        "name": "DeploymentEngine resumeDeployment should throw error if deployment not found",
-        "duration": 25,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+        "name": "Security Test Suite 1. localStorage Data Sanitization should encrypt sensitive data in localStorage",
+        "duration": 55,
+        "suite": "/src/__tests__/security-tests.spec.ts"
       },
       {
-        "name": "DeploymentEngine Constructor and Initialization should initialize with correct dependencies",
-        "duration": 4,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+        "name": "Security Test Suite 7. Sensitive Data Encryption should use secure key derivation for passwords",
+        "duration": 31,
+        "suite": "/src/__tests__/security-tests.spec.ts"
       },
       {
-        "name": "DeploymentEngine startDeployment should start a new deployment with valid config",
-        "duration": 2,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+        "name": "Security Test Suite 3. Input Validation & Injection Prevention should validate port numbers are within valid range",
+        "duration": 10,
+        "suite": "/src/__tests__/security-tests.spec.ts"
       },
       {
-        "name": "DeploymentEngine startDeployment should initialize deployers before starting deployment",
-        "duration": 2,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+        "name": "Security Test Suite 1. localStorage Data Sanitization should limit localStorage data size to prevent DoS",
+        "duration": 9,
+        "suite": "/src/__tests__/security-tests.spec.ts"
       },
       {
-        "name": "DeploymentEngine startDeployment should emit progress events during deployment",
-        "duration": 2,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+        "name": "Security Test Suite 1. localStorage Data Sanitization should sanitize XSS payloads before storing in localStorage",
+        "duration": 3,
+        "suite": "/src/__tests__/security-tests.spec.ts"
       },
       {
-        "name": "DeploymentEngine Service Account Propagation Handling should handle IAM propagation delays correctly",
-        "duration": 2,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
-      },
-      {
-        "name": "DeploymentEngine Constructor and Initialization should initialize deployers when OAuth client is available",
+        "name": "Security Test Suite 2. Credential Handling Security should not log credentials in plaintext",
         "duration": 1,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+        "suite": "/src/__tests__/security-tests.spec.ts"
       },
       {
-        "name": "DeploymentEngine Constructor and Initialization should handle missing OAuth client gracefully",
+        "name": "Security Test Suite 2. Credential Handling Security should use secure random tokens for session management",
         "duration": 1,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+        "suite": "/src/__tests__/security-tests.spec.ts"
       },
       {
-        "name": "DeploymentEngine startDeployment should reset pause state when starting new deployment",
+        "name": "Security Test Suite 3. Input Validation & Injection Prevention should sanitize file paths to prevent path traversal",
         "duration": 1,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+        "suite": "/src/__tests__/security-tests.spec.ts"
       },
       {
-        "name": "DeploymentEngine resumeDeployment should resume an existing deployment",
+        "name": "Security Test Suite 4. Network Scanning Boundaries & Limits should limit concurrent network connections to prevent DoS",
         "duration": 1,
-        "suite": "/tests/unit/services/deploymentEngine.test.ts"
+        "suite": "/src/__tests__/security-tests.spec.ts"
+      },
+      {
+        "name": "Security Test Suite 4. Network Scanning Boundaries & Limits should enforce timeout on network scans",
+        "duration": 1,
+        "suite": "/src/__tests__/security-tests.spec.ts"
       }
     ],
     "memoryUsage": {
-      "rss": "45.69 MB",
-      "heapTotal": "32.89 MB",
-      "heapUsed": "29.62 MB",
-      "external": "2.00 MB"
+      "rss": "62.72 MB",
+      "heapTotal": "34.89 MB",
+      "heapUsed": "30.00 MB",
+      "external": "2.02 MB"
     }
   },
   "regressions": []
