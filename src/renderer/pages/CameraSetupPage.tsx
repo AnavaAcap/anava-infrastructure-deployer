@@ -10,6 +10,7 @@ import {
   Alert,
   AlertTitle,
   CircularProgress,
+  LinearProgress,
   IconButton,
   InputAdornment,
   Stepper,
@@ -91,6 +92,11 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [manualIP, setManualIP] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<{ current: number; total: number; foundCount: number }>({ 
+    current: 0, 
+    total: 254, 
+    foundCount: 0 
+  });
   const [connecting, setConnecting] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
@@ -337,69 +343,40 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   };
 
   const handleNetworkScan = async () => {
-    // Clear any existing cameras and reset state for a fresh scan
+    // Clear state and start fresh scan
     setScanning(true);
     setCameras([]);
     setError(null);
     setSelectedCamera(null);
+    setScanProgress({ current: 0, total: 254, foundCount: 0 });
+    
+    // Set up progress listener
+    const unsubscribe = (window.electronAPI as any).onScanProgress?.((data: { ip: string; status: string }) => {
+      setScanProgress(prev => ({
+        ...prev,
+        current: prev.current + 1,
+        foundCount: data.status === 'found' ? prev.foundCount + 1 : prev.foundCount
+      }));
+      
+      if (data.status === 'found') {
+        setDeploymentStatus(`Found camera at ${data.ip}`);
+      }
+    });
     
     try {
-      // Show scanning status
-      setDeploymentStatus('Starting fresh network scan...');
+      // Show initial status
+      setDeploymentStatus('Scanning network for cameras (port 443)...');
       
-      // Always perform a fresh scan when user clicks the button
-      // This ensures we get the latest camera state on the network
-      console.log('Starting fresh network scan - ignoring any cached results...');
-      
-      // Add timeout handling for permission case
-      let results = [];
-      let scanAttempts = 0;
-      const maxAttempts = 2;
-      
-      while (scanAttempts < maxAttempts) {
-        scanAttempts++;
-        
-        try {
-          // Set a reasonable timeout for the scan
-          const scanPromise = (window.electronAPI as any).enhancedScanNetwork?.({
-            credentials: [{
-              username: credentials.username,
-              password: credentials.password,
-            }],
-            concurrent: 50,
-            timeout: 2000,
-          });
-          
-          // Create a timeout promise
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Scan timeout')), 30000); // 30 second timeout
-          });
-          
-          // Race between scan and timeout
-          results = await Promise.race([scanPromise, timeoutPromise]);
-          
-          // If we got results (even empty array), break the loop
-          if (Array.isArray(results)) {
-            break;
-          }
-        } catch (timeoutError) {
-          console.log(`Scan attempt ${scanAttempts} failed or timed out`);
-          
-          if (scanAttempts === 1) {
-            // First attempt failed, might be permission issue
-            setDeploymentStatus('Network scan requires permission. Please grant permission and scanning will continue...');
-            // Wait a bit for user to grant permission
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            setDeploymentStatus('Retrying network scan...');
-          } else {
-            // Second attempt also failed
-            throw new Error('Network scan failed after retries');
-          }
+      // Use the FAST scanner
+      const results = await (window.electronAPI as any).fastNetworkScan?.({
+        credentials: {
+          username: credentials.username,
+          password: credentials.password,
         }
-      }
+      });
       
       if (!Array.isArray(results)) {
-        results = [];
+        throw new Error('Invalid scan response');
       }
 
       const formattedCameras: CameraInfo[] = results.map((cam: any) => ({
@@ -450,6 +427,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       setDeploymentStatus('Scan failed. Please check permissions and try again.');
     } finally {
       setScanning(false);
+      // Clean up listener
+      if (unsubscribe) unsubscribe();
     }
   };
 
@@ -1047,8 +1026,20 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                       disabled={scanning}
                       startIcon={scanning ? <CircularProgress size={20} /> : <NetworkCheckIcon />}
                     >
-                      {scanning ? 'Scanning...' : 'Start Network Scan'}
+                      {scanning ? `Scanning... (${scanProgress.current}/${scanProgress.total})` : 'Start Network Scan'}
                     </Button>
+                    
+                    {scanning && (
+                      <Box sx={{ mt: 2, width: '100%', maxWidth: 400 }}>
+                        <LinearProgress 
+                          variant="determinate" 
+                          value={(scanProgress.current / scanProgress.total) * 100} 
+                        />
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                          Scanning IPs: {scanProgress.current}/{scanProgress.total} • Found: {scanProgress.foundCount}
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
                 </Collapse>
               </Paper>

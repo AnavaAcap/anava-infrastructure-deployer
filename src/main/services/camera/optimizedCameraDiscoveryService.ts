@@ -152,10 +152,8 @@ export class OptimizedCameraDiscoveryService {
     
     this.setupIPC();
     
-    // Initialize modules and start discovery asynchronously
-    this.initializeDiscovery().catch(err => {
-      safeConsole.error('Failed to initialize discovery:', err);
-    });
+    // NO PRE-SCANNING - only scan when user explicitly requests it
+    // Initialize modules will happen on first actual scan
   }
 
   private setupIPC() {
@@ -292,6 +290,18 @@ export class OptimizedCameraDiscoveryService {
     
     ipcMain.handle('enhanced-scan-network', async (event, options?: DiscoveryOptions) => {
       return this.enhancedScanNetwork(event.sender, options);
+    });
+    
+    // FAST network scanner
+    ipcMain.handle('fast-network-scan', async (event, options: { credentials: { username: string; password: string } }) => {
+      const { fastNetworkScan } = require('./fastNetworkScanner');
+      
+      // Send progress updates to renderer
+      return fastNetworkScan(options.credentials, (ip: string, status: string) => {
+        if (event.sender && !event.sender.isDestroyed()) {
+          event.sender.send('scan-progress', { ip, status });
+        }
+      });
     });
     
     ipcMain.handle('discover-service-cameras', async (event) => {
