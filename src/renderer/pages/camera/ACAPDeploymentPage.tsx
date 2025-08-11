@@ -462,25 +462,28 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                 );
                 
                 console.log('[LICENSE] License activation result:', licenseResult);
-                window.electronAPI.send('deployment-log', 'info', '[LICENSE] License activation succeeded', licenseResult);
-                addLog(`✓ License key activated successfully`);
                 
-                // Verify license was actually applied
-                console.log('[LICENSE] Verifying license status...');
-                try {
-                  const verifyUrl = `http://${currentIP}/axis-cgi/applications/list.cgi`;
-                  const response = await window.electronAPI.makeAuthenticatedRequest(
-                    verifyUrl,
-                    'GET',
-                    credentials[camera.id].username,
-                    credentials[camera.id].password
-                  );
-                  console.log('[LICENSE] License verification response:', response);
-                  if (response && response.includes('BatonAnalytic')) {
-                    addLog(`✓ License verified - ACAP is licensed and ready`);
-                  }
-                } catch (verifyError) {
-                  console.log('[LICENSE] Could not verify license status:', verifyError);
+                // Check the result
+                if (licenseResult?.licensed === true) {
+                  // Definitely licensed
+                  console.log('[LICENSE] ✅ License VERIFIED as active!');
+                  window.electronAPI.send('deployment-log', 'info', '[LICENSE] License activation VERIFIED', licenseResult);
+                  addLog(`✅ License key activated and verified successfully!`);
+                  addLog(`✅ ACAP is licensed and ready to use`);
+                } else if (licenseResult?.licensed === 'uncertain') {
+                  // Activation accepted but couldn't verify
+                  console.log('[LICENSE] License activation accepted but verification uncertain');
+                  window.electronAPI.send('deployment-log', 'warn', '[LICENSE] License activation uncertain', licenseResult);
+                  addLog(`✓ License key activation accepted`);
+                  addLog(`⚠ Please verify license status in camera web UI`);
+                } else if (licenseResult?.success) {
+                  // Generic success
+                  console.log('[LICENSE] License activation reported success');
+                  window.electronAPI.send('deployment-log', 'info', '[LICENSE] License activation succeeded', licenseResult);
+                  addLog(`✓ License key activated successfully`);
+                } else {
+                  // This shouldn't happen if the method throws on failure
+                  throw new Error('Unexpected license activation response');
                 }
               } catch (licenseError: any) {
                 console.log('[LICENSE] >>> LICENSE ERROR CAUGHT <<<');
@@ -494,7 +497,50 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                   stack: licenseError?.stack,
                   cameraId: camera.id
                 });
-                if (licenseError.message?.includes('already licensed')) {
+                
+                // Check for network/connectivity errors indicating camera is down
+                if (licenseError.message && (
+                    licenseError.message.includes('ECONNREFUSED') ||
+                    licenseError.message.includes('ETIMEDOUT') ||
+                    licenseError.message.includes('EHOSTDOWN') ||
+                    licenseError.message.includes('ENETUNREACH') ||
+                    licenseError.message.includes('ENOTFOUND') ||
+                    licenseError.message.includes('socket hang up') ||
+                    licenseError.message.includes('connect ECONNREFUSED')
+                )) {
+                  console.log('[LICENSE] CRITICAL: Camera is not responding');
+                  window.electronAPI.send('deployment-log', 'error', '[LICENSE] CRITICAL: Camera appears to be down');
+                  
+                  // Show prominent error in UI log
+                  addLog(``);
+                  addLog(`❌❌❌ CRITICAL ERROR ❌❌❌`);
+                  addLog(`Camera ${camera.model} at ${currentIP} is NOT RESPONDING!`);
+                  addLog(`The camera appears to be offline or has crashed.`);
+                  addLog(`Please manually restart the camera and try again.`);
+                  addLog(``);
+                  
+                  // Track as critical failure
+                  setLicenseFailures(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(camera.id, `🔴 CAMERA OFFLINE - Not responding at ${currentIP}`);
+                    return newMap;
+                  });
+                  
+                  // Mark deployment as failed
+                  setDeploymentStatus(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(camera.id, {
+                      cameraId: camera.id,
+                      status: 'error',
+                      message: `Camera offline/crashed - not responding`,
+                    });
+                    return newMap;
+                  });
+                  
+                  // Don't continue - this camera is dead
+                  throw new Error(`Camera ${camera.model} is offline. Manual restart required.`);
+                  
+                } else if (licenseError.message?.includes('already licensed')) {
                   console.log('[LICENSE] Camera already licensed - this is OK');
                   window.electronAPI.send('deployment-log', 'info', '[LICENSE] Camera already has valid license');
                   addLog(`✓ Camera already has a valid license`);
@@ -529,16 +575,33 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                     setLicenseFailures(prev => new Map(prev).set(camera.id, 'Unable to verify license'));
                   }
                 } else {
-                  console.log('[LICENSE] Unknown license error');
-                  window.electronAPI.send('deployment-log', 'error', `[LICENSE] Unknown error: ${licenseError.message}`);
-                  addLog(`⚠ License activation failed: ${licenseError.message}`);
-                  // Track failure for retry
+                  console.log('[LICENSE] Unknown license error - THIS IS FATAL');
+                  window.electronAPI.send('deployment-log', 'error', `[LICENSE] FATAL ERROR: ${licenseError.message}`);
+                  
+                  // Show clear error in logs
+                  addLog(``);
+                  addLog(`❌ LICENSE ACTIVATION FAILED`);
+                  addLog(`Error: ${licenseError.message}`);
+                  addLog(`The ACAP will NOT work without a valid license!`);
+                  addLog(``);
+                  
+                  // Track failure
                   setLicenseFailures(prev => new Map(prev).set(camera.id, licenseError.message));
+                  
+                  // Mark as error - this is FATAL
+                  setDeploymentStatus(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(camera.id, {
+                      cameraId: camera.id,
+                      status: 'error',
+                      message: `License activation failed - ACAP will not work`,
+                    });
+                    return newMap;
+                  });
+                  
+                  // THROW ERROR - License failure is FATAL
+                  throw new Error(`License activation failed for ${camera.model}: ${licenseError.message}. The ACAP will not function without a valid license.`);
                 }
-                
-                console.log('[LICENSE] License error was non-fatal, continuing...');
-                window.electronAPI.send('deployment-log', 'info', '[LICENSE] Continuing despite license error');
-                // Non-fatal - continue with deployment
               }
             } else {
               console.log('[LICENSE] No anavaKey in deployment config, skipping license');
@@ -608,31 +671,62 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
         addLog(`Failed deployments: ${errorCount}`);
       }
       
-      // Check if we have license failures that would prevent the app from working
-      const criticalLicenseFailures = Array.from(licenseFailures.values()).filter(
-        msg => !msg.includes('already licensed') && !msg.includes('timeout')
+      // Check if we have ANY license failures
+      const hasLicenseFailures = licenseFailures.size > 0;
+      
+      // Check what kind of failures we have
+      const criticalFailures = Array.from(licenseFailures.values()).filter(
+        msg => !msg.includes('already licensed') && 
+               !msg.includes('verification uncertain') &&
+               !msg.includes('verify manually')
       );
       
-      // Only advance if we had at least one success AND no critical license failures
+      // Only advance if we had successes AND no critical license failures
       if (successCount > 0) {
-        if (criticalLicenseFailures.length > 0 && licenseFailures.size === cameras.length) {
-          console.log('[Deploy] WARNING: All cameras have license issues');
-          addLog(`\n⚠️ WARNING: License activation had issues on all cameras`);
-          addLog(`The ACAP may not function properly without a valid license.`);
-          addLog(`You may need to manually activate licenses or retry.`);
-          setError('License activation failed on all cameras. The ACAP may not work properly.');
-          // Don't advance if ALL cameras failed licensing
+        if (criticalFailures.length > 0) {
+          // Critical license failures - do NOT advance
+          console.log('[Deploy] CRITICAL: License activation had critical failures - BLOCKING');
+          console.log('[Deploy] Critical failures on', criticalFailures.length, 'cameras');
+          
+          addLog(``);
+          addLog(`❌ DEPLOYMENT BLOCKED - LICENSE ISSUES ❌`);
+          addLog(`Critical license failures on ${criticalFailures.length} camera(s)`);
+          addLog(`The ACAP will NOT function properly without valid licenses!`);
+          addLog(``);
+          addLog(`Issues detected:`);
+          licenseFailures.forEach((msg, cameraId) => {
+            const camera = cameras.find(c => c.id === cameraId);
+            if (!msg.includes('already licensed')) {
+              addLog(`  • ${camera?.model || cameraId}: ${msg}`);
+            }
+          });
+          addLog(``);
+          addLog(`Please resolve these issues before proceeding.`);
+          
+          setError(`Critical license failures on ${criticalFailures.length} camera(s). Cannot proceed.`);
+          
+          // DO NOT ADVANCE - stay on current step
+          console.log('[Deploy] Staying on step 1 due to critical license failures');
+        } else if (hasLicenseFailures) {
+          // Non-critical issues (uncertain verification) - allow proceeding with warning
+          console.log('[Deploy] Some license verifications were uncertain but allowing proceed');
+          addLog(``);
+          addLog(`⚠ Some licenses could not be fully verified`);
+          addLog(`Please check the camera web UI to confirm licenses are active`);
+          addLog(``);
+          addLog(`✅ Proceeding to next step...`);
+          
+          setActiveStep(2);
         } else {
-          console.log('[Deploy] SUCCESS! Advancing to step 2 - Verify Deployment');
+          // Success - can advance
+          console.log('[Deploy] SUCCESS! All cameras deployed and licensed properly');
           console.log('[Deploy] Final counts - Success:', successCount, 'Error:', errorCount);
-          console.log('[Deploy] License failures:', licenseFailures.size, 'of', cameras.length);
           console.log('[Deploy] Setting activeStep from', activeStep, 'to 2');
           window.electronAPI.send('deployment-log', 'info', `Deployment completed: ${successCount} success, ${errorCount} failed`);
           window.electronAPI.send('deployment-log', 'info', `[STATE] Advancing from step ${activeStep} to step 2`);
           
-          if (licenseFailures.size > 0) {
-            addLog(`\n⚠️ Note: ${licenseFailures.size} camera(s) had license activation issues but ACAP was deployed.`);
-          }
+          addLog(``);
+          addLog(`✅ Deployment successful on all cameras!`);
           
           setActiveStep(2);
           // Force update the UI

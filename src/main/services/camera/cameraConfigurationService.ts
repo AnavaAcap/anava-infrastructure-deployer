@@ -764,6 +764,8 @@ export class CameraConfigurationService {
       try {
         // Try direct activation first (without puppeteer)
         console.log('[CameraConfig] Using direct license activation method...');
+        console.log('[CameraConfig] Camera IP:', ip);
+        console.log('[CameraConfig] Application:', applicationName);
         
         // Construct the license activation URL
         const licenseUrl = `http://${ip}/local/${applicationName}/license.cgi`;
@@ -776,10 +778,12 @@ export class CameraConfigurationService {
         
         console.log('[CameraConfig] Activating license with payload:', { 
           deviceId, 
-          keyLength: licenseKey.length 
+          keyLength: licenseKey.length,
+          url: licenseUrl
         });
         
         // Send the license activation request
+        console.log('[CameraConfig] Sending POST request to license.cgi...');
         const licenseResponse = await this.simpleDigestAuth(
           ip,
           username,
@@ -788,41 +792,108 @@ export class CameraConfigurationService {
           `/local/${applicationName}/license.cgi`,
           JSON.stringify(licensePayload)
         );
+        console.log('[CameraConfig] License response status:', licenseResponse?.status);
+        console.log('[CameraConfig] License response data:', licenseResponse?.data);
         
         if (licenseResponse && licenseResponse.status === 200) {
-          console.log('[CameraConfig] License key activated successfully');
+          console.log('[CameraConfig] License key activation request accepted');
+          console.log('[CameraConfig] Waiting for license to be processed...');
+          
+          // Give the camera time to process the license
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // Verify the license is active
+          console.log('[CameraConfig] Verifying license status...');
+          try {
+            const verifyResponse = await this.simpleDigestAuth(
+              ip,
+              username,
+              password,
+              'GET',
+              '/axis-cgi/applications/list.cgi',
+              null
+            );
+            
+            if (verifyResponse?.data) {
+              const dataStr = typeof verifyResponse.data === 'string' ? verifyResponse.data : JSON.stringify(verifyResponse.data);
+              console.log('[CameraConfig] Verification response (first 500 chars):', dataStr.substring(0, 500));
+              
+              // Check various license indicators
+              if (dataStr.includes('License="Valid"') || 
+                  dataStr.includes('Licensed') ||
+                  dataStr.includes('license_status>valid') ||
+                  (dataStr.includes('BatonAnalytic') && !dataStr.includes('License="None"'))) {
+                console.log('[CameraConfig] ✅ LICENSE VERIFIED AS ACTIVE!');
+                return { success: true, licensed: true };
+              }
+            }
+          } catch (verifyErr: any) {
+            console.log('[CameraConfig] Verification request failed:', verifyErr.message);
+          }
+          
+          // If we got here, activation was accepted but we can't verify
+          console.log('[CameraConfig] License activation accepted but verification uncertain');
+          return { success: true, licensed: 'uncertain' };
+          
         } else {
           // If direct method fails, try the upload method
-          console.log('[CameraConfig] Direct activation failed, trying XML upload method...');
+          console.log('[CameraConfig] Direct activation failed with status:', licenseResponse?.status);
+          console.log('[CameraConfig] Response data:', licenseResponse?.data);
+          console.log('[CameraConfig] Trying XML upload method as fallback...');
           
           // Generate simple license XML
           const licenseXML = this.generateLicenseXMLDirect(deviceId, licenseKey);
           
           if (!licenseXML) {
+            console.error('[CameraConfig] Failed to generate license XML');
             throw new Error('Failed to generate license XML');
           }
           
           // Upload the XML to the camera
+          console.log('[CameraConfig] Uploading license XML to camera...');
           await this.uploadLicenseXML(ip, username, password, applicationName, licenseXML);
           
-          console.log('[CameraConfig] License key activated via XML upload');
+          console.log('[CameraConfig] License key activation via XML upload completed');
+          return { success: true, method: 'xml-upload' };
         }
         
       } catch (error: any) {
-        console.error('[CameraConfig] Error during license activation:', error.message);
+        console.error('[CameraConfig] ERROR during license activation:', error);
+        console.error('[CameraConfig] Error message:', error.message);
+        console.error('[CameraConfig] Error stack:', error.stack);
         
-        // Log the specific error
-        console.warn('[CameraConfig] License activation failed:', error.message);
+        // Check if it's a network error
+        if (error.message && (
+            error.message.includes('ECONNREFUSED') ||
+            error.message.includes('ETIMEDOUT') ||
+            error.message.includes('EHOSTDOWN') ||
+            error.message.includes('ENETUNREACH')
+        )) {
+          console.error('[CameraConfig] Network error - camera may be down');
+          throw new Error(`Camera not responding: ${error.message}`);
+        }
+        
+        // Log detailed error information
+        console.error('[CameraConfig] License activation failed at:', new Date().toISOString());
+        console.error('[CameraConfig] Failed for camera IP:', ip);
+        console.error('[CameraConfig] Failed for device ID:', deviceId);
         
         // Throw error with clear message so UI can display it
-        throw new Error(`License activation failed: ${error.message}. You may need to activate the license manually through the camera's web interface.`);
+        const errorMsg = `License activation failed: ${error.message || 'Unknown error'}. You may need to activate the license manually through the camera's web interface.`;
+        console.error('[CameraConfig] Throwing error to UI:', errorMsg);
+        throw new Error(errorMsg);
       }
       
     } catch (error: any) {
-      console.error('[CameraConfig] Error in license activation process:', error);
+      console.error('[CameraConfig] OUTER ERROR in license activation process:', error);
+      console.error('[CameraConfig] Error type:', error.constructor.name);
+      console.error('[CameraConfig] Full error object:', JSON.stringify(error, null, 2));
+      
       // Throw error with user-friendly message
       const message = error.message || 'Unknown error during license activation';
-      throw new Error(`License activation process failed: ${message}. Please activate the license manually through the camera web UI.`);
+      const finalError = new Error(`License activation process failed: ${message}`);
+      console.error('[CameraConfig] Final error being thrown:', finalError.message);
+      throw finalError;
     }
   }
 
