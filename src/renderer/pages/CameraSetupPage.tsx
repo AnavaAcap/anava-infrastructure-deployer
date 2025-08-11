@@ -10,6 +10,7 @@ import {
   Alert,
   AlertTitle,
   CircularProgress,
+  LinearProgress,
   IconButton,
   InputAdornment,
   Stepper,
@@ -18,7 +19,6 @@ import {
   StepContent,
   Paper,
   Chip,
-  LinearProgress,
   Collapse,
   List,
   ListItem,
@@ -43,6 +43,7 @@ import {
   Videocam as VideocamIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
+  Warning as WarningIcon,
   Refresh as RefreshIcon,
   VolumeUp as VolumeUpIcon,
   NetworkCheck as NetworkCheckIcon,
@@ -64,6 +65,8 @@ interface CameraInfo {
   name: string;
   firmwareVersion?: string;
   accessible: boolean;
+  authRequired?: boolean;
+  mac?: string | null;
   hasACAP?: boolean;
   isLicensed?: boolean;
   status?: 'idle' | 'deploying' | 'licensing' | 'analyzing' | 'complete' | 'error';
@@ -81,49 +84,154 @@ interface CameraSetupPageProps {
 
 const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const { addCamera, updateCamera } = useCameraContext();
-  const [activeStep, setActiveStep] = useState(0);
-  const [completed, setCompleted] = useState<{ [key: number]: boolean }>({});
-  const [mode, setMode] = useState<'manual' | 'scan'>('manual');
-  const [credentials, setCredentials] = useState({
+  
+  // Load saved state from localStorage
+  const loadSavedState = () => {
+    try {
+      const savedState = localStorage.getItem('cameraSetupState');
+      if (savedState) {
+        try {
+          const state = JSON.parse(savedState);
+          console.log('Restoring camera setup state from localStorage');
+          return state;
+        } catch (error) {
+          console.error('Failed to parse saved camera setup state:', error);
+          // Clear corrupted state
+          localStorage.removeItem('cameraSetupState');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to access localStorage:', error);
+      // localStorage might be disabled or throw in some environments
+    }
+    return null;
+  };
+  
+  const savedState = loadSavedState();
+  
+  const [activeStep, setActiveStep] = useState(savedState?.activeStep || 0);
+  const [completed, setCompleted] = useState<{ [key: number]: boolean }>(savedState?.completed || {});
+  const [mode, setMode] = useState<'manual' | 'scan'>(savedState?.mode || 'manual');
+  const [credentials, setCredentials] = useState(savedState?.credentials || {
     username: 'root',
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [manualIP, setManualIP] = useState('');
+  const [manualIP, setManualIP] = useState(savedState?.manualIP || '');
   const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<{ current: number; total: number; foundCount: number }>({ 
+    current: 0, 
+    total: 254, 
+    foundCount: 0 
+  });
   const [connecting, setConnecting] = useState(false);
   const [deploying, setDeploying] = useState(false);
-  const [cameras, setCameras] = useState<CameraInfo[]>([]);
-  const [selectedCamera, setSelectedCamera] = useState<CameraInfo | null>(null);
+  const [cameras, setCameras] = useState<CameraInfo[]>(savedState?.cameras || []);
+  const [selectedCamera, setSelectedCamera] = useState<CameraInfo | null>(savedState?.selectedCamera || null);
   const [deploymentProgress, setDeploymentProgress] = useState(0);
   const [deploymentStatus, setDeploymentStatus] = useState('');
-  const [selectedACAPFile, setSelectedACAPFile] = useState<string | null>(null);
-  const [licenseKey, setLicenseKey] = useState<string | null>(null);
+  const [selectedACAPFile, setSelectedACAPFile] = useState<string | null>(savedState?.selectedACAPFile || null);
+  const [licenseKey, setLicenseKey] = useState<string | null>(savedState?.licenseKey || null);
   const [error, setError] = useState<string | null>(null);
   const [showLicensePrompt, setShowLicensePrompt] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [sceneDescription, setSceneDescription] = useState('');
-  const [sceneImage, setSceneImage] = useState('');
-  const [licenseMode, setLicenseMode] = useState<'trial' | 'manual'>('trial');
-  const [manualLicenseKey, setManualLicenseKey] = useState('');
-  const [hasPreDiscoveredCameras, setHasPreDiscoveredCameras] = useState(false);
+  const [sceneDescription, setSceneDescription] = useState(savedState?.sceneDescription || '');
+  const [sceneImage, setSceneImage] = useState(savedState?.sceneImage || '');
+  const [licenseMode, setLicenseMode] = useState<'trial' | 'manual'>(savedState?.licenseMode || 'trial');
+  const [manualLicenseKey, setManualLicenseKey] = useState(savedState?.manualLicenseKey || '');
   
   // Speaker configuration state
-  const [configureSpeaker, setConfigureSpeaker] = useState(false);
-  const [speakerConfig, setSpeakerConfig] = useState({
+  const [configureSpeaker, setConfigureSpeaker] = useState(savedState?.configureSpeaker || false);
+  const [speakerConfig, setSpeakerConfig] = useState(savedState?.speakerConfig || {
     ip: '',
     username: 'root',
     password: ''
   });
   const [showSpeakerPassword, setShowSpeakerPassword] = useState(false);
-  const [availableSpeakers, setAvailableSpeakers] = useState<Array<{ ip: string; model?: string }>>([]);
+  const [availableSpeakers, setAvailableSpeakers] = useState<Array<{ ip: string; model?: string }>>(savedState?.availableSpeakers || []);
   const [testingSpeaker, setTestingSpeaker] = useState(false);
   const [showDetectionModal, setShowDetectionModal] = useState(false);
+  const [validatingCredentials, setValidatingCredentials] = useState(false);
+  
+  // State to track if we need to restore from saved state
+  const [hasPreDiscoveredCameras, setHasPreDiscoveredCameras] = useState(false);
 
+  // Save state to localStorage whenever key values change
+  useEffect(() => {
+    try {
+      const stateToSave = {
+        activeStep,
+        completed,
+        mode,
+        credentials,
+        manualIP,
+        cameras,
+        selectedCamera,
+        selectedACAPFile,
+        licenseKey,
+        sceneDescription,
+        sceneImage,
+        licenseMode,
+        manualLicenseKey,
+        configureSpeaker,
+        speakerConfig,
+        availableSpeakers,
+      };
+      
+      // Don't save state during initial load from savedState
+      if (savedState === null || JSON.stringify(stateToSave) !== JSON.stringify(savedState)) {
+        localStorage.setItem('cameraSetupState', JSON.stringify(stateToSave));
+      }
+    } catch (error) {
+      console.error('Failed to save state to localStorage:', error);
+      // Continue without saving - localStorage might be disabled
+    }
+  }, [
+    activeStep,
+    completed,
+    mode,
+    credentials,
+    manualIP,
+    cameras,
+    selectedCamera,
+    selectedACAPFile,
+    licenseKey,
+    sceneDescription,
+    sceneImage,
+    licenseMode,
+    manualLicenseKey,
+    configureSpeaker,
+    speakerConfig,
+    availableSpeakers,
+  ]);
+  
   // Load license key and check for pre-discovered cameras on mount
   useEffect(() => {
     loadLicenseKey();
     checkPreDiscoveredCameras();
+    
+    // Load discovered speakers from localStorage when component mounts
+    const savedSpeakers = localStorage.getItem('discoveredSpeakers');
+    if (savedSpeakers) {
+      try {
+        const speakers = JSON.parse(savedSpeakers);
+        if (Array.isArray(speakers) && speakers.length > 0) {
+          console.log(`Loading ${speakers.length} previously discovered speaker(s):`, speakers);
+          setAvailableSpeakers(speakers);
+          
+          // Auto-fill speaker config with first speaker if available
+          if (speakers[0] && !speakerConfig.ip) {
+            setSpeakerConfig({
+              ip: speakers[0].ip,
+              username: credentials.username || 'root',
+              password: credentials.password || ''
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to parse saved speakers:', error);
+      }
+    }
   }, []);
 
   const loadLicenseKey = async () => {
@@ -151,6 +259,9 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
   const handleCredentialsSubmit = async () => {
     if (credentials.username && credentials.password) {
+      setValidatingCredentials(true);
+      setError(null);
+      
       // Classify any pre-discovered Axis devices with the provided credentials
       try {
         const result = await (window.electronAPI as any).camera?.classifyAxisDevices?.(credentials);
@@ -165,11 +276,11 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               accessible: true,
               authenticated: true,
             })));
-            setHasPreDiscoveredCameras(true);
+            // Cameras are now available for selection
           } else {
             // No cameras found
             setCameras([]);
-            setHasPreDiscoveredCameras(false);
+            // No cameras found
           }
           if (result.speakers && result.speakers.length > 0) {
             console.log(`Found ${result.speakers.length} speakers after classification`);
@@ -186,15 +297,18 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         } else {
           // No result, no cameras
           setCameras([]);
-          setHasPreDiscoveredCameras(false);
+          // No result, no cameras
         }
       } catch (error) {
         console.error('Failed to classify devices:', error);
         setCameras([]);
-        setHasPreDiscoveredCameras(false);
+        setError('Failed to validate credentials. Please check your network connection.');
+      } finally {
+        setValidatingCredentials(false);
       }
       
       setActiveStep(1);
+      setCompleted(prev => ({ ...prev, 0: true }));
     }
   };
 
@@ -264,6 +378,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
             name: updatedCamera.name || `Camera at ${updatedCamera.ip}`,
             ip: updatedCamera.ip,
             model: updatedCamera.model,
+            mac: updatedCamera.mac || null,
             status: {
               credentials: {
                 completed: true,
@@ -337,67 +452,71 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   };
 
   const handleNetworkScan = async () => {
+    // Clear state and start fresh scan
     setScanning(true);
     setCameras([]);
+    setError(null);
+    setSelectedCamera(null);
+    setScanProgress({ current: 0, total: 254, foundCount: 0 });
+    
+    // Set up progress listener
+    const unsubscribe = (window.electronAPI as any).onScanProgress?.((data: { ip: string; status: string; total?: number }) => {
+      if (data.status === 'total' && data.total) {
+        // Set the actual total number of IPs to scan
+        setScanProgress(prev => ({ ...prev, total: data.total }));
+      } else {
+        setScanProgress(prev => ({
+          ...prev,
+          current: prev.current + 1,
+          foundCount: data.status === 'found' ? prev.foundCount + 1 : prev.foundCount
+        }));
+        
+        if (data.status === 'found') {
+          setDeploymentStatus(`Found camera at ${data.ip}`);
+        }
+      }
+    });
     
     try {
-      // First, classify any pre-discovered Axis devices with current credentials
-      const classified = await (window.electronAPI as any).camera?.classifyAxisDevices?.(credentials);
-      console.log('Classification result:', classified);
+      // Show initial status
+      setDeploymentStatus('Scanning network for cameras (port 443)...');
       
-      // Check if we have pre-discovered and now classified cameras
-      const preDiscovered = await (window.electronAPI as any).camera?.getPreDiscoveredCameras?.();
-      console.log('Pre-discovered response:', preDiscovered);
-      
-      if (classified && classified.cameras && classified.cameras.length > 0) {
-        console.log('Using classified cameras:', classified.cameras.length);
-        
-        const formattedCameras: CameraInfo[] = classified.cameras.map((cam: any) => ({
-          id: cam.id || `camera-${cam.ip}`,
-          ip: cam.ip,
-          model: cam.model || 'Unknown',
-          name: cam.name || `Camera at ${cam.ip}`,
-          firmwareVersion: cam.firmwareVersion,
-          accessible: cam.authenticated || cam.status === 'accessible' || false,
-          hasACAP: false,
-          isLicensed: false,
-          status: 'idle',
-          credentials: cam.credentials
-        }));
-
-        setCameras(formattedCameras);
-        setScanning(false); // Stop scanning animation
-        
-        // Auto-select first accessible camera
-        const firstAccessible = formattedCameras.find(cam => cam.accessible);
-        if (firstAccessible) {
-          setSelectedCamera(firstAccessible);
-          setActiveStep(2);
-          setCompleted(prev => ({ ...prev, 0: true, 1: true }));
-        }
-        
-        return;
-      }
-      
-      // If no pre-discovered cameras, do a fresh scan
-      console.log('No pre-discovered cameras, performing fresh scan...');
-      
-      const results = await (window.electronAPI as any).enhancedScanNetwork?.({
-        credentials: [{
+      // Use the FAST scanner
+      const results = await (window.electronAPI as any).fastNetworkScan?.({
+        credentials: {
           username: credentials.username,
           password: credentials.password,
-        }],
-        concurrent: 50,
-        timeout: 2000,
+        }
       });
+      
+      if (!Array.isArray(results)) {
+        throw new Error('Invalid scan response');
+      }
 
-      const formattedCameras: CameraInfo[] = results.map((cam: any) => ({
+      // Filter out speakers - only show cameras in this view
+      const camerasOnly = results.filter((device: any) => 
+        device.deviceType !== 'speaker'
+      );
+      
+      // Store speakers separately for later use in speaker configuration
+      const speakers = results.filter((device: any) => 
+        device.deviceType === 'speaker'
+      );
+      if (speakers.length > 0) {
+        console.log(`Found ${speakers.length} speaker(s) for later configuration:`, speakers);
+        // Store speakers in localStorage or state for speaker config page
+        localStorage.setItem('discoveredSpeakers', JSON.stringify(speakers));
+      }
+
+      const formattedCameras: CameraInfo[] = camerasOnly.map((cam: any) => ({
         id: cam.id || `camera-${cam.ip}`,
         ip: cam.ip,
         model: cam.model || 'Unknown',
         name: cam.name || `Camera at ${cam.ip}`,
         firmwareVersion: cam.firmwareVersion,
         accessible: cam.accessible || false,
+        authRequired: cam.authRequired || false,
+        mac: cam.mac || null,  // Include MAC address from scanner!
         hasACAP: false,
         isLicensed: false,
         status: 'idle',
@@ -405,17 +524,51 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
       setCameras(formattedCameras);
       
-      // Auto-select first accessible camera
-      const firstAccessible = formattedCameras.find(cam => cam.accessible);
-      if (firstAccessible) {
-        setSelectedCamera(firstAccessible);
-        setActiveStep(2);
-        setCompleted(prev => ({ ...prev, 0: true, 1: true }));
+      // Update status message
+      if (formattedCameras.length > 0) {
+        setDeploymentStatus(`Network scan complete. Found ${formattedCameras.length} camera(s).`);
+        
+        // Auto-select first accessible camera but DON'T auto-advance
+        const firstAccessible = formattedCameras.find(cam => cam.accessible);
+        if (firstAccessible) {
+          setSelectedCamera(firstAccessible);
+          // Don't auto-advance - let user review and select cameras
+        }
+        
+        if (!firstAccessible) {
+          setDeploymentStatus(`Found ${formattedCameras.length} camera(s). Please verify credentials.`);
+        }
+      } else {
+        setDeploymentStatus('No cameras found on the network. Please check your connection.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Network scan failed:', error);
+      
+      // Platform-specific error messages
+      let errorMessage = 'Failed to scan network. ';
+      if (navigator.platform.includes('Win')) {
+        errorMessage += 'Please check Windows Firewall settings and ensure the application has network access. You may need to run as Administrator.';
+      } else if (navigator.platform.includes('Mac')) {
+        errorMessage += 'Please check network permissions in System Settings > Privacy & Security.';
+      } else {
+        errorMessage += 'Please check your connection and firewall settings.';
+      }
+      
+      setError(errorMessage);
+      setDeploymentStatus('Scan failed. Please check permissions and try again.');
     } finally {
       setScanning(false);
+      // Clean up listener
+      if (unsubscribe) unsubscribe();
+    }
+  };
+
+  // Handle network permission request
+  const handleRequestNetworkPermission = async () => {
+    try {
+      await (window.electronAPI as any).networkRequestPermission?.();
+    } catch (error) {
+      console.error('Failed to request network permission:', error);
     }
   };
 
@@ -554,12 +707,18 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         }, 500);
 
         try {
+          console.log('[DEBUG] CameraSetupPage activating license:', {
+            ip: selectedCamera.ip,
+            mac: selectedCamera.mac,
+            hasMAC: !!selectedCamera.mac
+          });
           await (window.electronAPI as any).activateLicenseKey?.(
             selectedCamera.ip,
             credentials.username,
             credentials.password,
             licenseKey,
-            'BatonAnalytic'
+            'BatonAnalytic',
+            selectedCamera.mac  // PASS THE MAC ADDRESS!
           );
           console.log('License key activated successfully');
         } catch (licenseError: any) {
@@ -615,13 +774,15 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         ).then(result => {
           if (result?.success) {
             console.log('Background scene capture completed successfully');
-            // Store the pre-fetched scene data
+            // Store the pre-fetched scene data with new audio format
             (window.electronAPI as any).setConfigValue?.('preFetchedScene', {
               cameraId: cameraForCapture.id,
               cameraIp: cameraForCapture.ip,
               description: result.description,
               imageBase64: result.imageBase64,
-              audioMP3Base64: result.audioMP3Base64,
+              audioMP3Base64: result.audioMP3Base64, // Keep for backward compatibility
+              audioBase64: result.audioBase64, // New audio field
+              audioFormat: result.audioFormat, // Audio format (pcm_l16_24000 or mp3)
               timestamp: Date.now()
             });
           } else {
@@ -629,6 +790,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           }
         }).catch(error => {
           console.error('Background scene capture error:', error);
+          // Report error to user
+          setError(`Background scene capture failed: ${error.message || 'Unknown error'}`);
         });
       } else {
         console.log('No API key available for background scene capture');
@@ -736,6 +899,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         name: selectedCamera.name || `Camera at ${selectedCamera.ip}`,
         ip: selectedCamera.ip,
         model: selectedCamera.model,
+        mac: selectedCamera.mac || null,
         status: {
           credentials: {
             completed: true,
@@ -868,10 +1032,11 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   variant="contained"
                   fullWidth
                   onClick={handleCredentialsSubmit}
-                  disabled={!credentials.username || !credentials.password}
+                  disabled={!credentials.username || !credentials.password || validatingCredentials}
                   size="large"
+                  startIcon={validatingCredentials ? <CircularProgress size={20} /> : null}
                 >
-                  Continue
+                  {validatingCredentials ? 'Validating Credentials...' : 'Continue'}
                 </Button>
               </Grid>
             </Grid>
@@ -902,46 +1067,6 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               </Button>
             </Box>
 
-            {/* Show dropdown if cameras were pre-discovered, otherwise show "No Cameras" message */}
-            {hasPreDiscoveredCameras ? (
-              <Box sx={{ mb: 3 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Select Camera from Network</InputLabel>
-                  <Select
-                    value={selectedCamera?.id || ''}
-                    label="Select Camera from Network"
-                    onChange={async (e: any) => {
-                      const cameraId = e.target.value;
-                      const camera = cameras.find(c => c.id === cameraId);
-                      if (camera) {
-                        setSelectedCamera(camera);
-                      }
-                    }}
-                  >
-                    {cameras.map((camera) => (
-                      <MenuItem key={camera.id} value={camera.id}>
-                        {camera.name} - {camera.ip} ({camera.model})
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                {cameras.length > 0 && (
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                    {cameras.length} camera{cameras.length !== 1 ? 's' : ''} discovered on your network
-                  </Typography>
-                )}
-              </Box>
-            ) : (
-              <Box sx={{ mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: 1, borderColor: 'divider' }}>
-                <Typography variant="body2" color="text.secondary" textAlign="center">
-                  No Cameras Automatically Discovered
-                </Typography>
-              </Box>
-            )}
-
-            <Divider sx={{ my: 3 }}>
-              <Typography variant="caption" color="text.secondary">OR</Typography>
-            </Divider>
 
             <RadioGroup value={mode} onChange={(e) => setMode(e.target.value as any)}>
               <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
@@ -987,7 +1112,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   label={
                     <Box>
                       <Typography variant="subtitle2">
-                        Scan Network Again
+                        Scan Network for Axis Devices
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         Search for cameras on your network
@@ -1006,6 +1131,17 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                     >
                       {scanning ? 'Scanning...' : 'Start Network Scan'}
                     </Button>
+                    
+                    {scanning && (
+                      <Box sx={{ mt: 2, width: '100%', maxWidth: 400 }}>
+                        <LinearProgress 
+                          variant="indeterminate"
+                        />
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                          Scanning IPs: {scanProgress.current} • Found: {scanProgress.foundCount}
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
                 </Collapse>
               </Paper>
@@ -1029,12 +1165,14 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                         border: selectedCamera?.id === camera.id ? 2 : 1,
                         borderColor: selectedCamera?.id === camera.id ? 'primary.main' : 'divider'
                       }}
-                      onClick={() => camera.accessible && setSelectedCamera(camera)}
+                      onClick={() => camera.accessible && !camera.authRequired && setSelectedCamera(camera)}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Box>
                           {camera.accessible ? (
                             <CheckCircleIcon color="success" sx={{ fontSize: 40 }} />
+                          ) : camera.authRequired ? (
+                            <WarningIcon color="warning" sx={{ fontSize: 40 }} />
                           ) : connecting ? (
                             <CircularProgress size={40} />
                           ) : (
@@ -1048,6 +1186,13 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                           <Typography variant="body2" color="text.secondary">
                             {camera.ip} • {camera.model}
                           </Typography>
+                          {camera.authRequired && (
+                            <Alert severity="warning" sx={{ mt: 1, py: 0 }}>
+                              <Typography variant="caption">
+                                Incorrect credentials - please update credentials to access this device
+                              </Typography>
+                            </Alert>
+                          )}
                           {camera.error && (
                             <Alert severity="error" sx={{ mt: 1, py: 0 }}>
                               <Typography variant="caption">
@@ -1572,6 +1717,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                       // Still continue even if push fails
                     }
                   }
+                  // Mark speaker config as completed and move to next step
+                  setCompleted(prev => ({ ...prev, 3: true }));
                   setActiveStep(4);
                 }}
                 disabled={configureSpeaker && (!speakerConfig.ip || !speakerConfig.password)}
@@ -1657,15 +1804,28 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                     variant="outlined"
                     fullWidth
                     onClick={() => {
-                      // Reset to start and configure another camera
+                      // Clear state for new camera setup
+                      localStorage.removeItem('cameraSetupState');
                       setActiveStep(0);
+                      setCompleted({});
+                      setMode('manual');
+                      setCredentials({ username: 'root', password: '' });
+                      setManualIP('');
+                      setCameras([]);
                       setSelectedCamera(null);
+                      setSelectedACAPFile(null);
                       setDeploymentProgress(0);
                       setDeploymentStatus('');
-                      setError(null);
-                      setCredentials({ username: 'root', password: '' });
+                      setSceneDescription('');
+                      setSceneImage('');
+                      setLicenseMode('trial');
+                      setManualLicenseKey('');
                       setConfigureSpeaker(false);
                       setSpeakerConfig({ ip: '', username: 'root', password: '' });
+                      setAvailableSpeakers([]);
+                      setError(null);
+                      // Reload license key for fresh start
+                      loadLicenseKey();
                     }}
                     startIcon={<VideocamIcon />}
                   >
@@ -1688,12 +1848,50 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
   return (
     <Box sx={{ p: 3, maxWidth: 800, mx: 'auto' }}>
-      <Typography variant="h4" gutterBottom>
-        Camera Setup
-      </Typography>
-      <Typography variant="body1" color="text.secondary" paragraph>
-        Get your first camera running with AI analytics in minutes
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Camera Setup
+          </Typography>
+          <Typography variant="body1" color="text.secondary" paragraph>
+            Get your first camera running with AI analytics in minutes
+          </Typography>
+        </Box>
+        {(activeStep > 0 || selectedCamera) && (
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => {
+              if (window.confirm('Start a new camera setup? This will clear your current progress.')) {
+                // Clear all state
+                localStorage.removeItem('cameraSetupState');
+                setActiveStep(0);
+                setCompleted({});
+                setMode('manual');
+                setCredentials({ username: 'root', password: '' });
+                setManualIP('');
+                setCameras([]);
+                setSelectedCamera(null);
+                setSelectedACAPFile(null);
+                setLicenseKey(null);
+                setSceneDescription('');
+                setSceneImage('');
+                setLicenseMode('trial');
+                setManualLicenseKey('');
+                setConfigureSpeaker(false);
+                setSpeakerConfig({ ip: '', username: 'root', password: '' });
+                setAvailableSpeakers([]);
+                setError(null);
+                // Reload license key for fresh start
+                loadLicenseKey();
+              }
+            }}
+            startIcon={<RefreshIcon />}
+          >
+            Start Fresh Setup
+          </Button>
+        )}
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
@@ -1800,7 +1998,13 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       <DetectionTestModal
         open={showDetectionModal}
         onClose={() => setShowDetectionModal(false)}
-        camera={selectedCamera}
+        camera={selectedCamera ? {
+          ...selectedCamera,
+          credentials: {
+            username: credentials.username,
+            password: credentials.password
+          }
+        } : null}
         speakerConfig={configureSpeaker ? speakerConfig : undefined}
       />
     </Box>

@@ -1,33 +1,56 @@
 import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
 class Logger {
   private logFile: string;
+  private standardLogFile: string;
   private stream: fs.WriteStream | null = null;
+  private standardStream: fs.WriteStream | null = null;
 
   constructor() {
-    // Create logs directory
-    const logsDir = app.getPath('logs');
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
+    // Create logs directory in user's home for debugging (accessible and writable)
+    // os.homedir() works on ALL platforms (Windows, macOS, Linux)
+    const homeDir = os.homedir();
+    const debugLogsDir = path.join(homeDir, 'anava-debug-logs');
+    
+    try {
+      if (!fs.existsSync(debugLogsDir)) {
+        fs.mkdirSync(debugLogsDir, { recursive: true });
+      }
+    } catch (error) {
+      console.error('Failed to create debug logs directory:', error);
+    }
+
+    // ALSO create in standard location
+    const standardLogsDir = app.getPath('logs');
+    try {
+      if (!fs.existsSync(standardLogsDir)) {
+        fs.mkdirSync(standardLogsDir, { recursive: true });
+      }
+    } catch (error) {
+      console.error('Failed to create standard logs directory:', error);
     }
 
     // Create log file with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    this.logFile = path.join(logsDir, `anava-vision-${timestamp}.log`);
+    this.logFile = path.join(debugLogsDir, `anava-vision-${timestamp}.log`);
+    this.standardLogFile = path.join(standardLogsDir, `anava-vision-${timestamp}.log`);
     
-    // Create write stream
+    // Create write streams for BOTH locations
     this.stream = fs.createWriteStream(this.logFile, { flags: 'a' });
+    this.standardStream = fs.createWriteStream(this.standardLogFile, { flags: 'a' });
     
     // Log startup info
     this.log('=== Anava Vision Started ===');
     this.log(`Version: ${app.getVersion()}`);
     this.log(`Electron: ${process.versions.electron}`);
     this.log(`Platform: ${process.platform} ${process.arch}`);
-    this.log(`Log file: ${this.logFile}`);
+    this.log(`DEBUG Log file: ${this.logFile}`);
+    this.log(`Standard Log file: ${this.standardLogFile}`);
     this.log(`User data: ${app.getPath('userData')}`);
     this.log('=========================================\n');
   }
@@ -41,14 +64,20 @@ class Logger {
   }
 
   writeToFile(message: string) {
+    // Write to BOTH log files
     if (this.stream && !this.stream.destroyed) {
       this.stream.write(message + '\n');
+    }
+    if (this.standardStream && !this.standardStream.destroyed) {
+      this.standardStream.write(message + '\n');
     }
   }
 
   log(message: string, ...args: any[]) {
     const formatted = this.formatMessage('INFO', message, ...args);
-    console.log(formatted);
+    if (isDevelopment) {
+      process.stdout.write(formatted + '\n');
+    }
     this.writeToFile(formatted);
   }
 
@@ -58,20 +87,24 @@ class Logger {
 
   warn(message: string, ...args: any[]) {
     const formatted = this.formatMessage('WARN', message, ...args);
-    console.warn(formatted);
+    if (isDevelopment) {
+      process.stderr.write(formatted + '\n');
+    }
     this.writeToFile(formatted);
   }
 
   error(message: string, ...args: any[]) {
     const formatted = this.formatMessage('ERROR', message, ...args);
-    console.error(formatted);
+    if (isDevelopment) {
+      process.stderr.write(formatted + '\n');
+    }
     this.writeToFile(formatted);
   }
 
   debug(message: string, ...args: any[]) {
     if (isDevelopment) {
       const formatted = this.formatMessage('DEBUG', message, ...args);
-      console.debug(formatted);
+      process.stdout.write(formatted + '\n');
       this.writeToFile(formatted);
     }
   }
@@ -83,6 +116,9 @@ class Logger {
   close() {
     if (this.stream) {
       this.stream.end();
+    }
+    if (this.standardStream) {
+      this.standardStream.end();
     }
   }
 }
@@ -97,32 +133,5 @@ export function getLogger(): Logger {
   return loggerInstance;
 }
 
-// Also override console methods to capture all logs
-const logger = getLogger();
-
 // Export the logger instance
-export { logger };
-const originalConsoleLog = console.log;
-const originalConsoleError = console.error;
-const originalConsoleWarn = console.warn;
-
-console.log = (...args: any[]) => {
-  originalConsoleLog(...args);
-  logger.writeToFile(logger.formatMessage('CONSOLE', args.map(arg => 
-    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-  ).join(' ')));
-};
-
-console.error = (...args: any[]) => {
-  originalConsoleError(...args);
-  logger.writeToFile(logger.formatMessage('ERROR', args.map(arg => 
-    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-  ).join(' ')));
-};
-
-console.warn = (...args: any[]) => {
-  originalConsoleWarn(...args);
-  logger.writeToFile(logger.formatMessage('WARN', args.map(arg => 
-    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-  ).join(' ')));
-};
+export const logger = getLogger();

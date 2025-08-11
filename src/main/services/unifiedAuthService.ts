@@ -38,7 +38,7 @@ export class UnifiedAuthService {
    * Authenticate user using embedded secure webview
    */
   async authenticate(parentWindow: BrowserWindow): Promise<AuthResult> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       // Generate PKCE parameters for enhanced security
       const codeVerifier = this.generateCodeVerifier();
       const codeChallenge = this.generateCodeChallenge(codeVerifier);
@@ -47,9 +47,15 @@ export class UnifiedAuthService {
       this.authWindow = new BrowserWindow({
         width: 500,
         height: 600,
+        title: 'Sign in with Google',
         parent: parentWindow,
-        modal: true,
+        modal: false, // Don't block the parent window
         show: false,
+        closable: true, // Allow closing
+        minimizable: true, // Allow minimizing
+        maximizable: false,
+        resizable: false,
+        alwaysOnTop: true, // Keep on top but not modal
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
@@ -85,7 +91,22 @@ export class UnifiedAuthService {
 
       this.authWindow.on('closed', () => {
         this.authWindow = null;
-        reject(new Error('Authentication cancelled'));
+        resolve({
+          success: false,
+          error: 'Authentication cancelled by user'
+        });
+      });
+      
+      // Add ESC key handler to close the window
+      this.authWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.key === 'Escape') {
+          event.preventDefault();
+          this.closeAuthWindow();
+          resolve({
+            success: false,
+            error: 'Authentication cancelled by user'
+          });
+        }
       });
 
       // Intercept navigation to capture auth code
