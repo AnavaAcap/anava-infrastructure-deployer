@@ -664,7 +664,7 @@ export class CameraConfigurationService {
     licenseKey: string,
     applicationName: string,
     macAddress?: string | null
-  ): Promise<void> {
+  ): Promise<{ success: boolean; licensed?: boolean | string; method?: string }> {
     try {
       // First, check if the application is installed
       console.log('[CameraConfig] Checking application status for license activation...');
@@ -702,7 +702,7 @@ export class CameraConfigurationService {
       // Check if application is in the list
       if (!appListData.includes(applicationName)) {
         console.warn(`[CameraConfig] Application ${applicationName} not found on camera, skipping license activation`);
-        return;
+        return { success: false, licensed: false };
       }
       
       // Parse XML response to check license status
@@ -710,7 +710,7 @@ export class CameraConfigurationService {
       
       if (licenseMatch && licenseMatch[1] === 'Valid') {
         console.log(`[CameraConfig] ${applicationName} is already licensed, skipping activation`);
-        return;
+        return { success: true, licensed: true };
       }
 
       // Get device ID (MAC address without colons)
@@ -1162,7 +1162,9 @@ export class CameraConfigurationService {
     return this.generateTestTone();
   }
 
-  private async getLicenseXMLFromAxis(deviceId: string, licenseCode: string): Promise<string | null> {
+  // @ts-ignore - Deprecated: This method used puppeteer which has been removed
+  // Keeping for reference in case we need to restore puppeteer-based activation
+  private async _getLicenseXMLFromAxis_DEPRECATED(deviceId: string, licenseCode: string): Promise<string | null> {
     try {
       console.log('[CameraConfig] Getting license XML using Axis SDK...');
       console.log('[CameraConfig] App path:', app.getAppPath());
