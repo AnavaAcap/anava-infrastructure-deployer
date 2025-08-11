@@ -33,21 +33,7 @@ const log = {
 import { getCameraBaseUrl } from './cameraProtocolUtils';
 
 // Dynamic imports for ESM modules
-let PQueue: any;
 let Bonjour: any;
-
-// Initialize ESM modules
-async function initializeModules() {
-  try {
-    const pQueueModule = await import('p-queue');
-    PQueue = pQueueModule.default;
-  } catch (err) {
-    // Fallback to older version if available
-    PQueue = require('p-queue').default || require('p-queue');
-  }
-  
-  Bonjour = require('bonjour-service').Bonjour || require('bonjour-service');
-}
 
 export interface Camera {
   id: string;
@@ -105,7 +91,6 @@ export class OptimizedCameraDiscoveryService {
   private preDiscoveryComplete = false;
   private hasShownNetworkPermissionDialog = false;
   private networkPermissionDenied = false;
-  private modulesInitialized = false;
 
 
   constructor() {
@@ -557,36 +542,6 @@ export class OptimizedCameraDiscoveryService {
   }
 
 
-  private async checkIfAxisDevice(ip: string, port: number = 80, protocol: 'http' | 'https' = 'http'): Promise<boolean> {
-    try {
-      const url = `${protocol}://${ip}:${port}/axis-cgi/param.cgi?action=list&group=Brand`;
-      
-      // Just check if the endpoint exists - 401 means it's an Axis device that needs auth
-      const response = await this.axiosInstance.get(url, {
-        timeout: 2000,
-        validateStatus: () => true // Accept any status
-      });
-      
-      // If we get 401 with Digest auth or 200 response, it's an Axis device
-      if (response.status === 401) {
-        const wwwAuth = response.headers['www-authenticate'];
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          console.log(`  ✓ Found Axis device at ${ip}:${port} (requires auth)`);
-          return true;
-        }
-      } else if (response.status === 200) {
-        // Somehow no auth required
-        const data = response.data?.toString() || '';
-        if (data.includes('Brand=AXIS') || data.includes('root.Brand.Brand=AXIS')) {
-          console.log(`  ✓ Found Axis device at ${ip}:${port} (no auth required)`);
-          return true;
-        }
-      }
-    } catch (error) {
-      // Connection failed - not an Axis device or not reachable
-    }
-    return false;
-  }
 
   private async scanIP(
     ip: string,
@@ -1335,128 +1290,4 @@ export class OptimizedCameraDiscoveryService {
     ].join('.');
   }
 
-  private shuffle<T>(array: T[]): T[] {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  }
-
-  /**
-   * Start pre-emptive camera discovery on app startup
-   * This runs in the background and caches results for instant access
-   */
-  private async startPreDiscovery() {
-    console.log('[Pre-Discovery] Starting pre-emptive camera discovery...');
-    this.isPreDiscovering = true;
-    let foundCamera = false;
-
-    try {
-      // First try service discovery (mDNS/SSDP) - this is often fastest
-      console.log('[Pre-Discovery] Trying service discovery first...');
-      const serviceTimeout = new Promise(resolve => setTimeout(() => resolve([]), 3000));
-      const serviceCameras = await Promise.race([
-        this.discoverViaServices(),
-        serviceTimeout
-      ]) as Camera[];
-
-      for (const camera of serviceCameras) {
-        if (camera.manufacturer?.toLowerCase().includes('axis')) {
-          console.log(`[Pre-Discovery] Found Axis camera via service discovery at ${camera.ip}`);
-          this.preDiscoveredCameras = [camera];
-          foundCamera = true;
-          return;
-        }
-      }
-
-      // If no camera found via services, do targeted scanning
-      const networks = this.getNetworksToScan();
-      if (networks.length === 0) {
-        console.log('[Pre-Discovery] No networks available for pre-discovery');
-        return;
-      }
-
-      const primaryNetwork = networks[0];
-      console.log(`[Pre-Discovery] Scanning primary network: ${primaryNetwork.network}`);
-
-      // Check common camera IPs first (often cameras have predictable IPs)
-      const ips = this.getIPsInRange(primaryNetwork.network);
-      const commonCameraIPs = ips.filter(ip => {
-        const lastOctet = parseInt(ip.split('.').pop() || '0');
-        // Common camera IP patterns: .100-.200, .64, .88, .156
-        return (lastOctet >= 100 && lastOctet <= 200) || 
-               lastOctet === 64 || lastOctet === 88 || lastOctet === 156;
-      });
-      
-      // Prioritize common IPs, then shuffle the rest
-      const otherIPs = this.shuffle(ips.filter(ip => !commonCameraIPs.includes(ip)));
-      const orderedIPs = [...commonCameraIPs, ...otherIPs];
-
-      const ports = [80, 443];
-      // No credentials for initial scan - just detect Axis devices
-
-      // Use higher concurrency for faster discovery
-      if (!PQueue) {
-        safeConsole.error('PQueue not initialized, skipping network scan');
-        return;
-      }
-      const queue = new PQueue({ concurrency: 30 });
-      const scanPromises: Promise<void>[] = [];
-
-      for (const ip of orderedIPs) {
-        if (foundCamera) break;
-
-        const promise = queue.add(async () => {
-          // Just check if it's an Axis device - no credentials needed
-          for (const port of ports) {
-            const protocol = port === 443 ? 'https' : 'http';
-            const isAxis = await this.checkIfAxisDevice(ip, port, protocol);
-            
-            if (isAxis) {
-              // Store this IP as an Axis device
-              if (!this.preDiscoveredAxisDevices.includes(ip)) {
-                this.preDiscoveredAxisDevices.push(ip);
-                console.log(`[Pre-Discovery] Found Axis device at ${ip} - total found: ${this.preDiscoveredAxisDevices.length}`);
-              }
-              break; // No need to check other ports
-            }
-          }
-        });
-
-        scanPromises.push(promise);
-      }
-
-      // Wait for first camera or timeout
-      await Promise.race([
-        Promise.all(scanPromises),
-        new Promise(resolve => {
-          const checkInterval = setInterval(() => {
-            if (foundCamera) {
-              clearInterval(checkInterval);
-              resolve(true);
-            }
-          }, 100);
-          
-          setTimeout(() => {
-            clearInterval(checkInterval);
-            resolve(false);
-          }, 10000); // 10 second timeout
-        })
-      ]);
-
-      console.log(`[Pre-Discovery] Found ${this.preDiscoveredCameras.length} accessible Axis cameras`);
-      this.preDiscoveredCameras.forEach(camera => {
-        console.log(`[Pre-Discovery] - ${camera.model} at ${camera.ip}`);
-      });
-
-    } catch (error) {
-      console.error('[Pre-Discovery] Error during pre-discovery:', error);
-    } finally {
-      this.isPreDiscovering = false;
-      this.preDiscoveryComplete = true;
-      console.log('[Pre-Discovery] Pre-emptive discovery complete');
-    }
-  }
 }
