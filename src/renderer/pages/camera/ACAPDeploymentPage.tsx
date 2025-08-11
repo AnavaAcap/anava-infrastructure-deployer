@@ -327,12 +327,14 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
             if (deploymentConfig?.anavaKey) {
               addLog(`Applying Anava license key...`);
               try {
+                // Pass the camera's MAC address for proper device ID
                 await window.electronAPI.activateLicenseKey(
                   currentIP,
                   credentials[camera.id].username,
                   credentials[camera.id].password,
                   deploymentConfig.anavaKey,
-                  'BatonAnalytic'
+                  'BatonAnalytic',
+                  camera.mac // Pass the MAC address from camera discovery
                 );
                 addLog(`✓ License key activated successfully`);
               } catch (licenseError: any) {

@@ -69,12 +69,29 @@ module.exports = {
     {
       displayName: 'security',
       testMatch: [
-        '<rootDir>/tests/security/**/*.test.ts'
+        '<rootDir>/tests/security/**/*.test.ts',
+        '<rootDir>/test-suite/security-tests.spec.js'
       ],
       preset: 'ts-jest',
       testEnvironment: 'node',
       setupFilesAfterEnv: ['<rootDir>/tests/setup/security.setup.ts'],
       testTimeout: 60000 // 1 minute for security tests
+    },
+    {
+      displayName: 'regression',
+      testMatch: [
+        '<rootDir>/test-suite/regression-tests.spec.js'
+      ],
+      testEnvironment: 'node',
+      testTimeout: 30000
+    },
+    {
+      displayName: 'integration-v178',
+      testMatch: [
+        '<rootDir>/test-suite/integration-tests.spec.js'
+      ],
+      testEnvironment: 'node',
+      testTimeout: 60000
     },
     {
       displayName: 'electron-v37',

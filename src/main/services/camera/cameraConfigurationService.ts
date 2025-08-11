@@ -311,8 +311,8 @@ export class CameraConfigurationService {
       return this.getSystemConfig(ip, username, password);
     });
     
-    ipcMain.handle('activate-license-key', async (_event, ip: string, username: string, password: string, licenseKey: string, applicationName: string) => {
-      return this.activateLicenseKey(ip, username, password, licenseKey, applicationName);
+    ipcMain.handle('activate-license-key', async (_event, ip: string, username: string, password: string, licenseKey: string, applicationName: string, macAddress?: string | null) => {
+      return this.activateLicenseKey(ip, username, password, licenseKey, applicationName, macAddress);
     });
     
     ipcMain.handle('test-speaker', async (_event, speakerIp: string, username: string, password: string) => {
@@ -661,7 +661,8 @@ export class CameraConfigurationService {
     username: string,
     password: string,
     licenseKey: string,
-    applicationName: string
+    applicationName: string,
+    macAddress?: string | null
   ): Promise<void> {
     try {
       // First, check if the application is installed
@@ -718,11 +719,22 @@ export class CameraConfigurationService {
       // Try multiple patterns to find MAC address
       let deviceId = '';
       
-      // Pattern 1: AXIS_B8A44F45D624 in realm
-      const realmMatch = appListData.match(/AXIS_([A-F0-9]{12})/i);
-      if (realmMatch) {
-        deviceId = realmMatch[1];
-        console.log('[CameraConfig] Found device ID from realm pattern:', deviceId);
+      // First, use the MAC address passed from camera discovery if available
+      if (macAddress) {
+        // Remove colons from MAC address to get device ID
+        deviceId = macAddress.replace(/[:-]/g, '').toUpperCase();
+        console.log('[CameraConfig] Using MAC address from camera discovery:', macAddress);
+        console.log('[CameraConfig] Converted to device ID:', deviceId);
+      }
+      
+      // If no MAC provided, try to extract from camera response
+      if (!deviceId) {
+        // Pattern 1: AXIS_B8A44F45D624 in realm
+        const realmMatch = appListData.match(/AXIS_([A-F0-9]{12})/i);
+        if (realmMatch) {
+          deviceId = realmMatch[1];
+          console.log('[CameraConfig] Found device ID from realm pattern:', deviceId);
+        }
       }
       
       // Pattern 2: Look in the XML structure for SerialNumber or similar
@@ -734,17 +746,11 @@ export class CameraConfigurationService {
         }
       }
       
-      // Pattern 3: Try to get from HTTP headers if available
+      // No fallback - if we can't find device ID, fail properly
       if (!deviceId) {
-        // For now, use the known device ID as fallback
-        deviceId = 'B8A44F45D624';
-        console.log('[CameraConfig] Using fallback device ID:', deviceId);
-      }
-      
-      if (!deviceId) {
-        console.error('[CameraConfig] Could not extract device ID from camera');
+        console.error('[CameraConfig] Could not determine device ID - MAC address not provided and not found in camera response');
         console.warn('[CameraConfig] Please activate the license manually through the camera web UI');
-        return;
+        throw new Error('Could not determine camera device ID. Please ensure camera was properly discovered.');
       }
 
       console.log('[CameraConfig] Device ID:', deviceId);

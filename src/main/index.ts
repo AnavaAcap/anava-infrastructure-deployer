@@ -136,7 +136,11 @@ function createWindow() {
     // Open dev tools in development
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    const indexPath = path.join(__dirname, '../renderer/index.html');
+    console.log(`[Main Process] Loading file from: ${indexPath}`);
+    mainWindow.loadFile(indexPath);
+    // Open DevTools in production for debugging
+    mainWindow.webContents.openDevTools();
   }
 
   mainWindow.on('closed', () => {
