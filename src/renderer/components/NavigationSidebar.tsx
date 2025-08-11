@@ -61,7 +61,7 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     const getLatestCamera = async () => {
       try {
         // Only show camera UI if we're on camera-setup page
-        if (currentPage !== 'camera-setup') {
+        if (currentView !== 'camera-setup') {
           setLatestCameraIp(null);
           return;
         }
@@ -99,11 +99,11 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     getLatestCamera();
     
     // Poll for camera changes every 5 seconds only when on camera-setup page
-    const interval = currentPage === 'camera-setup' ? setInterval(getLatestCamera, 5000) : null;
+    const interval = currentView === 'camera-setup' ? setInterval(getLatestCamera, 5000) : null;
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [currentPage]);
+  }, [currentView]);
   const menuItems = [
     { 
       id: 'welcome' as NavigationView, 
