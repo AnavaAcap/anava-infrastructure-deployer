@@ -1,28 +1,28 @@
 # Performance Test Report
 
-**Date**: 2025-08-11T23:12:57.704Z
+**Date**: 2025-08-11T23:51:32.042Z
 **Platform**: darwin (arm64)
 **Node Version**: v20.19.2
 **CPUs**: 14
 
 ## Summary
 
-- **Total Duration**: 12.63s
-- **Average Test Duration**: 631.45ms
-- **Memory Usage**: 30.00 MB / 34.89 MB
+- **Total Duration**: 472ms
+- **Average Test Duration**: 6.051282051282051ms
+- **Memory Usage**: 105.57 MB / 137.48 MB
 
 ## Slowest Tests
 
 | Test | Duration | Suite |
 |------|----------|-------|
-| Security Test Suite 1. localStorage Data Sanitization should encrypt sensitive data in localStorage | 55ms | /src/__tests__/security-tests.spec.ts |
-| Security Test Suite 7. Sensitive Data Encryption should use secure key derivation for passwords | 31ms | /src/__tests__/security-tests.spec.ts |
-| Security Test Suite 3. Input Validation & Injection Prevention should validate port numbers are within valid range | 10ms | /src/__tests__/security-tests.spec.ts |
-| Security Test Suite 1. localStorage Data Sanitization should limit localStorage data size to prevent DoS | 9ms | /src/__tests__/security-tests.spec.ts |
-| Security Test Suite 1. localStorage Data Sanitization should sanitize XSS payloads before storing in localStorage | 3ms | /src/__tests__/security-tests.spec.ts |
-| Security Test Suite 2. Credential Handling Security should not log credentials in plaintext | 1ms | /src/__tests__/security-tests.spec.ts |
-| Security Test Suite 2. Credential Handling Security should use secure random tokens for session management | 1ms | /src/__tests__/security-tests.spec.ts |
-| Security Test Suite 3. Input Validation & Injection Prevention should sanitize file paths to prevent path traversal | 1ms | /src/__tests__/security-tests.spec.ts |
-| Security Test Suite 4. Network Scanning Boundaries & Limits should limit concurrent network connections to prevent DoS | 1ms | /src/__tests__/security-tests.spec.ts |
-| Security Test Suite 4. Network Scanning Boundaries & Limits should enforce timeout on network scans | 1ms | /src/__tests__/security-tests.spec.ts |
+| 7. Error Recovery and Timeouts should handle ETIMEDOUT errors | 7ms | /src/__tests__/regression-tests-fixed.spec.ts |
+| Windows Installer Configuration Build Configuration Consistency should have only one electron-builder configuration file | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
+| Windows Installer Configuration Build Configuration Consistency should have consistent perMachine setting | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
+| Windows Installer Configuration Build Configuration Consistency should have proper Windows configuration | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
+| Windows Installer Configuration NSIS Script Validation should have filesystem tunneling mitigation | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
+| Windows Installer Configuration NSIS Script Validation should have comprehensive registry cleanup | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
+| Windows Installer Configuration Build Scripts should have VC++ Redistributable download script | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
+| Windows Installer Configuration Main Process Cleanup should use WMI for process cleanup on Windows | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
+| Registry Management GUID Generation should generate unique GUIDs | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
+| Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should save state to localStorage on changes | 1ms | /src/__tests__/regression-tests.spec.ts |
 
