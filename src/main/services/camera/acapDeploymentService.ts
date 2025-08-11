@@ -16,6 +16,9 @@ export interface DeploymentResult {
   firmwareVersion?: string;
   osVersion?: 'OS11' | 'OS12';
   selectedFile?: string;
+  detectionMethod?: string;
+  architectureDetected?: string;
+  wasUncertain?: boolean;
 }
 
 export class ACAPDeploymentService {
@@ -290,11 +293,26 @@ export class ACAPDeploymentService {
       const osVersionLower = firmwareInfo.osVersion.toLowerCase();
       const architecture = firmwareInfo.architecture || 'aarch64';
       
-      // First try exact match
+      // First try exact match with flexible patterns
       let matchingAcap = availableAcaps.find(acap => {
         const filename = acap.filename.toLowerCase();
-        const hasCorrectOS = filename.includes(osVersionLower);
-        const hasCorrectArch = filename.includes(architecture.toLowerCase());
+        
+        // Handle different naming patterns:
+        // - signed_Anava_-_Analyze_3_8_1_aarch64_os12.eap
+        // - anava-baton-os12-aarch64.eap
+        // - BatonAnalytic_os12_aarch64.eap
+        
+        // Check for OS version (os11, os12)
+        const hasCorrectOS = filename.includes(osVersionLower) || 
+                            filename.includes(osVersionLower.replace('os', 'os_')) ||
+                            filename.includes(osVersionLower.replace('os', '_os'));
+        
+        // Check for architecture
+        const hasCorrectArch = filename.includes(architecture.toLowerCase()) ||
+                              filename.includes(`_${architecture.toLowerCase()}_`) ||
+                              filename.includes(`_${architecture.toLowerCase()}.`) ||
+                              filename.includes(`-${architecture.toLowerCase()}-`) ||
+                              filename.includes(`-${architecture.toLowerCase()}.`);
         
         console.log(`[deployACAPAuto] Checking ${acap.filename}: OS match=${hasCorrectOS}, Arch match=${hasCorrectArch}`);
         return hasCorrectOS && hasCorrectArch && acap.isDownloaded;

@@ -93,10 +93,31 @@ export class ACAPDownloaderService {
   }
 
   private extractArchitecture(filename: string): string {
-    if (filename.includes('aarch64')) return 'aarch64';
-    if (filename.includes('armv7hf')) return 'armv7hf';
-    if (filename.includes('x86_64')) return 'x86_64';
-    if (filename.includes('i386')) return 'i386';
+    // Handle real naming patterns like:
+    // signed_Anava_-_Analyze_3_8_1_aarch64_os12.eap
+    // Look for architecture patterns with word boundaries
+    const patterns = [
+      { pattern: /[_\-]aarch64[_\-\.]/, arch: 'aarch64' },
+      { pattern: /[_\-]arm64[_\-\.]/, arch: 'aarch64' },
+      { pattern: /[_\-]armv7hf[_\-\.]/, arch: 'armv7hf' },
+      { pattern: /[_\-]armv7[_\-\.]/, arch: 'armv7hf' },
+      { pattern: /[_\-]x86_64[_\-\.]/, arch: 'x86_64' },
+      { pattern: /[_\-]i386[_\-\.]/, arch: 'i386' }
+    ];
+    
+    const lowerFilename = filename.toLowerCase();
+    for (const { pattern, arch } of patterns) {
+      if (pattern.test(lowerFilename)) {
+        return arch;
+      }
+    }
+    
+    // Fallback to simple contains check
+    if (lowerFilename.includes('aarch64')) return 'aarch64';
+    if (lowerFilename.includes('armv7hf')) return 'armv7hf';
+    if (lowerFilename.includes('x86_64')) return 'x86_64';
+    if (lowerFilename.includes('i386')) return 'i386';
+    
     return 'unknown';
   }
 
