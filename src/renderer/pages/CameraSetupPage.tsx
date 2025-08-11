@@ -337,59 +337,19 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   };
 
   const handleNetworkScan = async () => {
+    // Clear any existing cameras and reset state for a fresh scan
     setScanning(true);
     setCameras([]);
     setError(null);
+    setSelectedCamera(null);
     
     try {
       // Show scanning status
-      setDeploymentStatus('Initializing network scan...');
+      setDeploymentStatus('Starting fresh network scan...');
       
-      // First, classify any pre-discovered Axis devices with current credentials
-      const classified = await (window.electronAPI as any).camera?.classifyAxisDevices?.(credentials);
-      console.log('Classification result:', classified);
-      
-      // Check if we have pre-discovered and now classified cameras
-      const preDiscovered = await (window.electronAPI as any).camera?.getPreDiscoveredCameras?.();
-      console.log('Pre-discovered response:', preDiscovered);
-      
-      if (classified && classified.cameras && classified.cameras.length > 0) {
-        console.log('Using classified cameras:', classified.cameras.length);
-        setDeploymentStatus(`Found ${classified.cameras.length} camera(s) from previous scan`);
-        
-        const formattedCameras: CameraInfo[] = classified.cameras.map((cam: any) => ({
-          id: cam.id || `camera-${cam.ip}`,
-          ip: cam.ip,
-          model: cam.model || 'Unknown',
-          name: cam.name || `Camera at ${cam.ip}`,
-          firmwareVersion: cam.firmwareVersion,
-          accessible: cam.authenticated || cam.status === 'accessible' || false,
-          hasACAP: false,
-          isLicensed: false,
-          status: 'idle',
-          credentials: cam.credentials
-        }));
-
-        setCameras(formattedCameras);
-        setScanning(false); // Stop scanning animation
-        
-        // Auto-select first accessible camera but DON'T auto-advance
-        const firstAccessible = formattedCameras.find(cam => cam.accessible);
-        if (firstAccessible) {
-          setSelectedCamera(firstAccessible);
-          // Don't auto-advance - let user review cameras and click next
-          // setActiveStep(2);
-          // setCompleted(prev => ({ ...prev, 0: true, 1: true }));
-          setDeploymentStatus(`Found ${formattedCameras.length} camera(s). Select one to continue.`);
-        } else {
-          setDeploymentStatus(`Found ${formattedCameras.length} camera(s) but need authentication.`);
-        }
-        
-        return;
-      }
-      
-      // If no pre-discovered cameras, do a fresh scan
-      console.log('No pre-discovered cameras, performing fresh scan...');
+      // Always perform a fresh scan when user clicks the button
+      // This ensures we get the latest camera state on the network
+      console.log('Starting fresh network scan - ignoring any cached results...');
       
       const results = await (window.electronAPI as any).enhancedScanNetwork?.({
         credentials: [{
@@ -414,19 +374,27 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
       setCameras(formattedCameras);
       
-      // Auto-select first accessible camera but DON'T auto-advance
-      const firstAccessible = formattedCameras.find(cam => cam.accessible);
-      if (firstAccessible) {
-        setSelectedCamera(firstAccessible);
-        // Don't auto-advance - let user review and select
-        // setActiveStep(2);
-        // setCompleted(prev => ({ ...prev, 0: true, 1: true }));
+      // Update status message
+      if (formattedCameras.length > 0) {
         setDeploymentStatus(`Network scan complete. Found ${formattedCameras.length} camera(s).`);
+        
+        // Auto-select first accessible camera but DON'T auto-advance
+        const firstAccessible = formattedCameras.find(cam => cam.accessible);
+        if (firstAccessible) {
+          setSelectedCamera(firstAccessible);
+          // Don't auto-advance - let user review and select cameras
+        }
+        
+        if (!firstAccessible) {
+          setDeploymentStatus(`Found ${formattedCameras.length} camera(s). Please verify credentials.`);
+        }
       } else {
-        setDeploymentStatus(`Found ${formattedCameras.length} camera(s). Please authenticate to continue.`);
+        setDeploymentStatus('No cameras found on the network. Please check your connection.');
       }
     } catch (error) {
       console.error('Network scan failed:', error);
+      setError('Failed to scan network. Please check your connection and try again.');
+      setDeploymentStatus('Scan failed. Please try again.');
     } finally {
       setScanning(false);
     }
