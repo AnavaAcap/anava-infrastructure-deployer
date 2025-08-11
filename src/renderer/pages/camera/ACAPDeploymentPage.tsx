@@ -79,7 +79,11 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
   onComplete,
   onBack,
 }) => {
-  console.log('ACAPDeploymentPage render:', { cameras: initialCameras, deploymentConfig });
+  console.log('ACAPDeploymentPage render:', { 
+    cameras: initialCameras,
+    deploymentConfig,
+    camerasWithMAC: initialCameras.map(c => ({ id: c.id, mac: c.mac, hasMAC: !!c.mac }))
+  });
   const [cameras, setCameras] = useState<ManualCamera[]>(initialCameras);
   const [activeStep, setActiveStep] = useState(0);
   const [deploymentStatus, setDeploymentStatus] = useState<Map<string, DeploymentStatus>>(
@@ -127,12 +131,20 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
       setDeploymentLog(prev => [...prev, `Retrying license activation for ${camera.model}...`]);
       
       const currentIP = cameraIPs[camera.id] || camera.ip;
+      console.log('[DEBUG] Retrying license for camera:', {
+        id: camera.id,
+        ip: currentIP,
+        model: camera.model,
+        mac: camera.mac,
+        hasMAC: !!camera.mac
+      });
       await window.electronAPI.activateLicenseKey(
         currentIP,
         credentials[camera.id].username,
         credentials[camera.id].password,
         deploymentConfig.anavaKey,
-        'BatonAnalytic'
+        'BatonAnalytic',
+        camera.mac // Pass the MAC address for proper device ID
       );
       
       // Remove from failures if successful
@@ -340,6 +352,14 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
               addLog(`Applying Anava license key...`);
               try {
                 // Pass the camera's MAC address for proper device ID
+                console.log('[DEBUG] Activating license for camera:', {
+                  id: camera.id,
+                  ip: currentIP,
+                  model: camera.model,
+                  mac: camera.mac,
+                  hasMAC: !!camera.mac,
+                  fullCamera: camera
+                });
                 await window.electronAPI.activateLicenseKey(
                   currentIP,
                   credentials[camera.id].username,

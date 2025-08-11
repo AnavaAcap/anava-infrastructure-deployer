@@ -43,6 +43,7 @@ import {
   Videocam as VideocamIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
+  Warning as WarningIcon,
   Refresh as RefreshIcon,
   VolumeUp as VolumeUpIcon,
   NetworkCheck as NetworkCheckIcon,
@@ -64,6 +65,8 @@ interface CameraInfo {
   name: string;
   firmwareVersion?: string;
   accessible: boolean;
+  authRequired?: boolean;
+  mac?: string | null;
   hasACAP?: boolean;
   isLicensed?: boolean;
   status?: 'idle' | 'deploying' | 'licensing' | 'analyzing' | 'complete' | 'error';
@@ -269,6 +272,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
             name: updatedCamera.name || `Camera at ${updatedCamera.ip}`,
             ip: updatedCamera.ip,
             model: updatedCamera.model,
+            mac: updatedCamera.mac || null,
             status: {
               credentials: {
                 completed: true,
@@ -383,13 +387,30 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         throw new Error('Invalid scan response');
       }
 
-      const formattedCameras: CameraInfo[] = results.map((cam: any) => ({
+      // Filter out speakers - only show cameras in this view
+      const camerasOnly = results.filter((device: any) => 
+        device.deviceType !== 'speaker'
+      );
+      
+      // Store speakers separately for later use in speaker configuration
+      const speakers = results.filter((device: any) => 
+        device.deviceType === 'speaker'
+      );
+      if (speakers.length > 0) {
+        console.log(`Found ${speakers.length} speaker(s) for later configuration:`, speakers);
+        // Store speakers in localStorage or state for speaker config page
+        localStorage.setItem('discoveredSpeakers', JSON.stringify(speakers));
+      }
+
+      const formattedCameras: CameraInfo[] = camerasOnly.map((cam: any) => ({
         id: cam.id || `camera-${cam.ip}`,
         ip: cam.ip,
         model: cam.model || 'Unknown',
         name: cam.name || `Camera at ${cam.ip}`,
         firmwareVersion: cam.firmwareVersion,
         accessible: cam.accessible || false,
+        authRequired: cam.authRequired || false,
+        mac: cam.mac || null,  // Include MAC address from scanner!
         hasACAP: false,
         isLicensed: false,
         status: 'idle',
@@ -580,12 +601,18 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         }, 500);
 
         try {
+          console.log('[DEBUG] CameraSetupPage activating license:', {
+            ip: selectedCamera.ip,
+            mac: selectedCamera.mac,
+            hasMAC: !!selectedCamera.mac
+          });
           await (window.electronAPI as any).activateLicenseKey?.(
             selectedCamera.ip,
             credentials.username,
             credentials.password,
             licenseKey,
-            'BatonAnalytic'
+            'BatonAnalytic',
+            selectedCamera.mac  // PASS THE MAC ADDRESS!
           );
           console.log('License key activated successfully');
         } catch (licenseError: any) {
@@ -762,6 +789,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         name: selectedCamera.name || `Camera at ${selectedCamera.ip}`,
         ip: selectedCamera.ip,
         model: selectedCamera.model,
+        mac: selectedCamera.mac || null,
         status: {
           credentials: {
             completed: true,
@@ -973,7 +1001,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   label={
                     <Box>
                       <Typography variant="subtitle2">
-                        Scan Network Again
+                        Scan Network for Axis Devices
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         Search for cameras on your network
@@ -996,11 +1024,10 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                     {scanning && (
                       <Box sx={{ mt: 2, width: '100%', maxWidth: 400 }}>
                         <LinearProgress 
-                          variant="determinate" 
-                          value={(scanProgress.current / scanProgress.total) * 100} 
+                          variant="indeterminate"
                         />
                         <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                          Scanning IPs: {scanProgress.current}/{scanProgress.total} • Found: {scanProgress.foundCount}
+                          Scanning IPs: {scanProgress.current} • Found: {scanProgress.foundCount}
                         </Typography>
                       </Box>
                     )}
@@ -1027,12 +1054,14 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                         border: selectedCamera?.id === camera.id ? 2 : 1,
                         borderColor: selectedCamera?.id === camera.id ? 'primary.main' : 'divider'
                       }}
-                      onClick={() => camera.accessible && setSelectedCamera(camera)}
+                      onClick={() => camera.accessible && !camera.authRequired && setSelectedCamera(camera)}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Box>
                           {camera.accessible ? (
                             <CheckCircleIcon color="success" sx={{ fontSize: 40 }} />
+                          ) : camera.authRequired ? (
+                            <WarningIcon color="warning" sx={{ fontSize: 40 }} />
                           ) : connecting ? (
                             <CircularProgress size={40} />
                           ) : (
@@ -1046,6 +1075,13 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                           <Typography variant="body2" color="text.secondary">
                             {camera.ip} • {camera.model}
                           </Typography>
+                          {camera.authRequired && (
+                            <Alert severity="warning" sx={{ mt: 1, py: 0 }}>
+                              <Typography variant="caption">
+                                Incorrect credentials - please update credentials to access this device
+                              </Typography>
+                            </Alert>
+                          )}
                           {camera.error && (
                             <Alert severity="error" sx={{ mt: 1, py: 0 }}>
                               <Typography variant="caption">

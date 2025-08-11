@@ -13,9 +13,11 @@ const axiosInstance = axios.create({
 interface ScanResult {
   ip: string;
   accessible: boolean;
+  authRequired?: boolean;
   model?: string;
   manufacturer?: string;
   deviceType?: 'camera' | 'speaker';
+  mac?: string;
 }
 
 /**
@@ -86,16 +88,18 @@ export async function fastNetworkScan(
         // Port is open, but need to verify it's actually an Axis device
         const cameraInfo = await identifyCamera(ip, credentials);
         
-        if (cameraInfo.accessible && cameraInfo.manufacturer === 'Axis') {
+        if ((cameraInfo.accessible || cameraInfo.authRequired) && cameraInfo.manufacturer === 'Axis') {
           console.log(`✓ Found Axis device at ${ip}`);
           if (onProgress) onProgress(ip, 'found');
           
           return {
             ip,
-            accessible: true,
+            accessible: cameraInfo.accessible || false,
+            authRequired: cameraInfo.authRequired,
             model: cameraInfo.model,
             manufacturer: 'Axis',
-            deviceType: cameraInfo.deviceType
+            deviceType: cameraInfo.deviceType,
+            mac: cameraInfo.mac
           };
         } else {
           // Port 443 is open but it's not an Axis device
@@ -163,10 +167,10 @@ function checkPort(ip: string, port: number, timeout: number): Promise<boolean> 
 async function identifyCamera(
   ip: string, 
   credentials: { username: string; password: string }
-): Promise<{ accessible: boolean; model?: string; manufacturer?: string; deviceType?: 'camera' | 'speaker' }> {
+): Promise<{ accessible: boolean; authRequired?: boolean; model?: string; manufacturer?: string; deviceType?: 'camera' | 'speaker'; mac?: string }> {
   try {
-    // First try the basicdeviceinfo endpoint with proper auth
-    const response = await axiosInstance.get(`https://${ip}/axis-cgi/basicdeviceinfo.cgi`, {
+    // Try GET first (older devices)
+    let response = await axiosInstance.get(`https://${ip}/axis-cgi/basicdeviceinfo.cgi`, {
       auth: {
         username: credentials.username,
         password: credentials.password
@@ -175,63 +179,149 @@ async function identifyCamera(
       validateStatus: () => true
     });
     
-    // If we get 401, it might be an Axis device but wrong credentials
+    // If we get 401, it's an Axis device but wrong credentials
     if (response.status === 401) {
-      console.log(`Device at ${ip} requires authentication (likely Axis)`);
-      return { accessible: false };
-    }
-    
-    // If not 200, it's not an Axis device
-    if (response.status !== 200) {
-      return { accessible: false };
-    }
-    
-    // Parse the response to get device info
-    const data = response.data.toString();
-    const lines = data.split('\n');
-    let model = '';
-    let deviceType: 'camera' | 'speaker' = 'camera';
-    
-    for (const line of lines) {
-      if (line.startsWith('ProdNbr=')) {
-        model = line.split('=')[1].trim();
-      } else if (line.startsWith('ProdType=')) {
-        const prodType = line.split('=')[1].trim().toLowerCase();
-        // Check if it's a speaker (Audio devices)
-        if (prodType.includes('speaker') || prodType.includes('audio')) {
-          deviceType = 'speaker';
-        }
-      }
-    }
-    
-    // Double-check by trying to access camera-specific endpoint
-    if (deviceType === 'camera') {
+      console.log(`Axis device at ${ip} requires correct authentication`);
+      
+      // Try to determine if it's a speaker by checking audio endpoint
       try {
-        const cameraCheck = await axiosInstance.get(`https://${ip}/axis-cgi/param.cgi?action=list&group=Image`, {
+        const speakerCheck = await axiosInstance.get(`https://${ip}/axis-cgi/audio/transmit.cgi`, {
+          auth: { username: credentials.username, password: credentials.password },
+          validateStatus: () => true,
+          timeout: 1000
+        });
+        
+        if (speakerCheck.status === 401 || speakerCheck.status === 200) {
+          console.log(`Audio endpoint exists - likely a SPEAKER`);
+          return {
+            accessible: false,  // NOT accessible without correct credentials!
+            authRequired: true,
+            model: 'Axis Speaker (Authentication Required)',
+            manufacturer: 'Axis',
+            deviceType: 'speaker'
+          };
+        }
+      } catch (e) {
+        // Audio endpoint doesn't exist, probably a camera
+      }
+      
+      // Default to camera if can't determine
+      return { 
+        accessible: false,  // NOT accessible without correct credentials!
+        authRequired: true,
+        model: 'Axis Camera (Authentication Required)',
+        manufacturer: 'Axis',
+        deviceType: 'camera'
+      };
+    }
+    
+    // Check if it's a newer device that requires POST
+    if (response.status === 200 && response.data?.error?.message?.includes('POST supported')) {
+      console.log(`Device at ${ip} requires POST method (newer Axis device)`);
+      
+      // Try POST with JSON-RPC format for newer devices
+      // Include all properties we want to retrieve
+      const propertyList = [
+        'Brand', 'BuildDate', 'HardwareID', 'ProdFullName',
+        'ProdNbr', 'ProdShortName', 'ProdType', 'ProdVariant',
+        'SerialNumber', 'Soc', 'SocSerialNumber', 'Version', 'WebURL'
+      ];
+      
+      response = await axiosInstance.post(`https://${ip}/axis-cgi/basicdeviceinfo.cgi`, 
+        {
+          "apiVersion": "1.0",
+          "method": "getProperties",
+          "params": {
+            "propertyList": propertyList
+          }
+        },
+        {
           auth: {
             username: credentials.username,
             password: credentials.password
           },
-          timeout: 2000,
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 3000,
           validateStatus: () => true
-        });
-        
-        if (cameraCheck.status !== 200) {
-          // Might be a speaker if this camera endpoint fails
-          deviceType = 'speaker';
         }
-      } catch {
-        // Ignore, already identified as Axis device
+      );
+    }
+    
+    // If not 200 at this point, it's not an Axis device
+    if (response.status !== 200) {
+      return { accessible: false };
+    }
+    
+    // Parse the response - could be JSON or key=value format
+    let model = '';
+    let serialNumber = '';
+    let macAddress = '';
+    let deviceType: 'camera' | 'speaker' = 'camera';
+    
+    // Check if response is JSON (newer devices)
+    if (typeof response.data === 'object' && response.data.data?.propertyList) {
+      const properties = response.data.data.propertyList;
+      
+      model = properties.ProdNbr || properties.ProdFullName || '';
+      serialNumber = properties.SerialNumber || '';
+      macAddress = serialNumber.toUpperCase();
+      
+      const prodType = (properties.ProdType || '').toLowerCase();
+      console.log(`Product Type: ${properties.ProdType}`);
+      
+      // Check device type - be more specific
+      if (prodType.includes('speaker') || prodType.includes('audio') || prodType.includes('horn')) {
+        deviceType = 'speaker';
+      } else if (prodType.includes('camera') || prodType.includes('dome') || prodType.includes('bullet')) {
+        deviceType = 'camera';
+      }
+      
+      console.log(`✓ Found Axis ${deviceType} at ${ip}: ${model} (${properties.ProdType})`);
+      
+      return {
+        accessible: true,
+        model: model || `Axis ${deviceType}`,
+        manufacturer: 'Axis',
+        deviceType,
+        mac: macAddress || undefined
+      };
+    } else {
+      // Old key=value format
+      const data = response.data.toString();
+      
+      // If it doesn't have Axis-specific fields, it's not an Axis device
+      if (!data.includes('ProdNbr=') && !data.includes('Brand=') && !data.includes('SerialNumber=')) {
+        console.log(`Device at ${ip} responded but is not an Axis device`);
+        return { accessible: false };
+      }
+      
+      const lines = data.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('ProdNbr=')) {
+          model = line.split('=')[1].trim();
+        } else if (line.startsWith('SerialNumber=')) {
+          serialNumber = line.split('=')[1].trim();
+          macAddress = serialNumber.toUpperCase();
+          console.log(`Found SerialNumber/MAC: ${macAddress}`);
+        } else if (line.startsWith('ProdType=')) {
+          const prodType = line.split('=')[1].trim().toLowerCase();
+          if (prodType.includes('speaker') || prodType.includes('audio')) {
+            deviceType = 'speaker';
+          }
+        }
       }
     }
     
-    console.log(`✓ Found Axis ${deviceType} at ${ip}: ${model}`);
+    console.log(`✓ Found Axis ${deviceType} at ${ip}: ${model} (MAC: ${macAddress})`);
     
     return {
       accessible: true,
       model: model || `Axis ${deviceType}`,
       manufacturer: 'Axis',
-      deviceType
+      deviceType,
+      mac: macAddress || undefined
     };
     
   } catch (error) {
