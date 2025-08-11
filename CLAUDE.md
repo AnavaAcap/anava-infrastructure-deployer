@@ -60,7 +60,7 @@ npm run dist:win
 ```bash
 npx electron dist/main/index.js
 ```
-DevTools will auto-open in production for debugging (configured in `src/main/index.ts`)
+DevTools will NOT auto-open in production builds (disabled for release)
 
 ## Critical Technical Knowledge
 

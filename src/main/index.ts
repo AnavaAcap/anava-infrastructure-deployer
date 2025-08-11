@@ -139,8 +139,8 @@ function createWindow() {
     const indexPath = path.join(__dirname, '../renderer/index.html');
     console.log(`[Main Process] Loading file from: ${indexPath}`);
     mainWindow.loadFile(indexPath);
-    // Open DevTools in production for debugging
-    mainWindow.webContents.openDevTools();
+    // Don't open DevTools in production - only for development
+    // mainWindow.webContents.openDevTools();
   }
 
   mainWindow.on('closed', () => {
