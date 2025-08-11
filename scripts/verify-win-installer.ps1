@@ -1,272 +1,524 @@
-# PowerShell Script to Verify Windows Installer Integrity
-# Fixes NSIS integrity check failures
+# Windows Installer Verification Tool
+# Verifies installer integrity, shortcuts, and registry entries
+# Compatible with Anava Installer v0.9.178
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$InstallerPath = ""
+    [string]$InstallerPath,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$Detailed,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$TestInstall,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$OutputReport
 )
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Anava Installer - Windows Verification" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
+# Configuration
+$AppName = "Anava Installer"
+$AppId = "com.anava.installer"
+$Publisher = "Anava AI Inc."
+$Version = "0.9.178"
+$UninstallKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$AppName"
 
-# Function to calculate file hash
-function Get-FileHashValue {
-    param([string]$FilePath)
-    
-    if (Test-Path $FilePath) {
-        $hash = Get-FileHash -Path $FilePath -Algorithm SHA256
-        return $hash.Hash
-    }
-    return $null
+# Colors for output
+function Write-Success {
+    param([string]$Message)
+    Write-Host "✓ $Message" -ForegroundColor Green
 }
 
-# Function to check digital signature
-function Test-DigitalSignature {
-    param([string]$FilePath)
-    
-    try {
-        $signature = Get-AuthenticodeSignature -FilePath $FilePath
-        return @{
-            IsSigned = ($signature.Status -eq 'Valid')
-            Status = $signature.Status
-            SignerCertificate = $signature.SignerCertificate
-            TimeStamp = $signature.TimeStamperCertificate
-        }
-    }
-    catch {
-        return @{
-            IsSigned = $false
-            Status = "Error checking signature"
-            SignerCertificate = $null
-            TimeStamp = $null
-        }
-    }
+function Write-Warning {
+    param([string]$Message)
+    Write-Host "⚠ $Message" -ForegroundColor Yellow
 }
 
-# Function to verify NSIS installer structure
-function Test-NSISStructure {
-    param([string]$FilePath)
-    
-    try {
-        # Read first bytes to check for NSIS header
-        $bytes = [System.IO.File]::ReadAllBytes($FilePath)
-        
-        # NSIS installers typically start with specific signatures
-        # Check for common NSIS patterns
-        $isNSIS = $false
-        
-        # Convert first 16 bytes to string for pattern matching
-        $headerString = [System.Text.Encoding]::ASCII.GetString($bytes[0..15])
-        
-        # Check for NSIS markers
-        if ($headerString -match "Nullsoft" -or $bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A) {
-            $isNSIS = $true
-        }
-        
-        # Check file size (should be reasonable for an Electron app)
-        $fileSize = (Get-Item $FilePath).Length
-        $fileSizeMB = [math]::Round($fileSize / 1MB, 2)
-        
-        $sizeValid = ($fileSizeMB -gt 50 -and $fileSizeMB -lt 500)
-        
-        return @{
-            IsValidNSIS = $isNSIS
-            FileSize = $fileSize
-            FileSizeMB = $fileSizeMB
-            SizeValid = $sizeValid
-        }
-    }
-    catch {
-        return @{
-            IsValidNSIS = $false
-            FileSize = 0
-            FileSizeMB = 0
-            SizeValid = $false
-            Error = $_.Exception.Message
-        }
-    }
+function Write-Error {
+    param([string]$Message)
+    Write-Host "✗ $Message" -ForegroundColor Red
+}
+
+function Write-Info {
+    param([string]$Message)
+    Write-Host "ℹ $Message" -ForegroundColor Cyan
+}
+
+function Write-Section {
+    param([string]$Title)
+    Write-Host "`n" -NoNewline
+    Write-Host ("=" * 60) -ForegroundColor DarkGray
+    Write-Host $Title -ForegroundColor Cyan
+    Write-Host ("=" * 60) -ForegroundColor DarkGray
 }
 
 # Find installer if not specified
-if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
-    Write-Host "Searching for installer in release directory..." -ForegroundColor Yellow
+function Find-Installer {
+    if ($InstallerPath -and (Test-Path $InstallerPath)) {
+        return $InstallerPath
+    }
     
-    $scriptDir = Split-Path -Parent $PSScriptRoot
-    $releaseDir = Join-Path $scriptDir "release"
+    # Search in common locations
+    $searchPaths = @(
+        ".\dist\*.exe",
+        ".\dist\*Setup*.exe",
+        ".\*Setup*.exe",
+        "..\dist\*.exe",
+        "..\dist\*Setup*.exe"
+    )
     
-    if (Test-Path $releaseDir) {
-        $installers = Get-ChildItem -Path $releaseDir -Filter "*Setup*.exe" | Sort-Object LastWriteTime -Descending
+    foreach ($path in $searchPaths) {
+        $files = Get-ChildItem -Path $path -ErrorAction SilentlyContinue | 
+                 Where-Object { $_.Name -like "*Setup*" -and $_.Name -like "*.exe" } |
+                 Sort-Object LastWriteTime -Descending
         
-        if ($installers.Count -gt 0) {
-            $InstallerPath = $installers[0].FullName
-            Write-Host "Found installer: $($installers[0].Name)" -ForegroundColor Green
+        if ($files) {
+            return $files[0].FullName
         }
     }
-}
-
-if ([string]::IsNullOrWhiteSpace($InstallerPath) -or !(Test-Path $InstallerPath)) {
-    Write-Host "ERROR: Installer not found!" -ForegroundColor Red
-    Write-Host "Please specify the installer path using -InstallerPath parameter" -ForegroundColor Yellow
-    exit 1
-}
-
-Write-Host ""
-Write-Host "Verifying: $(Split-Path -Leaf $InstallerPath)" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host ""
-
-# 1. Check file existence and basic properties
-Write-Host "[1/6] Checking file properties..." -ForegroundColor Yellow
-$fileInfo = Get-Item $InstallerPath
-Write-Host "  File exists: Yes" -ForegroundColor Green
-Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
-Write-Host "  Created: $($fileInfo.CreationTime)"
-Write-Host "  Modified: $($fileInfo.LastWriteTime)"
-
-# 2. Calculate and display hash
-Write-Host ""
-Write-Host "[2/6] Calculating SHA256 hash..." -ForegroundColor Yellow
-$hash = Get-FileHashValue -FilePath $InstallerPath
-if ($hash) {
-    Write-Host "  SHA256: $hash" -ForegroundColor Green
     
-    # Save hash to file for future verification
-    $hashFile = "$InstallerPath.sha256"
-    "$hash *$(Split-Path -Leaf $InstallerPath)" | Out-File -FilePath $hashFile -Encoding ASCII
-    Write-Host "  Hash saved to: $(Split-Path -Leaf $hashFile)" -ForegroundColor Gray
-} else {
-    Write-Host "  ERROR: Could not calculate hash" -ForegroundColor Red
+    return $null
 }
 
-# 3. Check digital signature
-Write-Host ""
-Write-Host "[3/6] Checking digital signature..." -ForegroundColor Yellow
-$signature = Test-DigitalSignature -FilePath $InstallerPath
-if ($signature.IsSigned) {
-    Write-Host "  Signed: Yes" -ForegroundColor Green
-    Write-Host "  Status: $($signature.Status)" -ForegroundColor Green
-    if ($signature.SignerCertificate) {
-        Write-Host "  Signer: $($signature.SignerCertificate.Subject)"
-        Write-Host "  Issuer: $($signature.SignerCertificate.Issuer)"
+# Verify installer file integrity
+function Test-InstallerIntegrity {
+    param([string]$Path)
+    
+    Write-Section "Installer File Verification"
+    
+    if (-not (Test-Path $Path)) {
+        Write-Error "Installer file not found: $Path"
+        return $false
     }
-} else {
-    Write-Host "  Signed: No" -ForegroundColor Yellow
-    Write-Host "  Status: $($signature.Status)" -ForegroundColor Yellow
-    Write-Host "  Note: Unsigned installers will trigger Windows SmartScreen warnings" -ForegroundColor Gray
-}
-
-# 4. Verify NSIS structure
-Write-Host ""
-Write-Host "[4/6] Verifying NSIS installer structure..." -ForegroundColor Yellow
-$nsisCheck = Test-NSISStructure -FilePath $InstallerPath
-if ($nsisCheck.IsValidNSIS) {
-    Write-Host "  Valid NSIS installer: Yes" -ForegroundColor Green
-} else {
-    Write-Host "  Valid NSIS installer: Unknown" -ForegroundColor Yellow
-}
-Write-Host "  File size: $($nsisCheck.FileSizeMB) MB"
-if ($nsisCheck.SizeValid) {
-    Write-Host "  Size check: Valid" -ForegroundColor Green
-} else {
-    Write-Host "  Size check: Warning - unusual size" -ForegroundColor Yellow
-}
-
-# 5. Check for corruption indicators
-Write-Host ""
-Write-Host "[5/6] Checking for corruption indicators..." -ForegroundColor Yellow
-$corrupted = $false
-$warnings = @()
-
-# Check if file is blocked by Windows
-$stream = Get-Item $InstallerPath -Stream *
-if ($stream | Where-Object { $_.Stream -eq 'Zone.Identifier' }) {
-    $warnings += "File is blocked by Windows (downloaded from internet)"
-    Write-Host "  Windows block: Detected" -ForegroundColor Yellow
     
-    # Attempt to unblock
+    $file = Get-Item $Path
+    Write-Info "Installer: $($file.Name)"
+    Write-Info "Size: $([math]::Round($file.Length / 1MB, 2)) MB"
+    Write-Info "Created: $($file.CreationTime)"
+    Write-Info "Modified: $($file.LastWriteTime)"
+    
+    # Check file size
+    if ($file.Length -lt 50MB) {
+        Write-Warning "Installer size is unusually small (< 50 MB)"
+    } elseif ($file.Length -gt 200MB) {
+        Write-Warning "Installer size is unusually large (> 200 MB)"
+    } else {
+        Write-Success "File size is within expected range"
+    }
+    
+    # Verify PE signature
     try {
-        Unblock-File -Path $InstallerPath
-        Write-Host "  Unblocked file successfully" -ForegroundColor Green
+        $bytes = [System.IO.File]::ReadAllBytes($Path)
+        if ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A) {
+            Write-Success "Valid PE executable signature (MZ)"
+        } else {
+            Write-Error "Invalid PE executable signature"
+            return $false
+        }
     } catch {
-        Write-Host "  Could not unblock file automatically" -ForegroundColor Yellow
+        Write-Error "Failed to read file signature: $_"
+        return $false
     }
-} else {
-    Write-Host "  Windows block: No" -ForegroundColor Green
-}
-
-# Check for incomplete download
-if ($fileInfo.Length -lt 50MB) {
-    $corrupted = $true
-    $warnings += "File size too small - possible incomplete download"
-}
-
-if ($corrupted) {
-    Write-Host "  Corruption detected: Yes" -ForegroundColor Red
-} else {
-    Write-Host "  Corruption detected: No" -ForegroundColor Green
-}
-
-# 6. Generate verification report
-Write-Host ""
-Write-Host "[6/6] Generating verification report..." -ForegroundColor Yellow
-
-$report = @{
-    Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    FileName = Split-Path -Leaf $InstallerPath
-    FilePath = $InstallerPath
-    FileSize = $fileInfo.Length
-    FileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
-    SHA256 = $hash
-    IsSigned = $signature.IsSigned
-    SignatureStatus = $signature.Status
-    IsValidNSIS = $nsisCheck.IsValidNSIS
-    IsCorrupted = $corrupted
-    Warnings = $warnings
-    Passed = (-not $corrupted -and $nsisCheck.SizeValid)
-}
-
-$reportPath = "$InstallerPath.verification.json"
-$report | ConvertTo-Json -Depth 10 | Out-File -FilePath $reportPath -Encoding UTF8
-Write-Host "  Report saved to: $(Split-Path -Leaf $reportPath)" -ForegroundColor Green
-
-# Display summary
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Verification Summary" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-
-if ($report.Passed) {
-    Write-Host "RESULT: PASSED" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "The installer appears to be valid and ready for use." -ForegroundColor Green
     
-    if (-not $signature.IsSigned) {
-        Write-Host ""
-        Write-Host "Recommendation: Consider code signing to avoid security warnings." -ForegroundColor Yellow
+    # Check digital signature
+    try {
+        $signature = Get-AuthenticodeSignature -FilePath $Path
+        if ($signature.Status -eq "Valid") {
+            Write-Success "Digital signature is valid"
+            Write-Info "Signer: $($signature.SignerCertificate.Subject)"
+        } elseif ($signature.Status -eq "NotSigned") {
+            Write-Warning "File is not digitally signed"
+        } else {
+            Write-Warning "Digital signature status: $($signature.Status)"
+        }
+    } catch {
+        Write-Warning "Could not verify digital signature: $_"
     }
-} else {
-    Write-Host "RESULT: FAILED" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Issues detected:" -ForegroundColor Red
-    foreach ($warning in $warnings) {
-        Write-Host "  - $warning" -ForegroundColor Red
+    
+    # Calculate hash
+    try {
+        $hash = Get-FileHash -Path $Path -Algorithm SHA256
+        Write-Info "SHA256: $($hash.Hash)"
+        
+        # Save hash for future verification
+        $hashFile = "$Path.sha256"
+        "$($hash.Hash)  $($file.Name)" | Out-File -FilePath $hashFile -Encoding ASCII
+        Write-Success "Hash saved to $hashFile"
+    } catch {
+        Write-Warning "Could not calculate file hash: $_"
     }
-    Write-Host ""
-    Write-Host "Recommendations:" -ForegroundColor Yellow
-    Write-Host "  1. Re-download the installer" -ForegroundColor Yellow
-    Write-Host "  2. Check your internet connection" -ForegroundColor Yellow
-    Write-Host "  3. Disable antivirus temporarily during download" -ForegroundColor Yellow
-    Write-Host "  4. Use a different browser or download tool" -ForegroundColor Yellow
+    
+    if ($Detailed) {
+        # Extract and analyze NSIS header
+        Write-Info "`nAnalyzing NSIS installer structure..."
+        
+        try {
+            # Look for NSIS signature
+            $nsisSignature = [System.Text.Encoding]::ASCII.GetBytes("NullsoftInst")
+            $found = $false
+            
+            for ($i = 0; $i -lt [Math]::Min($bytes.Length, 10000); $i++) {
+                $match = $true
+                for ($j = 0; $j -lt $nsisSignature.Length; $j++) {
+                    if ($bytes[$i + $j] -ne $nsisSignature[$j]) {
+                        $match = $false
+                        break
+                    }
+                }
+                if ($match) {
+                    $found = $true
+                    Write-Success "Found NSIS installer signature at offset $i"
+                    break
+                }
+            }
+            
+            if (-not $found) {
+                Write-Warning "NSIS signature not found in expected location"
+            }
+        } catch {
+            Write-Warning "Could not analyze NSIS structure: $_"
+        }
+    }
+    
+    return $true
 }
 
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Cyan
+# Test installation in sandbox
+function Test-Installation {
+    param([string]$InstallerPath)
+    
+    Write-Section "Installation Test"
+    
+    if (-not (Get-Command "sandbox.exe" -ErrorAction SilentlyContinue)) {
+        Write-Warning "Windows Sandbox not available. Skipping installation test."
+        Write-Info "To enable: Enable-WindowsOptionalFeature -Online -FeatureName 'Containers-DisposableClientVM'"
+        return
+    }
+    
+    # Create sandbox configuration
+    $sandboxConfig = @"
+<Configuration>
+    <MappedFolders>
+        <MappedFolder>
+            <HostFolder>$(Split-Path $InstallerPath -Parent)</HostFolder>
+            <SandboxFolder>C:\Installer</SandboxFolder>
+            <ReadOnly>true</ReadOnly>
+        </MappedFolder>
+    </MappedFolders>
+    <LogonCommand>
+        <Command>powershell.exe -ExecutionPolicy Bypass -File C:\Installer\test-install.ps1</Command>
+    </LogonCommand>
+    <MemoryInMB>4096</MemoryInMB>
+</Configuration>
+"@
+    
+    # Create test script
+    $testScript = @"
+# Test installation in sandbox
+`$installer = 'C:\Installer\$(Split-Path $InstallerPath -Leaf)'
+Write-Host 'Starting installation test...'
 
-# Return exit code
-if ($report.Passed) {
-    exit 0
+# Run installer silently
+Start-Process -FilePath `$installer -ArgumentList '/S' -Wait
+
+# Check if installed
+if (Test-Path 'C:\Program Files\Anava AI\Anava Installer\Anava Installer.exe') {
+    Write-Host 'Installation successful!' -ForegroundColor Green
+    
+    # Check shortcuts
+    `$desktop = [Environment]::GetFolderPath('Desktop')
+    if (Test-Path "`$desktop\Anava Installer.lnk") {
+        Write-Host 'Desktop shortcut created' -ForegroundColor Green
+    } else {
+        Write-Host 'Desktop shortcut missing!' -ForegroundColor Red
+    }
+    
+    # Check Start Menu
+    `$startMenu = [Environment]::GetFolderPath('Programs')
+    if (Test-Path "`$startMenu\Anava AI\Anava Installer.lnk") {
+        Write-Host 'Start Menu shortcut created' -ForegroundColor Green
+    } else {
+        Write-Host 'Start Menu shortcut missing!' -ForegroundColor Red
+    }
+    
+    # Test uninstallation
+    Write-Host 'Testing uninstallation...'
+    Start-Process -FilePath 'C:\Program Files\Anava AI\Anava Installer\Uninstall.exe' -ArgumentList '/S' -Wait
+    
+    if (-not (Test-Path 'C:\Program Files\Anava AI\Anava Installer')) {
+        Write-Host 'Uninstallation successful!' -ForegroundColor Green
+    } else {
+        Write-Host 'Uninstallation failed - files remain!' -ForegroundColor Red
+    }
 } else {
-    exit 1
+    Write-Host 'Installation failed!' -ForegroundColor Red
 }
+
+Read-Host 'Press Enter to exit'
+"@
+    
+    $configFile = "$env:TEMP\sandbox-config.wsb"
+    $scriptFile = "$(Split-Path $InstallerPath -Parent)\test-install.ps1"
+    
+    try {
+        $sandboxConfig | Out-File -FilePath $configFile -Encoding UTF8
+        $testScript | Out-File -FilePath $scriptFile -Encoding UTF8
+        
+        Write-Info "Launching Windows Sandbox for installation test..."
+        Start-Process "sandbox.exe" -ArgumentList $configFile -Wait
+        
+        Remove-Item $configFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $scriptFile -Force -ErrorAction SilentlyContinue
+        
+        Write-Success "Sandbox test completed"
+    } catch {
+        Write-Error "Sandbox test failed: $_"
+    }
+}
+
+# Check installed application
+function Test-InstalledApplication {
+    Write-Section "Installed Application Verification"
+    
+    $installPaths = @(
+        "${env:ProgramFiles}\Anava AI\Anava Installer",
+        "${env:ProgramFiles(x86)}\Anava AI\Anava Installer",
+        "${env:LOCALAPPDATA}\Programs\Anava Installer"
+    )
+    
+    $installed = $false
+    $installPath = $null
+    
+    foreach ($path in $installPaths) {
+        if (Test-Path "$path\Anava Installer.exe") {
+            $installed = $true
+            $installPath = $path
+            break
+        }
+    }
+    
+    if (-not $installed) {
+        Write-Warning "Application not installed"
+        return $false
+    }
+    
+    Write-Success "Application found at: $installPath"
+    
+    # Check main executable
+    $exePath = "$installPath\Anava Installer.exe"
+    if (Test-Path $exePath) {
+        $exe = Get-Item $exePath
+        Write-Success "Main executable exists"
+        Write-Info "Version: $($exe.VersionInfo.FileVersion)"
+        Write-Info "Product: $($exe.VersionInfo.ProductName)"
+        Write-Info "Company: $($exe.VersionInfo.CompanyName)"
+    } else {
+        Write-Error "Main executable not found"
+    }
+    
+    # Check uninstaller
+    if (Test-Path "$installPath\Uninstall.exe") {
+        Write-Success "Uninstaller exists"
+    } else {
+        Write-Error "Uninstaller not found"
+    }
+    
+    # Check shortcuts
+    Write-Info "`nVerifying shortcuts..."
+    
+    # Desktop shortcut
+    $desktopPaths = @(
+        [Environment]::GetFolderPath("Desktop"),
+        [Environment]::GetFolderPath("CommonDesktopDirectory")
+    )
+    
+    $desktopShortcutFound = $false
+    foreach ($desktop in $desktopPaths) {
+        if (Test-Path "$desktop\Anava Installer.lnk") {
+            Write-Success "Desktop shortcut found at: $desktop"
+            $desktopShortcutFound = $true
+            
+            # Verify shortcut target
+            $shell = New-Object -ComObject WScript.Shell
+            $shortcut = $shell.CreateShortcut("$desktop\Anava Installer.lnk")
+            if ($shortcut.TargetPath -eq $exePath) {
+                Write-Success "Desktop shortcut target is correct"
+            } else {
+                Write-Warning "Desktop shortcut target mismatch: $($shortcut.TargetPath)"
+            }
+            break
+        }
+    }
+    
+    if (-not $desktopShortcutFound) {
+        Write-Error "Desktop shortcut not found"
+    }
+    
+    # Start Menu shortcut
+    $startMenuPaths = @(
+        [Environment]::GetFolderPath("Programs"),
+        [Environment]::GetFolderPath("CommonPrograms")
+    )
+    
+    $startMenuShortcutFound = $false
+    foreach ($startMenu in $startMenuPaths) {
+        if (Test-Path "$startMenu\Anava AI\Anava Installer.lnk") {
+            Write-Success "Start Menu shortcut found at: $startMenu\Anava AI"
+            $startMenuShortcutFound = $true
+            
+            # Verify shortcut target
+            $shell = New-Object -ComObject WScript.Shell
+            $shortcut = $shell.CreateShortcut("$startMenu\Anava AI\Anava Installer.lnk")
+            if ($shortcut.TargetPath -eq $exePath) {
+                Write-Success "Start Menu shortcut target is correct"
+            } else {
+                Write-Warning "Start Menu shortcut target mismatch: $($shortcut.TargetPath)"
+            }
+            break
+        }
+    }
+    
+    if (-not $startMenuShortcutFound) {
+        Write-Error "Start Menu shortcut not found"
+    }
+    
+    # Check registry entries
+    Write-Info "`nVerifying registry entries..."
+    
+    if (Test-Path $UninstallKey) {
+        Write-Success "Uninstall registry key exists"
+        
+        $regEntry = Get-ItemProperty -Path $UninstallKey -ErrorAction SilentlyContinue
+        
+        if ($regEntry.DisplayName -eq $AppName) {
+            Write-Success "Display name is correct"
+        } else {
+            Write-Warning "Display name mismatch: $($regEntry.DisplayName)"
+        }
+        
+        if ($regEntry.Publisher -eq $Publisher) {
+            Write-Success "Publisher is correct"
+        } else {
+            Write-Warning "Publisher mismatch: $($regEntry.Publisher)"
+        }
+        
+        if ($regEntry.DisplayVersion -eq $Version) {
+            Write-Success "Version is correct"
+        } else {
+            Write-Warning "Version mismatch: $($regEntry.DisplayVersion)"
+        }
+        
+        if ($regEntry.UninstallString) {
+            Write-Success "Uninstall string is set: $($regEntry.UninstallString)"
+        } else {
+            Write-Error "Uninstall string is missing"
+        }
+        
+        if ($regEntry.EstimatedSize) {
+            $sizeMB = [math]::Round($regEntry.EstimatedSize / 1024, 2)
+            Write-Info "Estimated size: $sizeMB MB"
+        }
+    } else {
+        Write-Error "Uninstall registry key not found"
+    }
+    
+    return $installed
+}
+
+# Generate verification report
+function New-VerificationReport {
+    param(
+        [string]$InstallerPath,
+        [bool]$IntegrityResult,
+        [bool]$InstallationResult,
+        [string]$OutputPath
+    )
+    
+    $report = @{
+        Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        InstallerFile = if ($InstallerPath) { Split-Path $InstallerPath -Leaf } else { "Not found" }
+        IntegrityCheck = if ($IntegrityResult) { "PASSED" } else { "FAILED" }
+        InstallationCheck = if ($InstallationResult) { "PASSED" } else { "NOT TESTED" }
+        System = @{
+            OSVersion = [System.Environment]::OSVersion.VersionString
+            Architecture = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
+            PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+            Username = [Environment]::UserName
+            MachineName = [Environment]::MachineName
+        }
+    }
+    
+    if ($OutputPath) {
+        $report | ConvertTo-Json -Depth 5 | Out-File -FilePath $OutputPath -Encoding UTF8
+        Write-Success "Report saved to: $OutputPath"
+    }
+    
+    return $report
+}
+
+# Main execution
+function Main {
+    Write-Host @"
+
+╔════════════════════════════════════════════════════════════╗
+║        Anava Installer - Windows Verification Tool        ║
+║                      Version $Version                      ║
+╚════════════════════════════════════════════════════════════╝
+
+"@ -ForegroundColor Cyan
+    
+    # Find installer
+    $installer = Find-Installer
+    if (-not $installer) {
+        Write-Error "No installer file found. Please specify with -InstallerPath parameter."
+        exit 1
+    }
+    
+    Write-Info "Using installer: $installer"
+    
+    # Run verifications
+    $integrityOk = Test-InstallerIntegrity -Path $installer
+    
+    if (-not $integrityOk) {
+        Write-Error "`nInstaller integrity check failed!"
+        exit 1
+    }
+    
+    # Check if application is installed
+    $isInstalled = Test-InstalledApplication
+    
+    # Run installation test if requested
+    if ($TestInstall -and -not $isInstalled) {
+        Test-Installation -InstallerPath $installer
+    } elseif ($TestInstall -and $isInstalled) {
+        Write-Warning "Application is already installed. Skipping installation test."
+    }
+    
+    # Generate report
+    if ($OutputReport) {
+        $report = New-VerificationReport -InstallerPath $installer `
+                                        -IntegrityResult $integrityOk `
+                                        -InstallationResult $isInstalled `
+                                        -OutputPath $OutputReport
+    }
+    
+    # Summary
+    Write-Section "Verification Summary"
+    
+    if ($integrityOk) {
+        Write-Success "Installer integrity verification: PASSED"
+    } else {
+        Write-Error "Installer integrity verification: FAILED"
+    }
+    
+    if ($isInstalled) {
+        Write-Success "Installation verification: Application is installed"
+    } else {
+        Write-Info "Installation verification: Application not installed"
+    }
+    
+    Write-Host "`nVerification complete.`n" -ForegroundColor Green
+}
+
+# Run main function
+Main
