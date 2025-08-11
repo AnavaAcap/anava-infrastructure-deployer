@@ -88,15 +88,15 @@ module.exports = {
       preset: 'ts-jest',
       testEnvironment: 'node',
       testTimeout: 30000,
-      globals: {
-        'ts-jest': {
+      transform: {
+        '^.+\\.tsx?$': ['ts-jest', {
           isolatedModules: true,
           tsconfig: {
             allowJs: true,
             esModuleInterop: true,
             skipLibCheck: true
           }
-        }
+        }]
       }
     },
     {

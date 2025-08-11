@@ -762,26 +762,57 @@ export class CameraConfigurationService {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       try {
-        // Get the signed XML from Axis license server
-        const licenseXML = await this.getLicenseXMLFromAxis(deviceId, licenseKey);
+        // Try direct activation first (without puppeteer)
+        console.log('[CameraConfig] Using direct license activation method...');
         
-        if (!licenseXML) {
-          throw new Error('Failed to get license XML from Axis server');
+        // Construct the license activation URL
+        const licenseUrl = `http://${ip}/local/${applicationName}/license.cgi`;
+        
+        // Create the license activation payload
+        const licensePayload = {
+          key: licenseKey,
+          deviceId: deviceId
+        };
+        
+        console.log('[CameraConfig] Activating license with payload:', { 
+          deviceId, 
+          keyLength: licenseKey.length 
+        });
+        
+        // Send the license activation request
+        const licenseResponse = await this.simpleDigestAuth(
+          ip,
+          username,
+          password,
+          'POST',
+          `/local/${applicationName}/license.cgi`,
+          JSON.stringify(licensePayload)
+        );
+        
+        if (licenseResponse && licenseResponse.status === 200) {
+          console.log('[CameraConfig] License key activated successfully');
+        } else {
+          // If direct method fails, try the upload method
+          console.log('[CameraConfig] Direct activation failed, trying XML upload method...');
+          
+          // Generate simple license XML
+          const licenseXML = this.generateLicenseXMLDirect(deviceId, licenseKey);
+          
+          if (!licenseXML) {
+            throw new Error('Failed to generate license XML');
+          }
+          
+          // Upload the XML to the camera
+          await this.uploadLicenseXML(ip, username, password, applicationName, licenseXML);
+          
+          console.log('[CameraConfig] License key activated via XML upload');
         }
-        
-        // Upload the signed XML to the camera
-        await this.uploadLicenseXML(ip, username, password, applicationName, licenseXML);
-        
-        console.log('[CameraConfig] License key activated successfully');
         
       } catch (error: any) {
         console.error('[CameraConfig] Error during license activation:', error.message);
         
         // Log the specific error
         console.warn('[CameraConfig] License activation failed:', error.message);
-        if (error.message.includes('puppeteer')) {
-          console.warn('[CameraConfig] Puppeteer error - ensure Chrome/Chromium is installed');
-        }
         
         // Throw error with clear message so UI can display it
         throw new Error(`License activation failed: ${error.message}. You may need to activate the license manually through the camera's web interface.`);
@@ -1229,19 +1260,26 @@ export class CameraConfigurationService {
   
   private generateLicenseXMLDirect(deviceId: string, licenseCode: string): string | null {
     try {
-      console.log('[CameraConfig] Generating license XML directly (fallback method)...');
+      console.log('[CameraConfig] Generating license XML directly...');
+      console.log('[CameraConfig] Device ID:', deviceId);
+      console.log('[CameraConfig] License key length:', licenseCode.length);
       
-      // Generate XML directly without Axis SDK
-      // This is a simplified version that should work for most cases
+      // Generate XML in Axis-compatible format
+      // The format is based on Axis ACAP license structure
       const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<licenseKey>
-  <deviceId>${deviceId}</deviceId>
-  <applicationId>415129</applicationId>
-  <licenseCode>${licenseCode}</licenseCode>
-  <timestamp>${new Date().toISOString()}</timestamp>
-</licenseKey>`;
+<License>
+  <Id>${licenseCode}</Id>
+  <Name>BatonAnalytic</Name>
+  <ApplicationId>415129</ApplicationId>
+  <DeviceId>${deviceId}</DeviceId>
+  <Valid>true</Valid>
+  <Type>Production</Type>
+  <ExpirationDate></ExpirationDate>
+  <ActivationDate>${new Date().toISOString()}</ActivationDate>
+</License>`;
       
-      console.log('[CameraConfig] Generated fallback license XML');
+      console.log('[CameraConfig] Generated license XML successfully');
+      console.log('[CameraConfig] XML content:', xml);
       return xml;
     } catch (error: any) {
       console.error('[CameraConfig] Failed to generate direct XML:', error);

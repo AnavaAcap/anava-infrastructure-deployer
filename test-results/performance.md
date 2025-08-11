@@ -1,28 +1,28 @@
 # Performance Test Report
 
-**Date**: 2025-08-11T22:09:18.745Z
+**Date**: 2025-08-11T23:12:57.704Z
 **Platform**: darwin (arm64)
 **Node Version**: v20.19.2
 **CPUs**: 14
 
 ## Summary
 
-- **Total Duration**: 8.57s
-- **Average Test Duration**: 571.4666666666667ms
-- **Memory Usage**: 29.62 MB / 32.89 MB
+- **Total Duration**: 12.63s
+- **Average Test Duration**: 631.45ms
+- **Memory Usage**: 30.00 MB / 34.89 MB
 
 ## Slowest Tests
 
 | Test | Duration | Suite |
 |------|----------|-------|
-| DeploymentEngine resumeDeployment should throw error if deployment not found | 25ms | /tests/unit/services/deploymentEngine.test.ts |
-| DeploymentEngine Constructor and Initialization should initialize with correct dependencies | 4ms | /tests/unit/services/deploymentEngine.test.ts |
-| DeploymentEngine startDeployment should start a new deployment with valid config | 2ms | /tests/unit/services/deploymentEngine.test.ts |
-| DeploymentEngine startDeployment should initialize deployers before starting deployment | 2ms | /tests/unit/services/deploymentEngine.test.ts |
-| DeploymentEngine startDeployment should emit progress events during deployment | 2ms | /tests/unit/services/deploymentEngine.test.ts |
-| DeploymentEngine Service Account Propagation Handling should handle IAM propagation delays correctly | 2ms | /tests/unit/services/deploymentEngine.test.ts |
-| DeploymentEngine Constructor and Initialization should initialize deployers when OAuth client is available | 1ms | /tests/unit/services/deploymentEngine.test.ts |
-| DeploymentEngine Constructor and Initialization should handle missing OAuth client gracefully | 1ms | /tests/unit/services/deploymentEngine.test.ts |
-| DeploymentEngine startDeployment should reset pause state when starting new deployment | 1ms | /tests/unit/services/deploymentEngine.test.ts |
-| DeploymentEngine resumeDeployment should resume an existing deployment | 1ms | /tests/unit/services/deploymentEngine.test.ts |
+| Security Test Suite 1. localStorage Data Sanitization should encrypt sensitive data in localStorage | 55ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 7. Sensitive Data Encryption should use secure key derivation for passwords | 31ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 3. Input Validation & Injection Prevention should validate port numbers are within valid range | 10ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 1. localStorage Data Sanitization should limit localStorage data size to prevent DoS | 9ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 1. localStorage Data Sanitization should sanitize XSS payloads before storing in localStorage | 3ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 2. Credential Handling Security should not log credentials in plaintext | 1ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 2. Credential Handling Security should use secure random tokens for session management | 1ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 3. Input Validation & Injection Prevention should sanitize file paths to prevent path traversal | 1ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 4. Network Scanning Boundaries & Limits should limit concurrent network connections to prevent DoS | 1ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 4. Network Scanning Boundaries & Limits should enforce timeout on network scans | 1ms | /src/__tests__/security-tests.spec.ts |
 
