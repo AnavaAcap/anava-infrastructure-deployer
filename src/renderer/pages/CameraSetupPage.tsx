@@ -169,11 +169,11 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               accessible: true,
               authenticated: true,
             })));
-            setHasPreDiscoveredCameras(true);
+            // Cameras are now available for selection
           } else {
             // No cameras found
             setCameras([]);
-            setHasPreDiscoveredCameras(false);
+            // No cameras found
           }
           if (result.speakers && result.speakers.length > 0) {
             console.log(`Found ${result.speakers.length} speakers after classification`);
@@ -190,15 +190,16 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         } else {
           // No result, no cameras
           setCameras([]);
-          setHasPreDiscoveredCameras(false);
+          // No result, no cameras
         }
       } catch (error) {
         console.error('Failed to classify devices:', error);
         setCameras([]);
-        setHasPreDiscoveredCameras(false);
+        // Error classifying devices
       }
       
       setActiveStep(1);
+      setCompleted(prev => ({ ...prev, 0: true }));
     }
   };
 
