@@ -3,6 +3,9 @@
  * Common configuration for unit tests
  */
 
+// Import custom matchers
+import './customMatchers';
+
 // Mock electron module
 jest.mock('electron', () => ({
   app: {

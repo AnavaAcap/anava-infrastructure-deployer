@@ -34,6 +34,7 @@ import {
   Error as ErrorIcon,
   Videocam as VideocamIcon,
   VolumeUp as VolumeUpIcon,
+  VolumeOff as VolumeOffIcon,
   OpenInNew as OpenInNewIcon,
   Refresh as RefreshIcon,
   Image as ImageIcon,
@@ -75,11 +76,29 @@ const DetectionTestPage: React.FC = () => {
   const [sceneAnalysis, setSceneAnalysis] = useState<SceneAnalysis | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [hasPreFetchedData, setHasPreFetchedData] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
   useEffect(() => {
     loadConfiguredCameras();
     loadApiKey();
     checkPreFetchedData();
+    
+    // Add global click handler to retry blocked audio
+    const handleGlobalClick = () => {
+      if ((window as any).pendingAudio) {
+        console.log('Retrying blocked audio playback...');
+        (window as any).pendingAudio.play().catch((e: any) => {
+          console.error('Still cannot play audio:', e);
+        });
+        (window as any).pendingAudio = null;
+      }
+    };
+    
+    document.addEventListener('click', handleGlobalClick);
+    
+    return () => {
+      document.removeEventListener('click', handleGlobalClick);
+    };
   }, []);
 
   // Separate effect for audio cleanup to avoid stale closure
@@ -184,11 +203,14 @@ const DetectionTestPage: React.FC = () => {
         setSceneAnalysis(analysis);
         
         // Play audio if available - use new format if available
-        if (preFetched.audioBase64) {
-          playAudio(preFetched.audioBase64, preFetched.audioFormat);
-        } else if (preFetched.audioMP3Base64) {
-          playAudio(preFetched.audioMP3Base64, 'mp3');
-        }
+        // Delay slightly to ensure modal is fully rendered
+        setTimeout(() => {
+          if (preFetched.audioBase64) {
+            playAudio(preFetched.audioBase64, preFetched.audioFormat);
+          } else if (preFetched.audioMP3Base64) {
+            playAudio(preFetched.audioMP3Base64, 'mp3');
+          }
+        }, 100);
         
         // Clear the pre-fetched data after using it
         await window.electronAPI?.setConfigValue('preFetchedScene', null);
@@ -217,11 +239,14 @@ const DetectionTestPage: React.FC = () => {
           setSceneAnalysis(analysis);
           
           // Play audio if available - use new format if available
-          if (result.audioBase64) {
-            playAudio(result.audioBase64, result.audioFormat);
-          } else if (result.audioMP3Base64) {
-            playAudio(result.audioMP3Base64, 'mp3');
-          }
+          // Delay slightly to ensure modal is fully rendered
+          setTimeout(() => {
+            if (result.audioBase64) {
+              playAudio(result.audioBase64, result.audioFormat);
+            } else if (result.audioMP3Base64) {
+              playAudio(result.audioMP3Base64, 'mp3');
+            }
+          }, 100);
           
           setActiveStep(2);
         } else {
@@ -311,9 +336,29 @@ const DetectionTestPage: React.FC = () => {
 
       // Create new audio element
       const audio = new Audio(audioUrl);
-      audio.play().catch(e => {
-        console.error('Failed to play audio:', e);
+      
+      // Track playing state
+      audio.addEventListener('play', () => setIsAudioPlaying(true));
+      audio.addEventListener('pause', () => setIsAudioPlaying(false));
+      audio.addEventListener('ended', () => setIsAudioPlaying(false));
+      
+      // Ensure audio is loaded before playing
+      audio.addEventListener('canplaythrough', () => {
+        audio.play().then(() => {
+          setIsAudioPlaying(true);
+        }).catch(e => {
+          console.error('Failed to play audio:', e);
+          // Retry with user interaction if blocked
+          if (e.name === 'NotAllowedError') {
+            console.log('Audio blocked by browser, will play on next user interaction');
+            // Store for retry
+            window.pendingAudio = audio;
+          }
+        });
       });
+      
+      // Load the audio
+      audio.load();
       
       // Clean up object URL when done
       if (format === 'pcm_l16_24000') {
@@ -338,9 +383,25 @@ const DetectionTestPage: React.FC = () => {
     setActiveStep(0);
     setSceneAnalysis(null);
     setError(null);
+    setIsAudioPlaying(false);
     if (audioElement) {
       audioElement.pause();
       audioElement.src = '';
+    }
+  };
+  
+  const toggleAudio = () => {
+    if (!audioElement) return;
+    
+    if (isAudioPlaying) {
+      audioElement.pause();
+      setIsAudioPlaying(false);
+    } else {
+      audioElement.play().then(() => {
+        setIsAudioPlaying(true);
+      }).catch(e => {
+        console.error('Failed to play audio:', e);
+      });
     }
   };
 
@@ -541,9 +602,20 @@ const DetectionTestPage: React.FC = () => {
                 
                 <Grid item xs={12}>
                   <Paper elevation={2} sx={{ p: 3 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <DescriptionIcon sx={{ mr: 1, color: 'primary.main' }} />
-                      <Typography variant="h6">AI Analysis</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <DescriptionIcon sx={{ mr: 1, color: 'primary.main' }} />
+                        <Typography variant="h6">AI Analysis</Typography>
+                      </Box>
+                      {audioElement && (
+                        <IconButton 
+                          onClick={toggleAudio}
+                          color="primary"
+                          title={isAudioPlaying ? 'Mute audio' : 'Play audio'}
+                        >
+                          {isAudioPlaying ? <VolumeOffIcon /> : <VolumeUpIcon />}
+                        </IconButton>
+                      )}
                     </Box>
                     <Typography variant="body1" paragraph>
                       {cleanDescription(sceneAnalysis.description)}
@@ -554,14 +626,23 @@ const DetectionTestPage: React.FC = () => {
                   </Paper>
                 </Grid>
 
-                {sceneAnalysis.audioMP3Base64 && (
+                {(sceneAnalysis.audioMP3Base64 || sceneAnalysis.audioBase64) && (
                   <Grid item xs={12}>
                     <Paper elevation={1} sx={{ p: 2 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <VolumeUpIcon sx={{ mr: 1, color: 'success.main' }} />
-                        <Typography variant="body2">
-                          Audio talkdown played through your speakers
-                        </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <VolumeUpIcon sx={{ mr: 1, color: isAudioPlaying ? 'success.main' : 'text.secondary' }} />
+                          <Typography variant="body2">
+                            {isAudioPlaying ? 'Audio talkdown playing...' : 'Audio talkdown available'}
+                          </Typography>
+                        </Box>
+                        <Button
+                          size="small"
+                          onClick={toggleAudio}
+                          startIcon={isAudioPlaying ? <VolumeOffIcon /> : <VolumeUpIcon />}
+                        >
+                          {isAudioPlaying ? 'Mute' : 'Play'}
+                        </Button>
                       </Box>
                     </Paper>
                   </Grid>
