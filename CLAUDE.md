@@ -57,11 +57,20 @@
 - **Files**: `CameraSetupPage.tsx` lines 771-773, `DetectionTestModal.tsx` lines 76-92
 - **Key**: Support both legacy MP3 and new PCM audio formats
 
-### ✅ Puppeteer Missing in Production - FIXED (v0.9.181)
-- **Problem**: License activation silently fails with "Cannot find module 'puppeteer'"
-- **Solution**: Add puppeteer to asarUnpack in electron-builder.yml
-- **File**: `electron-builder.yml` - Added puppeteer modules to asarUnpack
-- **Key**: Puppeteer needs to be unpacked from asar to work in production
+### ✅ License Activation Without Puppeteer - FIXED (v0.9.184)
+- **Problem**: Puppeteer was breaking in production builds, needed alternative for license activation
+- **Solution**: Use Electron's BrowserWindow to load Axis SDK and get signed license XML
+- **Files Changed**:
+  - `src/main/services/camera/cameraConfigurationService.ts` - Uses BrowserWindow instead of puppeteer
+  - `src/main/activator/activator.html` - Loads Axis SDK and handles license registration
+  - `src/main/activator/preload.js` - Secure IPC bridge between main and activator
+  - `src/main/activator/axis-sdk.js` - Local copy of Axis SDK (avoids CDN loading issues)
+- **Key Points**:
+  - BrowserWindow runs completely hidden (show: false) - no user-visible windows
+  - SDK loads asynchronously, needs 2-8 second wait time
+  - Gets properly signed XML from Axis servers with embedded Bearer token
+  - Works on ANY Mac/Windows machine without external dependencies
+- **Critical**: The Axis SDK has authentication built-in, must use their SDK to get signed XML
 
 ### ✅ Windows Uninstall Issues - FIXED (v0.9.178)
 - **Problem**: "Failed to uninstall old application files: 2" error during reinstall

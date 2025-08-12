@@ -94,7 +94,7 @@ export async function testCameraProtocol(
     const httpsAgent = new https.Agent({ rejectUnauthorized: false });
     await axios.get(httpsUrl, {
       httpsAgent,
-      timeout: 3000, // Short timeout for protocol test
+      timeout: 10000, // 10 seconds - HTTPS can be slower on cameras
       auth: username && password ? { username, password } : undefined,
       validateStatus: (status) => status < 500 // Accept any non-server-error
     });
