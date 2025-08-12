@@ -432,7 +432,7 @@ async function performWindowsCleanup() {
     
     // Windows-specific: Kill any orphaned Electron/Chrome processes
     if (process.platform === 'win32') {
-      const execName = path.basename(process.execPath);
+      // const execName = path.basename(process.execPath);
       const pid = process.pid;
       
       // Kill child processes using Windows tools
