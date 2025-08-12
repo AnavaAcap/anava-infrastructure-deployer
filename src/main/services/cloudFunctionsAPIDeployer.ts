@@ -4,7 +4,7 @@ import archiver from 'archiver';
 import fs from 'fs';
 import path from 'path';
 import { ParallelExecutor } from './utils/parallelExecutor';
-// import { ResilienceUtils } from './utils/resilienceUtils'; // TODO: Add retry logic to deployFunction
+import { ResilienceUtils } from './utils/resilienceUtils';
 
 export interface CloudFunctionConfig {
   name: string;
@@ -73,6 +73,46 @@ export class CloudFunctionsAPIDeployer {
   ): Promise<string> {
     console.log(`Deploying cloud function ${config.name} using Google Cloud APIs...`);
 
+    // Wrap the entire deployment in retry logic with intelligent error handling
+    return ResilienceUtils.withRetry(
+      async () => this.deployFunctionInternal(projectId, config, sourceDir),
+      {
+        maxAttempts: 3,
+        initialDelayMs: 15000, // 15 seconds initial delay
+        maxDelayMs: 60000,     // Max 60 seconds delay
+        backoffMultiplier: 2,
+        retryableErrors: (error) => {
+          // Check if it's a permission error (likely IAM propagation issue)
+          if (error.message?.includes('does not have permission') || 
+              error.message?.includes('PERMISSION_DENIED') ||
+              error.code === 403) {
+            console.log('Permission error detected, will retry after IAM propagation...');
+            return true;
+          }
+          
+          // Check if it's an organization policy error (not retryable)
+          if (error.message?.includes('organization policy') || 
+              error.message?.includes('do not belong to a permitted customer')) {
+            console.error('Organization policy error - not retryable');
+            return false;
+          }
+          
+          // Use default retry logic for other errors
+          return ResilienceUtils.isRetryableError(error);
+        },
+        onRetry: (attempt, error, delayMs) => {
+          console.log(`Retry attempt ${attempt + 1} for function ${config.name} after ${delayMs}ms delay`);
+          console.log(`Error was: ${error.message}`);
+        }
+      }
+    );
+  }
+
+  private async deployFunctionInternal(
+    projectId: string,
+    config: CloudFunctionConfig,
+    sourceDir: string
+  ): Promise<string> {
     try {
       // Get project number for bucket name
       const projectNumber = await this.getProjectNumber(projectId);
