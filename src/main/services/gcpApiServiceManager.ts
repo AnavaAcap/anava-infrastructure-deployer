@@ -19,12 +19,11 @@ export class GCPApiServiceManager {
   constructor(private gcpOAuthService: GCPOAuthService) {}
 
   private async getAuthClient(): Promise<OAuth2Client> {
-    // Use getOAuth2Client to support both unified auth and regular OAuth
-    try {
-      return await this.gcpOAuthService.getOAuth2Client();
-    } catch (error: any) {
-      throw new Error('OAuth client not initialized. Please login first: ' + error.message);
+    // Check if OAuth client is initialized
+    if (!this.gcpOAuthService.oauth2Client) {
+      throw new Error('OAuth client not initialized. Please login first');
     }
+    return this.gcpOAuthService.oauth2Client;
   }
 
   async enableApi(
