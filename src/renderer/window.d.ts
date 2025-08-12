@@ -103,7 +103,7 @@ declare global {
       configureCamera: (camera: any, config: any) => Promise<any>;
       pushCameraSettings: (ip: string, username: string, password: string, configPayload: any) => Promise<any>;
       getCameraSettings: (ip: string, username: string, password: string) => Promise<any>;
-      getSceneDescription: (camera: any, apiKey: string, includeSpeaker?: boolean) => Promise<any>;
+      getSceneDescription: (camera: any, apiKey: string, includeSpeaker?: boolean, customPrompt?: string) => Promise<any>;
       activateLicenseKey: (ip: string, username: string, password: string, licenseKey: string, applicationName: string) => Promise<void>;
       getNetworkInterfaces: () => Promise<any[]>;
       // Speaker-related APIs
