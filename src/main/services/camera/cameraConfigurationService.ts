@@ -762,35 +762,30 @@ export class CameraConfigurationService {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       try {
-        // Try direct activation first (without puppeteer)
-        console.log('[CameraConfig] Using direct license activation method...');
+        // Generate license XML for Axis API
+        console.log('[CameraConfig] Using Axis license upload API...');
         console.log('[CameraConfig] Camera IP:', ip);
         console.log('[CameraConfig] Application:', applicationName);
+        console.log('[CameraConfig] Device ID:', deviceId);
         
-        // Construct the license activation URL
-        const licenseUrl = `https://${ip}/local/${applicationName}/license.cgi`;
+        // Generate the license XML
+        const licenseXML = await this.generateLicenseXMLDirect(deviceId, licenseKey);
         
-        // Create the license activation payload
-        const licensePayload = {
-          key: licenseKey,
-          deviceId: deviceId
-        };
+        if (!licenseXML) {
+          console.error('[CameraConfig] Failed to generate license XML');
+          throw new Error('Failed to generate license XML');
+        }
         
-        console.log('[CameraConfig] Activating license with payload:', { 
-          deviceId, 
-          keyLength: licenseKey.length,
-          url: licenseUrl
-        });
+        console.log('[CameraConfig] Generated license XML (length):', licenseXML.length);
         
-        // Send the license activation request
-        console.log('[CameraConfig] Sending POST request to license.cgi...');
-        const licenseResponse = await this.simpleDigestAuth(
+        // Upload the license using Axis API endpoint
+        console.log('[CameraConfig] Uploading license to Axis API...');
+        const licenseResponse = await this.uploadLicenseXML(
           ip,
           username,
           password,
-          'POST',
-          `/local/${applicationName}/license.cgi`,
-          JSON.stringify(licensePayload)
+          applicationName,
+          licenseXML
         );
         console.log('[CameraConfig] License response status:', licenseResponse?.status);
         console.log('[CameraConfig] License response data:', licenseResponse?.data);
@@ -836,25 +831,10 @@ export class CameraConfigurationService {
           return { success: true, licensed: 'uncertain' };
           
         } else {
-          // If direct method fails, try the upload method
-          console.log('[CameraConfig] Direct activation failed with status:', licenseResponse?.status);
+          // Non-200 response
+          console.log('[CameraConfig] License upload failed with status:', licenseResponse?.status);
           console.log('[CameraConfig] Response data:', licenseResponse?.data);
-          console.log('[CameraConfig] Trying XML upload method as fallback...');
-          
-          // Generate simple license XML
-          const licenseXML = this.generateLicenseXMLDirect(deviceId, licenseKey);
-          
-          if (!licenseXML) {
-            console.error('[CameraConfig] Failed to generate license XML');
-            throw new Error('Failed to generate license XML');
-          }
-          
-          // Upload the XML to the camera
-          console.log('[CameraConfig] Uploading license XML to camera...');
-          await this.uploadLicenseXML(ip, username, password, applicationName, licenseXML);
-          
-          console.log('[CameraConfig] License key activation via XML upload completed');
-          return { success: true, method: 'xml-upload' };
+          throw new Error(`License upload failed with status ${licenseResponse?.status}`);
         }
         
       } catch (error: any) {
@@ -1331,33 +1311,134 @@ export class CameraConfigurationService {
     }
   }
   
-  private generateLicenseXMLDirect(deviceId: string, licenseCode: string): string | null {
-    try {
-      console.log('[CameraConfig] Generating license XML directly...');
+  private async generateLicenseXMLDirect(deviceId: string, licenseCode: string): Promise<string | null> {
+    // Use Electron's BrowserWindow to load the Axis SDK and get signed XML
+    const { BrowserWindow, ipcMain } = require('electron');
+    const path = require('path');
+    
+    return new Promise((resolve) => {
+      console.log('[CameraConfig] Getting signed license XML using BrowserWindow approach...');
       console.log('[CameraConfig] Device ID:', deviceId);
-      console.log('[CameraConfig] License key length:', licenseCode.length);
+      console.log('[CameraConfig] License key:', licenseCode);
       
-      // Generate XML in Axis-compatible format
-      // The format is based on Axis ACAP license structure
-      const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<License>
-  <Id>${licenseCode}</Id>
-  <Name>BatonAnalytic</Name>
-  <ApplicationId>415129</ApplicationId>
-  <DeviceId>${deviceId}</DeviceId>
-  <Valid>true</Valid>
-  <Type>Production</Type>
-  <ExpirationDate></ExpirationDate>
-  <ActivationDate>${new Date().toISOString()}</ActivationDate>
-</License>`;
+      let activatorWindow: any = null;
+      let resolved = false;
       
-      console.log('[CameraConfig] Generated license XML successfully');
-      console.log('[CameraConfig] XML content:', xml);
-      return xml;
-    } catch (error: any) {
-      console.error('[CameraConfig] Failed to generate direct XML:', error);
-      return null;
-    }
+      try {
+        // Create hidden window - NEVER show this to users!
+        activatorWindow = new BrowserWindow({
+          show: false, // ALWAYS hidden - this is just for SDK execution
+          width: 800,
+          height: 600,
+          webPreferences: {
+            preload: path.join(__dirname, '..', '..', 'activator', 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            webSecurity: false, // Allow cross-origin requests to Axis
+            allowRunningInsecureContent: true // Allow HTTP content if needed
+          }
+        });
+        
+        // Load the HTML file with Axis SDK
+        const htmlPath = path.join(__dirname, '..', '..', 'activator', 'activator.html');
+        console.log('[CameraConfig] Loading activator from:', htmlPath);
+        activatorWindow.loadFile(htmlPath);
+        
+        // When the window is ready, send it the data
+        activatorWindow.webContents.on('did-finish-load', () => {
+          console.log('[CameraConfig] Activator window loaded, waiting for SDK to initialize...');
+          // Give the SDK time to load - it loads asynchronously
+          setTimeout(() => {
+            console.log('[CameraConfig] Sending license data to activator...');
+            activatorWindow.webContents.send('license-data', {
+              deviceId,
+              licenseCode,
+              applicationId: '415129' // BatonAnalytic
+            });
+          }, 2000); // Wait 2 seconds for SDK to load
+        });
+        
+        // Listen for the result
+        ipcMain.once('license-result', (_event: any, result: any) => {
+          if (resolved) return;
+          resolved = true;
+          
+          console.log('[CameraConfig] Received result from activator:', result.success);
+          
+          if (result.success && result.data) {
+            // Extract the XML from the response
+            let xml = null;
+            if (result.data.licenseKey && result.data.licenseKey.xml) {
+              xml = result.data.licenseKey.xml;
+            } else if (result.data.xml) {
+              xml = result.data.xml;
+            } else if (typeof result.data === 'string') {
+              xml = result.data;
+            }
+            
+            if (xml) {
+              console.log('[CameraConfig] Got signed XML from Axis (length):', xml.length);
+              // Clean up the hidden window immediately
+              if (activatorWindow && !activatorWindow.isDestroyed()) {
+                activatorWindow.close();
+              }
+              resolve(xml);
+            } else {
+              console.error('[CameraConfig] No XML found in response');
+              // Clean up the hidden window immediately
+              if (activatorWindow && !activatorWindow.isDestroyed()) {
+                activatorWindow.close();
+              }
+              resolve(null);
+            }
+          } else {
+            console.error('[CameraConfig] License activation failed:', result.error);
+            
+            // Clean up immediately - no user-visible windows!
+            if (activatorWindow && !activatorWindow.isDestroyed()) {
+              activatorWindow.close();
+            }
+            
+            resolve(null);
+          }
+        });
+        
+        // Handle errors
+        activatorWindow.webContents.on('did-fail-load', (_event: any, _errorCode: number, errorDescription: string) => {
+          if (resolved) return;
+          resolved = true;
+          
+          console.error('[CameraConfig] Activator window failed to load:', errorDescription);
+          resolve(null);
+          
+          if (activatorWindow && !activatorWindow.isDestroyed()) {
+            activatorWindow.close();
+          }
+        });
+        
+        // Handle timeout
+        setTimeout(() => {
+          if (resolved) return;
+          resolved = true;
+          
+          console.error('[CameraConfig] License activation timed out');
+          resolve(null);
+          
+          if (activatorWindow && !activatorWindow.isDestroyed()) {
+            activatorWindow.close();
+          }
+        }, 30000);
+        
+      } catch (error: any) {
+        console.error('[CameraConfig] Failed to create BrowserWindow:', error.message);
+        resolved = true;
+        resolve(null);
+        
+        if (activatorWindow && !activatorWindow.isDestroyed()) {
+          activatorWindow.close();
+        }
+      }
+    });
   }
 
   private async uploadLicenseXML(
@@ -1366,7 +1447,7 @@ export class CameraConfigurationService {
     password: string,
     applicationName: string,
     xmlContent: string
-  ): Promise<void> {
+  ): Promise<any> {
     const startTime = Date.now();
     console.log('[CameraConfig] ========== LICENSE UPLOAD START ==========');
     console.log('[CameraConfig] Target camera:', ip);
@@ -1423,7 +1504,7 @@ export class CameraConfigurationService {
         if (responseText.includes('OK') || responseText.includes('Error: 0') || responseText.includes('success')) {
           console.log('[CameraConfig] ✅ License upload SUCCESSFUL');
           console.log('[CameraConfig] ========== LICENSE UPLOAD END ==========');
-          return;
+          return response;
         }
         
         // Check for known error patterns
@@ -1437,7 +1518,7 @@ export class CameraConfigurationService {
         console.warn('[CameraConfig] ⚠️ Ambiguous 200 response:', responseText);
         console.log('[CameraConfig] Treating as success due to 200 status');
         console.log('[CameraConfig] ========== LICENSE UPLOAD END ==========');
-        return;
+        return response;
       }
       
       // Non-200 status - this is a failure
