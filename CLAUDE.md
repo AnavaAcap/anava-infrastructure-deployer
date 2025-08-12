@@ -5,12 +5,12 @@
 - **Organization**: AnavaAcap
 - **Product Name**: Anava Installer
 - **Public Releases**: https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
-- **Current Version**: v0.9.188 (2025-01-15)
+- **Current Version**: v0.9.195 (2025-01-16)
 - **Electron**: v37.2.6 (latest)
 - **Node.js**: v20.x
 - **Build System**: Vite v7.x
 
-## Latest Features (v0.9.188) - PRODUCTION VERIFIED ✅
+## Latest Features (v0.9.195) - VIRUS DETECTION FIXED ✅
 
 ### ✅ CRITICAL FIX: Missing Activator Files in Production - FIXED & VERIFIED
 - **Problem**: License activation failing at 60% for all users except developer
