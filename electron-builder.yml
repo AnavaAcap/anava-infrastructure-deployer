@@ -77,7 +77,6 @@ nsis:
   useZip: false
   warningsAsErrors: false
   license: LICENSE.md
-  include: installer-scripts/installer-fixed.nsh
   guid: ${env.INSTALLER_GUID}  # Dynamic GUID from environment
   runAfterFinish: false  # Prevent auto-launch to avoid process conflicts
   installerHeader: assets/installerHeader.bmp

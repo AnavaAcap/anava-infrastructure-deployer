@@ -1,6 +1,6 @@
 {
   "name": "anava-installer",
-  "version": "0.9.191",
+  "version": "0.9.192",
   "description": "Anava Installer - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
@@ -158,8 +158,7 @@
         "installerHeaderIcon": "assets/icon.ico",
         "artifactName": "Anava.Installer.Setup.${version}.exe",
         "unicode": true,
-        "warningsAsErrors": false,
-        "include": "nsis-rescue-installer.nsh"
+        "warningsAsErrors": false
       }
     }
   },
