@@ -1,4 +1,5 @@
 import axios from 'axios';
+import https from 'https';
 import { getLogger } from '../../utils/logger';
 
 const logger = getLogger();
@@ -85,25 +86,27 @@ export async function testCameraProtocol(
     }
   }
   
-  // Try HTTP as fallback
+  // Always use HTTPS for security
   try {
-    const httpUrl = `http://${ip}/axis-cgi/param.cgi?action=list&group=Brand`;
-    logger.debug(`[Protocol] Trying HTTP for ${ip}`);
+    const httpsUrl = `https://${ip}/axis-cgi/param.cgi?action=list&group=Brand`;
+    logger.debug(`[Protocol] Using HTTPS for ${ip}`);
     
-    await axios.get(httpUrl, {
+    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+    await axios.get(httpsUrl, {
+      httpsAgent,
       timeout: 3000, // Short timeout for protocol test
       auth: username && password ? { username, password } : undefined,
       validateStatus: (status) => status < 500 // Accept any non-server-error
     });
     
-    // If we get here without error, HTTP works
-    logger.info(`[Protocol] HTTP works for ${ip} (HTTPS not available)`);
+    // If we get here without error, HTTPS works
+    logger.info(`[Protocol] HTTPS works for ${ip}`);
     return {
-      protocol: 'http',
-      baseUrl: `http://${ip}`,
+      protocol: 'https',
+      baseUrl: `https://${ip}`,
       verified: true
     };
-  } catch (httpError: any) {
+  } catch (httpsError: any) {
     // Both failed, log error
     logger.warn(`[Protocol] Both HTTPS and HTTP failed for ${ip}`);
     

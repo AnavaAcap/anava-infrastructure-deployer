@@ -768,7 +768,7 @@ export class CameraConfigurationService {
         console.log('[CameraConfig] Application:', applicationName);
         
         // Construct the license activation URL
-        const licenseUrl = `http://${ip}/local/${applicationName}/license.cgi`;
+        const licenseUrl = `https://${ip}/local/${applicationName}/license.cgi`;
         
         // Create the license activation payload
         const licensePayload = {
@@ -901,7 +901,7 @@ export class CameraConfigurationService {
   private async _startApplication(ip: string, username: string, password: string, applicationName: string): Promise<void> {
     try {
       console.log('[CameraConfig] Starting application:', applicationName);
-      const startUrl = `http://${ip}/axis-cgi/applications/control.cgi`;
+      const startUrl = `https://${ip}/axis-cgi/applications/control.cgi`;
       const startParams = new URLSearchParams();
       startParams.append('action', 'start');
       startParams.append('package', applicationName);
@@ -956,7 +956,7 @@ export class CameraConfigurationService {
       console.log('[CameraConfig] Testing speaker connectivity:', speakerIp);
       
       // Try to get device info
-      const infoUrl = `http://${speakerIp}/axis-cgi/basicdeviceinfo.cgi`;
+      const infoUrl = `https://${speakerIp}/axis-cgi/basicdeviceinfo.cgi`;
       
       const response1 = await axios.get(infoUrl, {
         timeout: 5000,
@@ -1063,7 +1063,7 @@ export class CameraConfigurationService {
       console.log(`[CameraConfig] Playing audio on speaker ${speakerIp}`);
       
       // Use VAPIX audio API to play audio
-      const audioUrl = `http://${speakerIp}/axis-cgi/audio/transmit.cgi`;
+      const audioUrl = `https://${speakerIp}/axis-cgi/audio/transmit.cgi`;
       
       // Prepare audio data based on file type
       let audioData: Buffer;

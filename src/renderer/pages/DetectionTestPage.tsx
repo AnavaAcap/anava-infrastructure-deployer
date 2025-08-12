@@ -375,7 +375,7 @@ const DetectionTestPage: React.FC = () => {
 
   const openAnavaInterface = () => {
     if (selectedCamera) {
-      window.electronAPI?.openExternal(`http://${selectedCamera.ip}/local/BatonAnalytic/local-events.html`);
+      window.electronAPI?.openExternal(`https://${selectedCamera.ip}/local/BatonAnalytic/local-events.html`);
     }
   };
 
