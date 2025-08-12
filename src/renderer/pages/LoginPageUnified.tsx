@@ -43,28 +43,7 @@ const LoginPageUnified: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setError(null);
 
     try {
-      // Use unified Google auth to get both ID token and access token
-      const authResult = await window.electronAPI.auth.unifiedGoogle();
-      
-      if (!authResult.success) {
-        throw new Error(authResult.error || 'Authentication failed');
-      }
-
-      console.log('Google auth successful:', authResult);
-      
-      // Get the actual authenticated user's email
-      if (!authResult.user || !authResult.user.email) {
-        throw new Error('Authentication succeeded but no user email found');
-      }
-      
-      const userEmail = authResult.user.email;
-      console.log('Using authenticated user email:', userEmail);
-      
-      // Get the Google tokens from the auth result
-      const googleIdToken = authResult.user.idToken;
-      const googleAccessToken = authResult.user.accessToken;
-      
-      // Get Firebase config for license assignment
+      // Get Firebase config
       const firebaseConfig = {
         apiKey: "AIzaSyCJbWAa-zQir1v8kmlye8Kv3kmhPb9r18s",
         authDomain: "anava-ai.firebaseapp.com",
@@ -73,38 +52,42 @@ const LoginPageUnified: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         messagingSenderId: "392865621461",
         appId: "1:392865621461:web:15db206ae4e9c72f7dc95c"
       };
+
+      // Initialize Google Auth with Firebase
+      const { GoogleAuthService } = await import('../services/googleAuthService');
+      const googleAuth = new GoogleAuthService();
+      await googleAuth.initialize(firebaseConfig);
       
-      try {
-        // Use the new Firebase Google Auth method with both tokens
-        const licenseResult = await window.electronAPI.license.assignWithFirebaseGoogle({
-          googleIdToken,
-          googleAccessToken,
-          firebaseConfig
-        });
-        
-        if (licenseResult.success) {
-          console.log('License key retrieved/assigned:', licenseResult.key);
-          console.log('Already assigned:', licenseResult.alreadyAssigned);
-          onLoginSuccess();
-        } else {
-          throw new Error(licenseResult.error || 'Failed to assign license');
-        }
-      } catch (licenseError: any) {
-        console.error('License assignment error:', licenseError);
-        
-        // Fallback: check if we have a cached key
-        const cachedKey = await window.electronAPI.license.getAssignedKey();
-        if (cachedKey.success && cachedKey.key) {
-          console.log('Using cached license key');
-          onLoginSuccess();
-        } else {
-          throw new Error('Unable to assign license key. Please try again or contact support.');
-        }
+      // Sign in with Google popup (Firebase)
+      const profile = await googleAuth.signInWithGoogle();
+      
+      console.log('Google sign-in successful:', profile.email);
+      
+      // Store user's display name in localStorage for later use
+      if (profile.displayName) {
+        localStorage.setItem('userDisplayName', profile.displayName);
+        console.log('Stored user display name:', profile.displayName);
+      }
+      
+      // Assign license with Google credentials using Firebase
+      const licenseResult = await window.electronAPI.license.assignWithGoogle({
+        idToken: profile.idToken,
+        firebaseConfig
+      });
+      
+      if (licenseResult.success) {
+        console.log('License assigned:', licenseResult.key);
+        // Clean up
+        googleAuth.dispose();
+        // Navigate to main app
+        onLoginSuccess();
+      } else {
+        throw new Error(licenseResult.error || 'Failed to assign license');
       }
       
     } catch (error: any) {
       console.error('Login error:', error);
-      if (error.message === 'Authentication cancelled') {
+      if (error.message === 'Sign-in cancelled') {
         setError('Sign-in was cancelled. Please try again.');
       } else {
         setError(error.message || 'Failed to sign in');
