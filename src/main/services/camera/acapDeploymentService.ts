@@ -310,7 +310,25 @@ export class ACAPDeploymentService {
       console.log(`[deployACAPAuto] Getting firmware info for ${camera.ip}...`);
       logger.info('[deployACAPAuto] Getting firmware info', { cameraIp: camera.ip });
       
-      const firmwareInfo = await this.getCameraFirmwareInfo(camera);
+      // Add timeout handling for offline cameras
+      let firmwareInfo;
+      try {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Camera not responding - timeout after 15 seconds')), 15000)
+        );
+        
+        firmwareInfo = await Promise.race([
+          this.getCameraFirmwareInfo(camera),
+          timeoutPromise
+        ]);
+      } catch (error: any) {
+        console.error(`[deployACAPAuto] Failed to get firmware info:`, error.message);
+        
+        if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT') || error.message.includes('ECONNREFUSED')) {
+          throw new Error(`Camera at ${camera.ip} is not responding. Please check:\n- Camera is powered on\n- Network connection is working\n- IP address is correct\n- Camera is not rebooting`);
+        }
+        throw error;
+      }
       
       console.log(`[deployACAPAuto] Firmware info received:`, firmwareInfo);
       logger.info('[deployACAPAuto] Firmware info received', firmwareInfo);
@@ -862,22 +880,21 @@ export class ACAPDeploymentService {
     options: any = {}
   ): Promise<any> {
     try {
-      // Always use HTTPS with Basic auth for security
-      const url = `https://${ip}${uri}`;
-      const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+      // Use HTTP for Axis cameras (they use Digest auth)
+      const url = `http://${ip}${uri}`;
       
-      // Use Basic auth directly
+      // Use Basic auth for now (Axis cameras may accept it)
       const auth = Buffer.from(`${username}:${password}`).toString('base64');
       
       const config: any = {
         method,
         url,
-        httpsAgent,
-        timeout: options.timeout || 300000, // 5 minutes for large file uploads
+        timeout: options.timeout || 10000, // 10 seconds default timeout
         headers: {
           'Authorization': `Basic ${auth}`,
           ...options.headers
         },
+        validateStatus: () => true, // Don't throw on 401
         ...options
       };
 
@@ -885,13 +902,16 @@ export class ACAPDeploymentService {
         config.data = data;
       }
 
-      console.log(`[basicAuth] ${method} ${url}`);
-      console.log('[basicAuth] Making request with Basic auth...');
+      console.log(`[digestAuth] ${method} ${url} (timeout: ${config.timeout}ms)`);
       const response = await axios(config);
       
       if (response.status === 200 || response.status === 204) {
-        console.log('[basicAuth] Response status:', response.status);
+        console.log('[digestAuth] Response status:', response.status);
         return response;
+      } else if (response.status === 401) {
+        // Camera requires auth but we're using wrong method
+        console.log('[digestAuth] Got 401 - camera requires proper authentication');
+        throw new Error('Authentication required - check credentials');
       } else {
         throw new Error(`Request failed with status ${response.status}`);
       }
