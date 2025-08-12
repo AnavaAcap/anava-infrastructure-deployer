@@ -880,16 +880,22 @@ export class ACAPDeploymentService {
     options: any = {}
   ): Promise<any> {
     try {
-      // Use HTTP for Axis cameras (they use Digest auth)
-      const url = `http://${ip}${uri}`;
+      // Use HTTPS with Basic auth for Axis cameras
+      const url = `https://${ip}${uri}`;
       
-      // Use Basic auth for now (Axis cameras may accept it)
+      // Basic auth header
       const auth = Buffer.from(`${username}:${password}`).toString('base64');
+      
+      // Create HTTPS agent that allows self-signed certificates
+      const httpsAgent = new https.Agent({
+        rejectUnauthorized: false
+      });
       
       const config: any = {
         method,
         url,
-        timeout: options.timeout || 300000, // 5 minutes default timeout
+        httpsAgent,
+        timeout: options.timeout || 10000, // 10 seconds default timeout
         headers: {
           'Authorization': `Basic ${auth}`,
           ...options.headers
@@ -909,16 +915,15 @@ export class ACAPDeploymentService {
         console.log('[digestAuth] Response status:', response.status);
         return response;
       } else if (response.status === 401) {
-        // Camera requires auth but we're using wrong method
-        console.log('[digestAuth] Got 401 - camera requires proper authentication');
-        throw new Error('Authentication required - check credentials');
+        console.log('[digestAuth] Got 401 - authentication failed');
+        throw new Error('Authentication failed - check credentials');
       } else {
         throw new Error(`Request failed with status ${response.status}`);
       }
     } catch (error: any) {
-      console.error('[basicAuth] Error:', error.message);
+      console.error('[digestAuth] Error:', error.message);
       if (error.code) {
-        console.error('[basicAuth] Error code:', error.code);
+        console.error('[digestAuth] Error code:', error.code);
       }
       throw error;
     }

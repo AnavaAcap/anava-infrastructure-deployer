@@ -562,7 +562,7 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                   
                   // Try to verify if license is actually active despite the error
                   try {
-                    const verifyUrl = `http://${currentIP}/axis-cgi/applications/list.cgi`;
+                    const verifyUrl = `https://${currentIP}/axis-cgi/applications/list.cgi`;
                     const response = await window.electronAPI.makeAuthenticatedRequest(
                       verifyUrl,
                       'GET',

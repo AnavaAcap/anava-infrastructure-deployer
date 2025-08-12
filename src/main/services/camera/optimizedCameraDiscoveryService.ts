@@ -796,7 +796,7 @@ export class OptimizedCameraDiscoveryService {
           status: 'accessible',
           credentials: { username, password },
           rtspUrl: `rtsp://${username}:${password}@${ip}:554/axis-media/media.amp`,
-          httpUrl: `http://${ip}:${port === 80 ? '' : port}`,
+          httpUrl: `https://${ip}:${port === 443 ? '' : port}`,
           httpsUrl: protocol === 'https' ? `https://${ip}:${port === 443 ? '' : port}` : undefined,
           authenticated: true
         };
@@ -863,7 +863,7 @@ export class OptimizedCameraDiscoveryService {
           status: 'accessible',
           credentials: { username, password },
           rtspUrl: `rtsp://${username}:${password}@${ip}:554/axis-media/media.amp`,
-          httpUrl: `http://${ip}:${port === 80 ? '' : port}`,
+          httpUrl: `https://${ip}:${port === 443 ? '' : port}`,
           httpsUrl: protocol === 'https' ? `https://${ip}:${port === 443 ? '' : port}` : undefined,
           authenticated: true
         };
