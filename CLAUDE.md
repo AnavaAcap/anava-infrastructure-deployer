@@ -5,12 +5,43 @@
 - **Organization**: AnavaAcap
 - **Product Name**: Anava Installer
 - **Public Releases**: https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
-- **Current Version**: v0.9.185 (2025-01-13)
+- **Current Version**: v0.9.188 (2025-01-15)
 - **Electron**: v37.2.6 (latest)
 - **Node.js**: v20.x
 - **Build System**: Vite v7.x
 
-## Critical Fixes Applied (v0.9.185)
+## Latest Features (v0.9.188)
+
+### ✅ CRITICAL FIX: Missing Activator Files in Production - FIXED
+- **Problem**: License activation failing at 60% for all users except developer
+- **Solution**: Added copy-activator.js script to include activator files in build
+- **Impact**: Production builds now include critical license activation components
+
+### ✅ Enhanced Error Display - NEW
+- **Feature**: Full raw error responses shown for debugging
+- **Implementation**: Errors displayed with JSON data, status codes, stack traces
+- **Format**: Monospace/preformatted text for better readability
+
+### ✅ Personalized AI Greetings - NEW
+- **Feature**: AI greets users by name during validation tests
+- **Implementation**: 
+  - Stores user's displayName from Google login in localStorage
+  - Passes custom prompts through: frontend → IPC → backend → camera API
+  - Fallback to generic greeting if no name available
+- **Prompt Format**: "You are Anava... greet [Name] by name..."
+- **Files**: `LoginPage.tsx`, `DetectionTestModal.tsx`, `cameraConfigurationService.ts`
+
+### ✅ Pre-fetched Scene Data Reuse - FIXED
+- **Problem**: First AI test wasn't using already-fetched data
+- **Solution**: Store cameraId and timestamp with pre-fetched data
+- **Files**: `CameraSetupPage.tsx` line 868-874, `DetectionTestModal.tsx` line 67-80
+
+### ✅ Speaker Config Loading State - NEW
+- **Feature**: Loading overlay during 10-second speaker configuration
+- **Implementation**: Full-screen overlay with progress indicator
+- **Files**: `CameraSetupPage.tsx` lines 1475-1502, state at line 153
+
+## Critical Production Fixes
 
 ### ✅ White Screen Issue - FIXED
 - **Problem**: React app not mounting in production builds
@@ -29,33 +60,9 @@
 - **Solution**: Removed node-ssdp completely, using only Bonjour/mDNS
 - **Result**: 0 npm audit vulnerabilities
 
-### ✅ AI Mode Deployment - FIXED
-- **Problem**: AI Studio mode was skipping service account creation
-- **Solution**: Removed conditional logic - all steps run regardless of AI mode
-- **File**: `deploymentEngine.ts` - Removed `if (!isAiStudioMode)` checks
-
-### ✅ Camera Detection - FIXED (2025-01-11)
-- **Problem**: Scanner incorrectly identified devices (.121 as speaker, .156 not detected)
-- **Solution**: Fixed POST request format with propertyList, added speaker detection
+### ✅ Camera Detection - CRITICAL
+- **Key**: Newer Axis devices require POST with propertyList array in params
 - **File**: `fastNetworkScanner.ts` - Proper POST format and audio endpoint checking
-- **Key**: Newer devices require POST with propertyList array in params
-
-### ✅ Camera Setup State Persistence - FIXED (2025-01-11)
-- **Problem**: Camera setup state lost when AI Vision modal closed
-- **Solution**: Added localStorage persistence for camera setup state
-- **File**: `CameraSetupPage.tsx` - Save/restore state to/from localStorage
-- **Key**: State persists across component unmounts, "Start Fresh Setup" button added
-
-### ✅ Speaker Configuration Completion - FIXED (2025-01-11)
-- **Problem**: Step 4 (speaker config) not marked as completed visually
-- **Solution**: Added setCompleted call when speaker configuration finishes
-- **File**: `CameraSetupPage.tsx` line 1705
-
-### ✅ AI Vision Audio Playback - FIXED (2025-01-11)
-- **Problem**: Pre-fetched AI Vision test audio not playing on first load
-- **Solution**: Store audioBase64 and audioFormat fields in pre-fetched data
-- **Files**: `CameraSetupPage.tsx` lines 771-773, `DetectionTestModal.tsx` lines 76-92
-- **Key**: Support both legacy MP3 and new PCM audio formats
 
 ### ✅ License Activation Without Puppeteer - FIXED (v0.9.184)
 - **Problem**: Puppeteer was breaking in production builds, needed alternative for license activation
@@ -76,22 +83,13 @@
 - **Problem**: ACAP may restart after deployment causing 503/connection errors during license activation
 - **Solution**: Added retry logic with 10-second delays between attempts
 - **Files**: `ACAPDeploymentPage.tsx` - Both automatic and manual retry functions
+
 - **Key Features**:
   - Up to 3 retry attempts for license activation
   - 10-second delay between retries when camera is restarting
   - Handles ECONNREFUSED, ETIMEDOUT, and 503 errors gracefully
   - User-friendly messages during retry process
 
-### ✅ Windows Uninstall Issues - FIXED (v0.9.178)
-- **Problem**: "Failed to uninstall old application files: 2" error during reinstall
-- **Solution**: Comprehensive NSIS installer fixes with process termination and retry logic
-- **Files**: `installer.nsh`, `electron-builder-win.yml`
-- **Key Features**:
-  - Process termination before uninstall (`taskkill /F /IM "Anava Installer.exe"`)
-  - 5-attempt retry logic with delays for locked files
-  - Admin rights verification for proper permissions
-  - Safe cleanup routines with registry verification
-- **Note**: Users experiencing this issue likely tested versions before v0.9.178
 
 ## Build Commands
 
@@ -189,15 +187,11 @@ tail -f "$LATEST_LOG"  # Follow log in real-time
 
 | Issue | Solution |
 |-------|----------|
-| White screen in production | Check DevTools console, verify script in body |
-| License activation fails | Check MAC address is passed through entire chain, not hardcoded |
-| Camera not detected | Check POST request format, ensure propertyList in params |
-| Speaker showing as camera | Verify audio endpoint detection logic |
-| Wrong progress count | Remove denominator or calculate total IPs correctly |
-| 403 errors from cameras | Token needs refresh, check permissions |
-| npm audit vulnerabilities | Run `npm audit fix` or check specific packages |
-| Build fails on Windows | Run as Administrator |
-| Notarization fails | Check Apple credentials are current |
+| White screen in production | Script must load AFTER `<div id="root">` - check vite.config.ts |
+| License activation fails | Check MAC flows: scanner → formattedCameras → selectedCamera → activation |
+| Camera not detected | POST with propertyList required for newer devices |
+| Custom prompt not working | Check localStorage has userDisplayName, verify customPrompt passed through IPC |
+| Pre-fetched data not used | Ensure cameraId and timestamp stored with data |
 
 ## Troubleshooting Camera Detection
 
@@ -220,47 +214,24 @@ curl -k https://192.168.50.121/axis-cgi/audio/transmit.cgi
 
 See `CAMERA_DETECTION_TROUBLESHOOTING.md` for detailed debugging guide.
 
-## Important Files
+## Key Files
 
 - `vite.config.ts` - Build configuration with script placement fix
-- `src/main/index.ts` - Main process with DevTools auto-open
-- `src/renderer/pages/camera/ACAPDeploymentPage.tsx` - License activation (line 369)
-- `src/renderer/pages/CameraSetupPage.tsx` - Camera discovery UI (MAC pass at line 337)
-- `src/main/services/camera/fastNetworkScanner.ts` - Device detection logic (identifyCamera exported)
+- `src/renderer/pages/CameraSetupPage.tsx` - Camera setup, speaker config, pre-fetch logic
+- `src/renderer/components/DetectionTestModal.tsx` - AI test with personalized prompts
+- `src/main/services/camera/cameraConfigurationService.ts` - getSceneDescription with customPrompt
+- `src/main/services/camera/fastNetworkScanner.ts` - Device detection (POST with propertyList)
 - `src/main/services/deploymentEngine.ts` - GCP deployment logic
-- `package.json` - Version and dependencies
-- `src/__tests__/regression-tests-fixed.spec.ts` - Working regression tests
-- `src/__tests__/security-tests.spec.ts` - Security test suite
-- `src/__tests__/integration-tests.spec.ts` - Integration tests
-- `.github/workflows/test.yml` - CI/CD test configuration
-- `src/__tests__/regression-tests.spec.ts` - Regression tests for camera detection
 
-## Test Suite Status
-
-### Current Test Coverage (v0.9.182)
-- **Regression Tests**: 18/18 passing ✅
-- **Security Tests**: 18/20 passing (2 minor XSS test issues)
-- **Integration Tests**: 19/19 passing ✅
-- **GitHub Actions**: Configured and operational ✅
-
-### Test Commands
+## Test Commands
 ```bash
 npm test                       # Run all tests
-npm run test:regression        # Regression tests only
-npm run test:security          # Security tests only
-npm run test:integration       # Integration tests only
-npm run test:coverage          # With coverage report
+npm run test:regression        # Regression tests (18/18 passing)
+npm run test:integration       # Integration tests (19/19 passing)
 ```
 
-## DO NOT
+## Critical DO NOTs
 - Use hardcoded MAC addresses for license activation
-- Skip service account creation for any AI mode
-- Add node-ssdp back (security vulnerability)
-- Put script tags in HTML head for Electron
-- Deploy without testing locally first
-- Forget to update version before release
-- Forget to pass MAC through entire chain (scanner → UI → license)
-- Show speakers in "Found Cameras" list
-- Use GET for newer Axis devices (they require POST)
-- Forget to run `npm run build:renderer` after UI changes
-- Ship without running regression tests
+- Put script tags in HTML head for Electron (breaks production)
+- Use GET for newer Axis devices (they require POST with propertyList)
+- Ship without testing the production build locally first
