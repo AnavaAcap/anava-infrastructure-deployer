@@ -93,6 +93,8 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
   const [configuring, setConfiguring] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<{ title: string; message: string; details?: string } | null>(null);
   const [showCredentialsDialog, setShowCredentialsDialog] = useState(false);
   const [credentials, setCredentials] = useState<CameraCredentials>(
     cameras.reduce((acc, cam) => ({
@@ -270,6 +272,13 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
     setDeploymentLog(prev => [...prev, `[${timestamp}] ${message}`]);
+  };
+
+  const showErrorDialog = (title: string, message: string, details?: string) => {
+    setErrorDetails({ title, message, details });
+    setErrorDialogOpen(true);
+    // Also set the error for the banner (fallback)
+    setError(`${title}: ${message}`);
   };
 
   const addManualCamera = () => {
@@ -472,8 +481,13 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
               console.log('[LICENSE] Deployment config has anavaKey:', !!deploymentConfig.anavaKey);
               console.log('[LICENSE] AnavaKey length:', deploymentConfig.anavaKey?.length);
               
+              // CRITICAL: Wait for ACAP to fully restart after deployment
+              addLog(`⏱ Waiting for ACAP to initialize (15 seconds)...`);
+              window.electronAPI.send('deployment-log', 'info', '[LICENSE] Waiting for ACAP to stabilize after deployment');
+              await new Promise(resolve => setTimeout(resolve, 15000)); // Wait 15 seconds
+              
               addLog(`Applying Anava license key...`);
-              window.electronAPI.send('deployment-log', 'info', '[LICENSE] Starting license activation');
+              window.electronAPI.send('deployment-log', 'info', '[LICENSE] Starting license activation after delay');
               
               try {
                 // Pass the camera's MAC address for proper device ID
@@ -750,13 +764,16 @@ Please use a different license key or deactivate it from the other device first.
                     licenseError.message;
                   setLicenseFailures(prev => new Map(prev).set(camera.id, fullErrorMsg));
                   
-                  // Set error with FULL details visible to user
-                  const detailedError = licenseError.response ?
-                    `License activation failed: ${licenseError.message}
-
-Full Response: ${JSON.stringify(licenseError.response.data, null, 2)}` :
-                    `License activation failed: ${licenseError.message}`;
-                  setError(detailedError);
+                  // Show error dialog with FULL details
+                  const errorTitle = 'License Activation Failed';
+                  const errorMessage = licenseError.message.includes('stream') ? 
+                    'Connection lost during license activation. The ACAP may be restarting. Please wait a moment and retry.' :
+                    licenseError.message;
+                  const errorDetailsText = licenseError.response ? 
+                    JSON.stringify(licenseError.response.data, null, 2) :
+                    licenseError.stack || '';
+                  
+                  showErrorDialog(errorTitle, errorMessage, errorDetailsText);
                   
                   // Mark as error - this is FATAL
                   setDeploymentStatus(prev => {
@@ -1322,6 +1339,60 @@ Full Response: ${JSON.stringify(licenseError.response.data, null, 2)}` :
             </Step>
           ))}
         </Stepper>
+
+        {/* Error Dialog for critical errors */}
+        <Dialog
+          open={errorDialogOpen}
+          onClose={() => setErrorDialogOpen(false)}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle sx={{ 
+            bgcolor: 'error.main', 
+            color: 'error.contrastText',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1
+          }}>
+            <ErrorIcon />
+            {errorDetails?.title || 'Error'}
+          </DialogTitle>
+          <DialogContent sx={{ mt: 2 }}>
+            <Typography variant="body1" paragraph>
+              {errorDetails?.message}
+            </Typography>
+            {errorDetails?.details && (
+              <Box sx={{ 
+                bgcolor: 'grey.100', 
+                p: 2, 
+                borderRadius: 1,
+                maxHeight: 300,
+                overflow: 'auto'
+              }}>
+                <Typography variant="body2" component="pre" sx={{ fontFamily: 'monospace' }}>
+                  {errorDetails.details}
+                </Typography>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setErrorDialogOpen(false)} color="primary">
+              Close
+            </Button>
+            {deploying && (
+              <Button 
+                onClick={() => {
+                  setErrorDialogOpen(false);
+                  // Retry logic could go here
+                }} 
+                color="primary" 
+                variant="contained"
+              >
+                Continue Anyway
+              </Button>
+            )}
+          </DialogActions>
+        </Dialog>
       </Paper>
     </Box>
   );

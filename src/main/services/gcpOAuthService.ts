@@ -88,6 +88,62 @@ export class GCPOAuthService {
     }
   }
   
+  private async getAuthenticatedClient(): Promise<OAuth2Client> {
+    // First try to use unified auth tokens
+    try {
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'config.json');
+      const configData = await fs.readFile(configPath, 'utf-8');
+      const config = JSON.parse(configData);
+      
+      if (config.gcpAccessToken) {
+        log.info('Using unified auth tokens');
+        
+        // Create OAuth2Client with unified auth tokens
+        if (!this.authConfig) {
+          await this.initialize();
+        }
+        
+        const clientId = this.authConfig?.client_id;
+        const clientSecret = this.authConfig?.client_secret;
+        
+        if (!clientId || !clientSecret) {
+          throw new Error('OAuth configuration missing client_id or client_secret');
+        }
+        
+        const client = new OAuth2Client(
+          clientId,
+          clientSecret,
+          'http://localhost:3000/auth/callback'
+        );
+        
+        // Set the credentials from unified auth
+        client.setCredentials({
+          access_token: config.gcpAccessToken,
+          refresh_token: config.gcpRefreshToken,
+          token_type: 'Bearer'
+        });
+        
+        // Also set the _clientId and _clientSecret properties directly
+        // These are used internally by the OAuth2Client
+        (client as any)._clientId = clientId;
+        (client as any)._clientSecret = clientSecret;
+        
+        return client;
+      }
+    } catch (error) {
+      // No unified auth tokens, fall back to regular OAuth
+      log.info('No unified auth tokens found, using regular OAuth');
+    }
+    
+    // Fall back to existing oauth2Client
+    if (!this.oauth2Client || !this.oauth2Client.credentials) {
+      throw new Error('Not authenticated. Please sign in first.');
+    }
+    
+    return this.oauth2Client;
+  }
+  
   public cleanup() {
     try {
       if (this.server) {
@@ -600,11 +656,10 @@ export class GCPOAuthService {
   }
 
   async listProjects() {
-    if (!this.oauth2Client || !this.oauth2Client.credentials) {
-      throw new Error('Not authenticated');
-    }
-
     try {
+      // Get OAuth client - either from unified auth or regular OAuth
+      const oauth2Client = await this.getAuthenticatedClient();
+      
       log.info('Listing GCP projects...');
       const cloudResourceManager = google.cloudresourcemanager('v1');
       
@@ -613,7 +668,7 @@ export class GCPOAuthService {
       });
       
       const listPromise = cloudResourceManager.projects.list({
-        auth: this.oauth2Client as any,
+        auth: oauth2Client as any,
         pageSize: 100,
         filter: 'lifecycleState:ACTIVE'
       });
@@ -627,7 +682,7 @@ export class GCPOAuthService {
       const projects = rawProjects.map((project: any) => ({
         projectId: project.projectId || '',
         projectNumber: project.projectNumber || '',
-        displayName: project.name || project.projectId || '', // API returns 'name', we need 'displayName'
+        displayName: project.name || project.projectId || '',
         state: project.lifecycleState || 'ACTIVE'
       }));
       
@@ -675,13 +730,44 @@ export class GCPOAuthService {
   }
 
   isAuthenticated(): boolean {
-    return !!(this.oauth2Client && 
-             this.oauth2Client.credentials && 
-             this.oauth2Client.credentials.refresh_token);
+    // First check for unified auth tokens
+    try {
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'config.json');
+      const fs = require('fs');
+      
+      if (fs.existsSync(configPath)) {
+        const configData = fs.readFileSync(configPath, 'utf-8');
+        const config = JSON.parse(configData);
+        
+        if (config.gcpAccessToken || config.gcpRefreshToken) {
+          log.info('Authenticated via unified auth - tokens found');
+          return true;
+        }
+      }
+    } catch (error) {
+      log.error('Error checking unified auth:', error);
+    }
+    
+    // Fall back to checking regular oauth2Client
+    const hasOAuth = !!(this.oauth2Client && 
+                        this.oauth2Client.credentials && 
+                        this.oauth2Client.credentials.refresh_token);
+    
+    if (!hasOAuth) {
+      log.info('Not authenticated - no unified tokens and no OAuth client');
+    }
+    
+    return hasOAuth;
   }
 
   getCredentials() {
     return this.oauth2Client?.credentials || null;
+  }
+  
+  async getOAuth2Client(): Promise<OAuth2Client> {
+    // Use the same logic as getAuthenticatedClient
+    return this.getAuthenticatedClient();
   }
 
   async setProject(projectId: string) {
@@ -690,17 +776,69 @@ export class GCPOAuthService {
   }
 
   async getServiceAccountKey(): Promise<any> {
-    // For Terraform, we'll use the Application Default Credentials
-    // that we've already set up
+    // First try to get unified auth tokens
+    try {
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'config.json');
+      const configData = await fs.readFile(configPath, 'utf-8');
+      const config = JSON.parse(configData);
+      
+      if (config.gcpRefreshToken) {
+        log.info('Using unified auth for service account key');
+        
+        // Make sure authConfig is loaded
+        if (!this.authConfig) {
+          await this.loadOAuthConfig();
+        }
+        
+        // Get client ID and secret from the loaded config
+        // The authConfig structure after loadOAuthConfig is this.authConfig = config.installed
+        const clientId = this.authConfig?.client_id;
+        const clientSecret = this.authConfig?.client_secret;
+        
+        if (!clientId || !clientSecret) {
+          log.error('Missing client_id or client_secret in auth config');
+          throw new Error('Invalid OAuth configuration - missing client credentials');
+        }
+        
+        log.info(`Creating service account key with client_id: ${clientId.substring(0, 20)}...`);
+        
+        // Return the ADC-formatted credentials that Terraform can use
+        return {
+          type: 'authorized_user',
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: config.gcpRefreshToken
+        };
+      }
+    } catch (error: any) {
+      // Fall back to regular OAuth
+      log.info('No unified auth tokens for service account key, trying regular OAuth:', error.message);
+    }
+    
+    // Fall back to regular OAuth client
     if (!this.oauth2Client || !this.oauth2Client.credentials.refresh_token) {
       throw new Error('Not authenticated');
+    }
+    
+    // Ensure authConfig is loaded for regular OAuth too
+    if (!this.authConfig) {
+      await this.loadOAuthConfig();
+    }
+    
+    const clientId = this.authConfig?.client_id;
+    const clientSecret = this.authConfig?.client_secret;
+    
+    if (!clientId || !clientSecret) {
+      log.error('Missing client_id or client_secret in auth config for regular OAuth');
+      throw new Error('Invalid OAuth configuration - missing client credentials');
     }
     
     // Return the ADC-formatted credentials that Terraform can use
     return {
       type: 'authorized_user',
-      client_id: this.authConfig.client_id,
-      client_secret: this.authConfig.client_secret,
+      client_id: clientId,
+      client_secret: clientSecret,
       refresh_token: this.oauth2Client.credentials.refresh_token
     };
   }

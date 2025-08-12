@@ -1,5 +1,4 @@
 import { BrowserWindow, app, shell } from 'electron';
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as http from 'http';
@@ -40,7 +39,7 @@ export class UnifiedGCPAuthService {
    * Initiate GCP OAuth flow
    */
   async authenticate(): Promise<{ success: boolean; code?: string; error?: string }> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       // Generate state for CSRF protection
       const state = crypto.randomBytes(32).toString('hex');
       
@@ -78,6 +77,10 @@ export class UnifiedGCPAuthService {
           if (error) {
             res.end(`
               <html>
+                <head>
+                  <meta charset="UTF-8">
+                  <title>Authentication Failed</title>
+                </head>
                 <body style="font-family: system-ui; padding: 40px; text-align: center;">
                   <h2>Authentication Failed</h2>
                   <p>${error}</p>
@@ -93,18 +96,53 @@ export class UnifiedGCPAuthService {
           if (code && returnedState === state) {
             res.end(`
               <html>
-                <body style="font-family: system-ui; padding: 40px; text-align: center;">
-                  <h2>✅ Authentication Successful!</h2>
-                  <p>You can close this window and return to Anava Vision.</p>
-                  <script>window.close();</script>
+                <head>
+                  <meta charset="UTF-8">
+                  <title>Authentication Successful</title>
+                </head>
+                <body style="font-family: system-ui; padding: 40px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: 0; height: 100vh; display: flex; align-items: center; justify-content: center;">
+                  <div>
+                    <div style="font-size: 72px; margin-bottom: 20px;">✓</div>
+                    <h2 style="margin: 0 0 10px 0;">Authentication Successful!</h2>
+                    <p style="margin: 0; opacity: 0.9;">Returning to Anava Vision...</p>
+                    <script>
+                      // Auto-close after a brief moment
+                      setTimeout(() => {
+                        window.close();
+                      }, 1500);
+                    </script>
+                  </div>
                 </body>
               </html>
             `);
+            
+            // Bring the Electron app back to focus
+            if (this.authWindow && !this.authWindow.isDestroyed()) {
+              this.authWindow.focus();
+            }
+            
+            // Also try to bring the main window to focus
+            const { BrowserWindow } = require('electron');
+            const mainWindow = BrowserWindow.getAllWindows()[0];
+            if (mainWindow) {
+              mainWindow.show();
+              mainWindow.focus();
+              // On macOS, we need to explicitly activate the app
+              if (process.platform === 'darwin' && app.dock) {
+                app.dock.show();
+                app.focus({ steal: true });
+              }
+            }
+            
             this.cleanup();
             resolve({ success: true, code });
           } else {
             res.end(`
               <html>
+                <head>
+                  <meta charset="UTF-8">
+                  <title>Authentication Error</title>
+                </head>
                 <body style="font-family: system-ui; padding: 40px; text-align: center;">
                   <h2>Authentication Error</h2>
                   <p>Invalid response. Please try again.</p>

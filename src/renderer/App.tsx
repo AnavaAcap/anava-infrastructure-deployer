@@ -67,8 +67,8 @@ function App() {
         console.error('Error clearing auth:', error);
       }
       
-      // Subscribe to deployment events
-      window.electronAPI.deployment.subscribe();
+      // Don't subscribe globally - let DeploymentPage handle its own subscriptions
+      // window.electronAPI.deployment.subscribe();
       console.timeEnd('App initialization');
     }, 0);
   }, []);
@@ -197,22 +197,14 @@ function App() {
         );
 
       case 'gcp-setup':
-        if (authState !== 'authenticated') {
-          return (
-            <AuthenticationPage
-              onProjectSelected={handleProjectSelected}
-              onBack={() => setCurrentView('welcome')}
-              onLogout={handleLogout}
-            />
-          );
-        }
-        
         // Always use Vertex AI for production deployments
         if (!selectedAIMode) {
           setSelectedAIMode('vertex');
           return null; // Will re-render with selectedAIMode set
         }
         
+        // After unified login, users already have GCP auth
+        // Go directly to project selection
         if (!selectedProject) {
           return (
             <AuthenticationPage
@@ -354,7 +346,7 @@ function App() {
           onAccept={() => setEulaAccepted(true)} 
         />
         <Suspense fallback={<AppLoader message="Loading login..." />}>
-          <LoginPageUnified 
+          <UnifiedLoginPage 
             onLoginSuccess={() => {
               setAuthState('authenticated');
               loadLicenseKey();

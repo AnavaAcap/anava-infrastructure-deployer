@@ -762,6 +762,12 @@ ipcMain.on('deployment:subscribe', async (event) => {
     deploymentEngine = new DeploymentEngineClass(stateManager, gcpOAuthService);
   }
   
+  // Remove all existing listeners first to prevent duplicates
+  deploymentEngine.removeAllListeners('progress');
+  deploymentEngine.removeAllListeners('error');
+  deploymentEngine.removeAllListeners('complete');
+  deploymentEngine.removeAllListeners('log');
+  
   deploymentEngine.on('progress', (progress) => {
     event.sender.send('deployment:progress', progress);
     
@@ -798,7 +804,13 @@ ipcMain.on('deployment:subscribe', async (event) => {
     
     // Save the deployment config to cache
     if (result.success) {
-      const user = await gcpOAuthService.getCurrentUser();
+      let user;
+      try {
+        user = await gcpOAuthService.getCurrentUser();
+      } catch (error) {
+        console.log('Could not get current user for caching, continuing...');
+        user = null;
+      }
       const state = stateManager.getState();
       if (state && user?.email) {
         // Lazy load config cache service

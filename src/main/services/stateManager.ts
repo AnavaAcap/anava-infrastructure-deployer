@@ -24,11 +24,29 @@ export class StateManager {
     try {
       if (fs.existsSync(this.statePath)) {
         const data = fs.readFileSync(this.statePath, 'utf8');
+        // Check if file is empty or contains only whitespace
+        if (!data || data.trim().length === 0) {
+          console.log('State file is empty, starting fresh');
+          this.state = null;
+          // Remove the empty file to avoid future issues
+          fs.unlinkSync(this.statePath);
+          return;
+        }
         this.state = JSON.parse(data);
+        console.log('Loaded existing deployment state');
       }
     } catch (error) {
-      console.error('Failed to load state:', error);
+      console.error('Failed to load state, will start fresh:', error);
       this.state = null;
+      // Try to remove corrupted state file
+      try {
+        if (fs.existsSync(this.statePath)) {
+          fs.unlinkSync(this.statePath);
+          console.log('Removed corrupted state file');
+        }
+      } catch (e) {
+        console.error('Failed to remove corrupted state file:', e);
+      }
     }
   }
 

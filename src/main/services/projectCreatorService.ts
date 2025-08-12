@@ -30,18 +30,12 @@ export class ProjectCreatorService {
   }
 
   private async getAuthClient(): Promise<OAuth2Client> {
-    // Wait a bit for OAuth to initialize if needed
-    let retries = 0;
-    while (!this.gcpOAuthService.oauth2Client && retries < 5) {
-      await this.sleep(100);
-      retries++;
+    // Use getOAuth2Client to support both unified auth and regular OAuth
+    try {
+      return await this.gcpOAuthService.getOAuth2Client();
+    } catch (error: any) {
+      throw new Error('OAuth client not initialized. Please login first: ' + error.message);
     }
-    
-    if (!this.gcpOAuthService.oauth2Client) {
-      throw new Error('OAuth client not initialized. Please login first.');
-    }
-    
-    return this.gcpOAuthService.oauth2Client;
   }
 
   async createProject(config: {
