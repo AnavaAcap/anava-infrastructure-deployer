@@ -1,28 +1,28 @@
 # Performance Test Report
 
-**Date**: 2025-08-12T00:38:55.200Z
+**Date**: 2025-08-12T00:38:56.207Z
 **Platform**: darwin (arm64)
 **Node Version**: v20.19.2
 **CPUs**: 14
 
 ## Summary
 
-- **Total Duration**: 522ms
-- **Average Test Duration**: 6.6923076923076925ms
-- **Memory Usage**: 109.27 MB / 135.23 MB
+- **Total Duration**: 5.85s
+- **Average Test Duration**: 292.6ms
+- **Memory Usage**: 29.46 MB / 34.89 MB
 
 ## Slowest Tests
 
 | Test | Duration | Suite |
 |------|----------|-------|
-| 7. Error Recovery and Timeouts should handle ETIMEDOUT errors | 7ms | /src/__tests__/regression-tests-fixed.spec.ts |
-| Critical Regression Tests v0.9.178 MAC Address Flow should pass MAC through scanner results | 2ms | /src/__tests__/regression-tests.spec.ts |
-| Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should save state to localStorage on changes | 1ms | /src/__tests__/regression-tests.spec.ts |
-| Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should clear state when "Start Fresh Setup" is clicked | 1ms | /src/__tests__/regression-tests.spec.ts |
-| Critical Regression Tests v0.9.178 4. Camera Detection with POST Requests should correctly identify .121 as a SPEAKER when auth fails | 1ms | /src/__tests__/regression-tests.spec.ts |
-| Critical Regression Tests v0.9.178 UI Component Integration should mark auth-failed devices as not accessible | 1ms | /src/__tests__/regression-tests.spec.ts |
-| Edge Cases and Error Handling should handle devices that require POST but fail to provide data | 1ms | /src/__tests__/regression-tests.spec.ts |
-| 1. Camera Setup State Persistence should persist camera setup state to localStorage | 1ms | /src/__tests__/regression-tests-fixed.spec.ts |
-| 2. Speaker Configuration Completion should mark Step 4 as completed when speaker config finishes | 1ms | /src/__tests__/regression-tests-fixed.spec.ts |
-| 3. AI Vision Audio Playback Support should support legacy MP3 format audio | 1ms | /src/__tests__/regression-tests-fixed.spec.ts |
+| Security Test Suite 1. localStorage Data Sanitization should encrypt sensitive data in localStorage | 55ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 7. Sensitive Data Encryption should use secure key derivation for passwords | 31ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 1. localStorage Data Sanitization should limit localStorage data size to prevent DoS | 8ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 4. Network Scanning Boundaries & Limits should rate limit scan requests from same source | 6ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 1. localStorage Data Sanitization should sanitize XSS payloads before storing in localStorage | 3ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 1. localStorage Data Sanitization should validate JSON structure before parsing from localStorage | 1ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 2. Credential Handling Security should not log credentials in plaintext | 1ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 2. Credential Handling Security should use secure random tokens for session management | 1ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 3. Input Validation & Injection Prevention should reject command injection in network range inputs | 1ms | /src/__tests__/security-tests.spec.ts |
+| Security Test Suite 3. Input Validation & Injection Prevention should sanitize file paths to prevent path traversal | 1ms | /src/__tests__/security-tests.spec.ts |
 
