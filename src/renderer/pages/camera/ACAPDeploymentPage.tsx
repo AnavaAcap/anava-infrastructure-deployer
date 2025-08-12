@@ -635,11 +635,20 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                   console.log('[LICENSE] CRITICAL: License already used on another device');
                   window.electronAPI.send('deployment-log', 'error', '[LICENSE] License already used on another device');
                   
-                  // Show prominent error in UI
+                  // Show prominent error in UI with FULL ERROR DETAILS
                   addLog(``);
                   addLog(`❌❌❌ LICENSE ERROR ❌❌❌`);
                   addLog(`This license key is already registered to another device!`);
                   addLog(`The license cannot be used on ${camera.model} at ${currentIP}`);
+                  addLog(``);
+                  addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+                  addLog(`FULL ERROR RESPONSE:`);
+                  addLog(`${licenseError.message}`);
+                  if (licenseError.response) {
+                    addLog(`Response Status: ${licenseError.response.status}`);
+                    addLog(`Response Data: ${JSON.stringify(licenseError.response.data, null, 2)}`);
+                  }
+                  addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
                   addLog(``);
                   addLog(`To fix this:`);
                   addLog(`  1. Use a different license key for this camera`);
@@ -654,8 +663,21 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                     return newMap;
                   });
                   
-                  // Set prominent error message
-                  setError(`License activation failed: This license key is already registered to another device. Please use a different license key or deactivate it from the other device first.`);
+                  // Set prominent error message with FULL ERROR DETAILS
+                  const fullError = licenseError.response ?
+                    `License activation failed: This license key is already registered to another device.
+
+Full Error: ${licenseError.message}
+
+Response Data: ${JSON.stringify(licenseError.response.data, null, 2)}
+
+Please use a different license key or deactivate it from the other device first.` :
+                    `License activation failed: This license key is already registered to another device.
+
+Full Error: ${licenseError.message}
+
+Please use a different license key or deactivate it from the other device first.`;
+                  setError(fullError);
                   
                   // Mark deployment as failed
                   setDeploymentStatus(prev => {
@@ -705,15 +727,36 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                   console.log('[LICENSE] Unknown license error - THIS IS FATAL');
                   window.electronAPI.send('deployment-log', 'error', `[LICENSE] FATAL ERROR: ${licenseError.message}`);
                   
-                  // Show clear error in logs
+                  // Show FULL RAW ERROR in logs
                   addLog(``);
                   addLog(`❌ LICENSE ACTIVATION FAILED`);
-                  addLog(`Error: ${licenseError.message}`);
+                  addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+                  addLog(`FULL ERROR RESPONSE:`);
+                  addLog(`${licenseError.message}`);
+                  if (licenseError.response) {
+                    addLog(`Response Status: ${licenseError.response.status}`);
+                    addLog(`Response Data: ${JSON.stringify(licenseError.response.data, null, 2)}`);
+                  }
+                  if (licenseError.stack) {
+                    addLog(`Stack Trace: ${licenseError.stack}`);
+                  }
+                  addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
                   addLog(`The ACAP will NOT work without a valid license!`);
                   addLog(``);
                   
-                  // Track failure
-                  setLicenseFailures(prev => new Map(prev).set(camera.id, licenseError.message));
+                  // Track failure with FULL error details
+                  const fullErrorMsg = licenseError.response ? 
+                    `${licenseError.message} | Response: ${JSON.stringify(licenseError.response.data)}` : 
+                    licenseError.message;
+                  setLicenseFailures(prev => new Map(prev).set(camera.id, fullErrorMsg));
+                  
+                  // Set error with FULL details visible to user
+                  const detailedError = licenseError.response ?
+                    `License activation failed: ${licenseError.message}
+
+Full Response: ${JSON.stringify(licenseError.response.data, null, 2)}` :
+                    `License activation failed: ${licenseError.message}`;
+                  setError(detailedError);
                   
                   // Mark as error - this is FATAL
                   setDeploymentStatus(prev => {
@@ -995,7 +1038,18 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
             {error && (
               <Alert severity="error" sx={{ mb: 3 }}>
                 <AlertTitle>Deployment Error</AlertTitle>
-                <Typography variant="body2">{error}</Typography>
+                <Typography 
+                  variant="body2" 
+                  component="pre"
+                  sx={{ 
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  {error}
+                </Typography>
               </Alert>
             )}
             
