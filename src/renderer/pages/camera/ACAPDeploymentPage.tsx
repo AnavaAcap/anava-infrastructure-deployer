@@ -13,6 +13,7 @@ import {
   Paper,
   Typography,
   Alert,
+  AlertTitle,
   Stepper,
   Step,
   StepLabel,
@@ -217,7 +218,7 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
           const currentIP = cameraIPs[camera.id] || camera.ip;
           addLog(`Connecting to ${currentIP}...`);
           addLog(`Sending GCP configuration to camera...`);
-          addLog(`POST http://${currentIP}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`);
+          addLog(`POST https://${currentIP}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`);
           
           const result = await window.electronAPI.configureCamera(cameraWithCreds, deploymentConfig);
           
@@ -283,7 +284,7 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
       capabilities: ['HTTP', 'ACAP', 'VAPIX', 'RTSP'],
       discoveredAt: new Date().toISOString(),
       status: 'accessible',
-      httpUrl: 'http://192.168.1.100',
+      httpUrl: 'https://192.168.1.100',
       authenticated: false,
       isManual: true
     };
@@ -324,7 +325,12 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
     
     setDeploying(true);
     setError(null);
-    setDeploymentLog([]);
+    // Don't clear logs on retry - append instead to preserve history
+    if (deploymentLog.length > 0) {
+      setDeploymentLog(prev => [...prev, '', '=== Retrying Deployment ===', '']);
+    } else {
+      setDeploymentLog([]);
+    }
 
     try {
       addLog('Starting ACAP deployment process...');
@@ -617,6 +623,54 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                   console.log('[LICENSE] Camera already licensed - this is OK');
                   window.electronAPI.send('deployment-log', 'info', '[LICENSE] Camera already has valid license');
                   addLog(`✓ Camera already has a valid license`);
+                } else if (
+                  // Check for license already used on another device
+                  licenseError.message?.toLowerCase().includes('already activated') ||
+                  licenseError.message?.toLowerCase().includes('already in use') ||
+                  licenseError.message?.toLowerCase().includes('another device') ||
+                  licenseError.message?.toLowerCase().includes('different device') ||
+                  licenseError.message?.toLowerCase().includes('already registered') ||
+                  licenseError.message?.toLowerCase().includes('already bound')
+                ) {
+                  console.log('[LICENSE] CRITICAL: License already used on another device');
+                  window.electronAPI.send('deployment-log', 'error', '[LICENSE] License already used on another device');
+                  
+                  // Show prominent error in UI
+                  addLog(``);
+                  addLog(`❌❌❌ LICENSE ERROR ❌❌❌`);
+                  addLog(`This license key is already registered to another device!`);
+                  addLog(`The license cannot be used on ${camera.model} at ${currentIP}`);
+                  addLog(``);
+                  addLog(`To fix this:`);
+                  addLog(`  1. Use a different license key for this camera`);
+                  addLog(`  2. OR deactivate the license from the other device first`);
+                  addLog(`  3. OR contact Anava support for assistance`);
+                  addLog(``);
+                  
+                  // Track as critical failure
+                  setLicenseFailures(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(camera.id, `License already registered to another device`);
+                    return newMap;
+                  });
+                  
+                  // Set prominent error message
+                  setError(`License activation failed: This license key is already registered to another device. Please use a different license key or deactivate it from the other device first.`);
+                  
+                  // Mark deployment as failed
+                  setDeploymentStatus(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(camera.id, {
+                      cameraId: camera.id,
+                      status: 'error',
+                      message: `License already used on another device`,
+                    });
+                    return newMap;
+                  });
+                  
+                  // Stop the entire deployment process
+                  throw new Error(`License key is already registered to another device. Cannot continue deployment.`);
+                  
                 } else if (licenseError.message?.includes('stream has been aborted')) {
                   console.log('[LICENSE] License timeout - may still be processing');
                   window.electronAPI.send('deployment-log', 'warn', '[LICENSE] License activation timeout');
@@ -937,6 +991,14 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
       case 1:
         return (
           <Box>
+            {/* Show prominent error message at the top */}
+            {error && (
+              <Alert severity="error" sx={{ mb: 3 }}>
+                <AlertTitle>Deployment Error</AlertTitle>
+                <Typography variant="body2">{error}</Typography>
+              </Alert>
+            )}
+            
             <Typography variant="body2" paragraph>
               Deploy the Anava authentication application to each camera:
             </Typography>

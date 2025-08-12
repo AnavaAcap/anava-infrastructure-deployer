@@ -18,7 +18,7 @@
 
 ; Use dynamic GUID from environment or generate at build time
 !ifdef INSTALLER_GUID
-  !define PRODUCT_GUID "${INSTALLER_GUID}"
+  !define PRODUCT_GUID "{A6B35E27-412C-403C-A1F4-CAD19A2E8B28}"
 !else
   !define PRODUCT_GUID "{$%INSTALLER_GUID%}"
 !endif
