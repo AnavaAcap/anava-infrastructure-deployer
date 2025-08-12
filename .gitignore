@@ -43,6 +43,10 @@ coverage/
 *.temp
 .cache/
 
+# Test scripts (don't include in production)
+test-*.js
+test-*.ts
+
 # Electron
 electron-builder.yml
 !electron-builder.yml

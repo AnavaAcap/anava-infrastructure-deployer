@@ -1,6 +1,6 @@
 {
   "name": "anava-installer",
-  "version": "0.9.189",
+  "version": "0.9.190",
   "description": "Anava Installer - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
@@ -61,7 +61,10 @@
       "!node_modules/**/test/**",
       "!node_modules/**/*.map",
       "!node_modules/**/*.ts",
-      "!node_modules/**/*.tsx"
+      "!node_modules/**/*.tsx",
+      "!test-*.js",
+      "!test-*.ts",
+      "!scripts/prepare-windows-build.js"
     ],
     "asarUnpack": [
       "node_modules/ping/**/*"
