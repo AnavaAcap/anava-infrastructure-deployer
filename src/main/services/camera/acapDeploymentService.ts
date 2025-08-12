@@ -889,7 +889,7 @@ export class ACAPDeploymentService {
       const config: any = {
         method,
         url,
-        timeout: options.timeout || 10000, // 10 seconds default timeout
+        timeout: options.timeout || 300000, // 5 minutes default timeout
         headers: {
           'Authorization': `Basic ${auth}`,
           ...options.headers
