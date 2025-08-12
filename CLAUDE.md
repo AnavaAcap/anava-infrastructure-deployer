@@ -5,12 +5,12 @@
 - **Organization**: AnavaAcap
 - **Product Name**: Anava Installer
 - **Public Releases**: https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
-- **Current Version**: v0.9.184 (2025-01-13)
+- **Current Version**: v0.9.185 (2025-01-13)
 - **Electron**: v37.2.6 (latest)
 - **Node.js**: v20.x
 - **Build System**: Vite v7.x
 
-## Critical Fixes Applied (v0.9.184)
+## Critical Fixes Applied (v0.9.185)
 
 ### ✅ White Screen Issue - FIXED
 - **Problem**: React app not mounting in production builds
