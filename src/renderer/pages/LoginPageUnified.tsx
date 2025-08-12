@@ -70,13 +70,25 @@ const LoginPageUnified: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       }
       
       // Assign license with Google credentials using Firebase
-      const licenseResult = await window.electronAPI.license.assignWithGoogle({
-        idToken: profile.idToken,
+      // Use the Firebase-specific method that handles both tokens
+      const licenseResult = await window.electronAPI.license.assignWithFirebaseGoogle({
+        googleIdToken: profile.idToken,
+        googleAccessToken: profile.accessToken || '',
         firebaseConfig
       });
       
       if (licenseResult.success) {
         console.log('License assigned:', licenseResult.key);
+        
+        // Store the user's email for later GCP OAuth hint
+        if (profile.email) {
+          await window.electronAPI.setConfigValue('userEmail', profile.email);
+        }
+        
+        // Don't generate API key here - it will happen on-demand when needed
+        // This follows the principle of least privilege
+        console.log('Login successful. API key will be generated when needed.');
+        
         // Clean up
         googleAuth.dispose();
         // Navigate to main app

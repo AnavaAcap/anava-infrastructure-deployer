@@ -13,7 +13,7 @@ import { CameraProvider } from './contexts/CameraContext';
 
 // Import essential pages directly for now
 import WelcomePage from './pages/WelcomePage';
-import LoginPageUnified from './pages/LoginPageUnified';
+import UnifiedLoginPage from './pages/UnifiedLoginPage';
 
 // Lazy load only heavy/less-used pages
 const AuthenticationPage = lazy(() => import('./pages/AuthenticationPage'));

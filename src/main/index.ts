@@ -1287,6 +1287,21 @@ ipcMain.handle('auth:unified-google', async () => {
   }
 });
 
+// Unified GCP OAuth handler - new single sign-on
+ipcMain.handle('auth:unified-gcp', async () => {
+  try {
+    const { getUnifiedGCPAuthService } = await import('./services/unifiedGCPAuthService');
+    const authService = getUnifiedGCPAuthService();
+    
+    // Initiate OAuth flow
+    const result = await authService.authenticate();
+    return result;
+  } catch (error: any) {
+    logger.error('Unified GCP auth failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Unified auth sign out
 ipcMain.handle('auth:unified-signout', async () => {
   try {

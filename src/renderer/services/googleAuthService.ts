@@ -13,6 +13,7 @@ export interface GoogleUserProfile {
   displayName: string;
   photoURL: string | null;
   idToken: string;
+  accessToken?: string;
   company?: string;
 }
 
@@ -67,13 +68,18 @@ export class GoogleAuthService {
       // Get the ID token for backend verification
       const idToken = await user.getIdToken();
       
+      // Get the Google access token from the credential (if available)
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const accessToken = credential?.accessToken || '';
+      
       // Extract company from email domain
       const company = this.extractCompanyFromEmail(user.email || '');
       
       console.log('Google sign-in successful:', {
         email: user.email,
         displayName: user.displayName,
-        company
+        company,
+        hasAccessToken: !!accessToken
       });
       
       return {
@@ -82,6 +88,7 @@ export class GoogleAuthService {
         displayName: user.displayName || '',
         photoURL: user.photoURL,
         idToken,
+        accessToken,
         company
       };
     } catch (error: any) {

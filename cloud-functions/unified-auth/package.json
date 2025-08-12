@@ -1,0 +1,20 @@
+{
+  "name": "unified-auth",
+  "version": "1.0.0",
+  "description": "Unified authentication broker for Anava Vision",
+  "main": "index.js",
+  "scripts": {
+    "deploy": "gcloud functions deploy unified-auth --gen2 --runtime=nodejs20 --region=us-central1 --source=. --entry-point=unifiedAuth --trigger-http --allow-unauthenticated --set-env-vars OAUTH_CLIENT_SECRET=$OAUTH_CLIENT_SECRET --project=anava-ai",
+    "deploy-refresh": "gcloud functions deploy refresh-token --gen2 --runtime=nodejs20 --region=us-central1 --source=. --entry-point=refreshToken --trigger-http --allow-unauthenticated --set-env-vars OAUTH_CLIENT_SECRET=$OAUTH_CLIENT_SECRET --project=anava-ai"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.3.0",
+    "@google-cloud/apikeys": "^1.0.0",
+    "firebase-admin": "^12.0.0",
+    "google-auth-library": "^9.0.0",
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

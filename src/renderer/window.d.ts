@@ -18,6 +18,7 @@ declare global {
           };
           error?: string;
         }>;
+        unifiedGCPAuth: () => Promise<{ success: boolean; code?: string; error?: string }>;
         unifiedSignOut: () => Promise<{ success: boolean; error?: string }>;
       };
       state: {
