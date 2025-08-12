@@ -5,12 +5,22 @@
 - **Organization**: AnavaAcap
 - **Product Name**: Anava Installer
 - **Public Releases**: https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
-- **Current Version**: v0.9.187 (2025-01-15)
+- **Current Version**: v0.9.188 (2025-01-15)
 - **Electron**: v37.2.6 (latest)
 - **Node.js**: v20.x
 - **Build System**: Vite v7.x
 
-## Latest Features (v0.9.187)
+## Latest Features (v0.9.188)
+
+### ✅ CRITICAL FIX: Missing Activator Files in Production - FIXED
+- **Problem**: License activation failing at 60% for all users except developer
+- **Solution**: Added copy-activator.js script to include activator files in build
+- **Impact**: Production builds now include critical license activation components
+
+### ✅ Enhanced Error Display - NEW
+- **Feature**: Full raw error responses shown for debugging
+- **Implementation**: Errors displayed with JSON data, status codes, stack traces
+- **Format**: Monospace/preformatted text for better readability
 
 ### ✅ Personalized AI Greetings - NEW
 - **Feature**: AI greets users by name during validation tests
@@ -73,6 +83,7 @@
 - **Problem**: ACAP may restart after deployment causing 503/connection errors during license activation
 - **Solution**: Added retry logic with 10-second delays between attempts
 - **Files**: `ACAPDeploymentPage.tsx` - Both automatic and manual retry functions
+
 - **Key Features**:
   - Up to 3 retry attempts for license activation
   - 10-second delay between retries when camera is restarting
