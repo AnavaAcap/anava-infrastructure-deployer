@@ -50,3 +50,4 @@ electron-builder.yml
 # OAuth configuration (contains secrets)
 oauth-config.jsonworktrees/
 release-assets/
+release-artifacts/
