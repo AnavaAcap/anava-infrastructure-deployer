@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-12T00:38:56.207Z",
+  "timestamp": "2025-08-12T01:54:30.633Z",
   "environment": {
     "node": "v20.19.2",
     "platform": "darwin",
@@ -9,342 +9,1098 @@
   },
   "testSuites": [
     {
-      "name": "/src/__tests__/security-tests.spec.ts",
-      "duration": 5852,
+      "name": "/src/__tests__/regression-tests.spec.ts",
+      "duration": 321,
       "tests": [
         {
-          "title": "should sanitize XSS payloads before storing in localStorage",
-          "fullName": "Security Test Suite 1. localStorage Data Sanitization should sanitize XSS payloads before storing in localStorage",
-          "duration": 3,
-          "status": "failed",
-          "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36544160,
-            "external": 2112277,
-            "arrayBuffers": 51461
-          }
-        },
-        {
-          "title": "should validate JSON structure before parsing from localStorage",
-          "fullName": "Security Test Suite 1. localStorage Data Sanitization should validate JSON structure before parsing from localStorage",
+          "title": "should save state to localStorage on changes",
+          "fullName": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should save state to localStorage on changes",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36546080,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69279336,
+            "external": 10235807,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should limit localStorage data size to prevent DoS",
-          "fullName": "Security Test Suite 1. localStorage Data Sanitization should limit localStorage data size to prevent DoS",
-          "duration": 8,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36546368,
-            "external": 2112317,
-            "arrayBuffers": 51461
-          }
-        },
-        {
-          "title": "should encrypt sensitive data in localStorage",
-          "fullName": "Security Test Suite 1. localStorage Data Sanitization should encrypt sensitive data in localStorage",
-          "duration": 55,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36546656,
-            "external": 2112317,
-            "arrayBuffers": 51461
-          }
-        },
-        {
-          "title": "should not log credentials in plaintext",
-          "fullName": "Security Test Suite 2. Credential Handling Security should not log credentials in plaintext",
+          "title": "should restore state from localStorage on component mount",
+          "fullName": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should restore state from localStorage on component mount",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36546944,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69281272,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should clear credentials from memory after use",
-          "fullName": "Security Test Suite 2. Credential Handling Security should clear credentials from memory after use",
+          "title": "should clear state when \"Start Fresh Setup\" is clicked",
+          "fullName": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should clear state when \"Start Fresh Setup\" is clicked",
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36547232,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69281576,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should use secure random tokens for session management",
-          "fullName": "Security Test Suite 2. Credential Handling Security should use secure random tokens for session management",
+          "title": "should preserve state when AI Vision test modal opens/closes",
+          "fullName": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should preserve state when AI Vision test modal opens/closes",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69281880,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should handle corrupted localStorage data gracefully",
+          "fullName": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should handle corrupted localStorage data gracefully",
+          "duration": 2,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69282184,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should mark Step 4 as completed when speaker is configured",
+          "fullName": "Critical Regression Tests v0.9.178 2. Speaker Configuration Completion should mark Step 4 as completed when speaker is configured",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69282488,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should show green checkmark when Step 4 is completed",
+          "fullName": "Critical Regression Tests v0.9.178 2. Speaker Configuration Completion should show green checkmark when Step 4 is completed",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69282792,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should save speaker configuration to localStorage",
+          "fullName": "Critical Regression Tests v0.9.178 2. Speaker Configuration Completion should save speaker configuration to localStorage",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36547520,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69283096,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should reject SQL injection attempts in camera IP inputs",
-          "fullName": "Security Test Suite 3. Input Validation & Injection Prevention should reject SQL injection attempts in camera IP inputs",
+          "title": "should handle pre-fetched audio data with audioBase64 field",
+          "fullName": "Critical Regression Tests v0.9.178 3. AI Vision Audio Playback should handle pre-fetched audio data with audioBase64 field",
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36547808,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69283400,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should reject command injection in network range inputs",
-          "fullName": "Security Test Suite 3. Input Validation & Injection Prevention should reject command injection in network range inputs",
+          "title": "should support legacy MP3 format",
+          "fullName": "Critical Regression Tests v0.9.178 3. AI Vision Audio Playback should support legacy MP3 format",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69283704,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should support new PCM format (pcm_l16_24000)",
+          "fullName": "Critical Regression Tests v0.9.178 3. AI Vision Audio Playback should support new PCM format (pcm_l16_24000)",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69283960,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should construct valid WAV header for PCM data",
+          "fullName": "Critical Regression Tests v0.9.178 3. AI Vision Audio Playback should construct valid WAV header for PCM data",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36548096,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69284376,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should sanitize file paths to prevent path traversal",
-          "fullName": "Security Test Suite 3. Input Validation & Injection Prevention should sanitize file paths to prevent path traversal",
+          "title": "should play audio on first load of pre-fetched data",
+          "fullName": "Critical Regression Tests v0.9.178 3. AI Vision Audio Playback should play audio on first load of pre-fetched data",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69284712,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should use proper POST request format with propertyList",
+          "fullName": "Critical Regression Tests v0.9.178 4. Camera Detection with POST Requests should use proper POST request format with propertyList",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69285048,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should correctly identify .156 as a CAMERA with POST method",
+          "fullName": "Critical Regression Tests v0.9.178 4. Camera Detection with POST Requests should correctly identify .156 as a CAMERA with POST method",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69285384,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should correctly identify .121 as a SPEAKER when auth fails",
+          "fullName": "Critical Regression Tests v0.9.178 4. Camera Detection with POST Requests should correctly identify .121 as a SPEAKER when auth fails",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36548384,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69285720,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should validate port numbers are within valid range",
-          "fullName": "Security Test Suite 3. Input Validation & Injection Prevention should validate port numbers are within valid range",
+          "title": "should reject non-Axis devices like NAS at .125",
+          "fullName": "Critical Regression Tests v0.9.178 4. Camera Detection with POST Requests should reject non-Axis devices like NAS at .125",
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36548608,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69286056,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should limit concurrent network connections to prevent DoS",
-          "fullName": "Security Test Suite 4. Network Scanning Boundaries & Limits should limit concurrent network connections to prevent DoS",
+          "title": "should extract MAC from SerialNumber in JSON response",
+          "fullName": "Critical Regression Tests v0.9.178 MAC Address Flow should extract MAC from SerialNumber in JSON response",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69286392,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should pass MAC through scanner results",
+          "fullName": "Critical Regression Tests v0.9.178 MAC Address Flow should pass MAC through scanner results",
+          "duration": 2,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69287088,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should filter speakers from camera list",
+          "fullName": "Critical Regression Tests v0.9.178 UI Component Integration should filter speakers from camera list",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69287424,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should include MAC in formatted cameras",
+          "fullName": "Critical Regression Tests v0.9.178 UI Component Integration should include MAC in formatted cameras",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69287760,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should mark auth-failed devices as not accessible",
+          "fullName": "Critical Regression Tests v0.9.178 UI Component Integration should mark auth-failed devices as not accessible",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69288096,
+            "external": 10235847,
+            "arrayBuffers": 6900562
+          }
+        },
+        {
+          "title": "should pass MAC address to activateLicenseKey",
+          "fullName": "Critical Regression Tests v0.9.178 License Activation should pass MAC address to activateLicenseKey",
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36549008,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69288432,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should enforce timeout on network scans",
-          "fullName": "Security Test Suite 4. Network Scanning Boundaries & Limits should enforce timeout on network scans",
+          "title": "should handle missing MAC gracefully",
+          "fullName": "Critical Regression Tests v0.9.178 License Activation should handle missing MAC gracefully",
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36549328,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69288768,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should only scan private IP ranges",
-          "fullName": "Security Test Suite 4. Network Scanning Boundaries & Limits should only scan private IP ranges",
+          "title": "should report actual total IPs to scan",
+          "fullName": "Critical Regression Tests v0.9.178 Network Scanning Progress should report actual total IPs to scan",
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36549648,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69289104,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should rate limit scan requests from same source",
-          "fullName": "Security Test Suite 4. Network Scanning Boundaries & Limits should rate limit scan requests from same source",
-          "duration": 6,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36549968,
-            "external": 2112317,
-            "arrayBuffers": 51461
-          }
-        },
-        {
-          "title": "should verify camera credentials before operations",
-          "fullName": "Security Test Suite 5. Authorization Checks should verify camera credentials before operations",
+          "title": "should include propertyList in params for newer devices",
+          "fullName": "Critical Regression Tests v0.9.178 POST Request Format should include propertyList in params for newer devices",
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36550288,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69289440,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should implement session timeout for idle connections",
-          "fullName": "Security Test Suite 5. Authorization Checks should implement session timeout for idle connections",
+          "title": "should handle devices that require POST but fail to provide data",
+          "fullName": "Edge Cases and Error Handling should handle devices that require POST but fail to provide data",
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36550608,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69289776,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         },
         {
-          "title": "should generate and validate CSRF tokens",
-          "fullName": "Security Test Suite 6. CSRF Protection should generate and validate CSRF tokens",
-          "duration": 0,
+          "title": "should handle network timeouts gracefully",
+          "fullName": "Edge Cases and Error Handling should handle network timeouts gracefully",
+          "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36550928,
-            "external": 2112317,
-            "arrayBuffers": 51461
-          }
-        },
-        {
-          "title": "should encrypt API keys before storage",
-          "fullName": "Security Test Suite 7. Sensitive Data Encryption should encrypt API keys before storage",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36551608,
-            "external": 2112317,
-            "arrayBuffers": 51461
-          }
-        },
-        {
-          "title": "should use secure key derivation for passwords",
-          "fullName": "Security Test Suite 7. Sensitive Data Encryption should use secure key derivation for passwords",
-          "duration": 31,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 144113664,
-            "heapTotal": 49119232,
-            "heapUsed": 36551928,
-            "external": 2112317,
-            "arrayBuffers": 51461
+            "rss": 209436672,
+            "heapTotal": 99876864,
+            "heapUsed": 69290112,
+            "external": 10235847,
+            "arrayBuffers": 6900562
           }
         }
       ]
     },
     {
-      "name": "/tests/security/vulnerabilityScanning.test.ts",
-      "duration": 0,
-      "tests": []
+      "name": "/src/__tests__/regression-tests-fixed.spec.ts",
+      "duration": 157,
+      "tests": [
+        {
+          "title": "should persist camera setup state to localStorage",
+          "fullName": "1. Camera Setup State Persistence should persist camera setup state to localStorage",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106528880,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should restore camera setup state when component remounts",
+          "fullName": "1. Camera Setup State Persistence should restore camera setup state when component remounts",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106529368,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should clear state when \"Start Fresh Setup\" is clicked",
+          "fullName": "1. Camera Setup State Persistence should clear state when \"Start Fresh Setup\" is clicked",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106529704,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should mark Step 4 as completed when speaker config finishes",
+          "fullName": "2. Speaker Configuration Completion should mark Step 4 as completed when speaker config finishes",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106530040,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should persist speaker config completion state",
+          "fullName": "2. Speaker Configuration Completion should persist speaker config completion state",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106530376,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should support legacy MP3 format audio",
+          "fullName": "3. AI Vision Audio Playback Support should support legacy MP3 format audio",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106530712,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should support new PCM format audio",
+          "fullName": "3. AI Vision Audio Playback Support should support new PCM format audio",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106531048,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should handle pre-fetched audio data correctly",
+          "fullName": "3. AI Vision Audio Playback Support should handle pre-fetched audio data correctly",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106531384,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should use proper POST request format with propertyList",
+          "fullName": "4. Camera Detection - POST Request Format should use proper POST request format with propertyList",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106531720,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should extract MAC from SerialNumber field",
+          "fullName": "4. Camera Detection - POST Request Format should extract MAC from SerialNumber field",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106532056,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should properly identify speakers vs cameras",
+          "fullName": "4. Camera Detection - POST Request Format should properly identify speakers vs cameras",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106532592,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should handle non-Axis devices gracefully",
+          "fullName": "4. Camera Detection - POST Request Format should handle non-Axis devices gracefully",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106532928,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should pass actual MAC from scanner to license activation",
+          "fullName": "5. MAC Address Flow Through System should pass actual MAC from scanner to license activation",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106533264,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should never use hardcoded MAC address",
+          "fullName": "5. MAC Address Flow Through System should never use hardcoded MAC address",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106533600,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should calculate correct total IPs for progress display",
+          "fullName": "6. Network Scanning IP Count should calculate correct total IPs for progress display",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106533936,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should update progress correctly during scan",
+          "fullName": "6. Network Scanning IP Count should update progress correctly during scan",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106534272,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should handle network timeouts gracefully",
+          "fullName": "7. Error Recovery and Timeouts should handle network timeouts gracefully",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106534608,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        },
+        {
+          "title": "should handle ETIMEDOUT errors",
+          "fullName": "7. Error Recovery and Timeouts should handle ETIMEDOUT errors",
+          "duration": 7,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 249577472,
+            "heapTotal": 134856704,
+            "heapUsed": 106534944,
+            "external": 17005645,
+            "arrayBuffers": 13668806
+          }
+        }
+      ]
     },
     {
-      "name": "/tests/security/cameraCredentials.test.ts",
-      "duration": 0,
-      "tests": []
+      "name": "/src/__tests__/windows-installer-regression.spec.ts",
+      "duration": 38,
+      "tests": [
+        {
+          "title": "should have only one electron-builder configuration file",
+          "fullName": "Windows Installer Configuration Build Configuration Consistency should have only one electron-builder configuration file",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113153632,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have consistent perMachine setting",
+          "fullName": "Windows Installer Configuration Build Configuration Consistency should have consistent perMachine setting",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113154120,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should use dynamic GUID generation",
+          "fullName": "Windows Installer Configuration Build Configuration Consistency should use dynamic GUID generation",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113154456,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have installer-fixed.nsh as include script",
+          "fullName": "Windows Installer Configuration Build Configuration Consistency should have installer-fixed.nsh as include script",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113154792,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have proper Windows configuration",
+          "fullName": "Windows Installer Configuration Build Configuration Consistency should have proper Windows configuration",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113155128,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have installer-fixed.nsh file",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have installer-fixed.nsh file",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113155464,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should include Windows process cleanup functions",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should include Windows process cleanup functions",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113155800,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have filesystem tunneling mitigation",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have filesystem tunneling mitigation",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113156136,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have Windows Defender handling",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have Windows Defender handling",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113156472,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have MOTW handling",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have MOTW handling",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113156808,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have Visual C++ Redistributable checks",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have Visual C++ Redistributable checks",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113157144,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have comprehensive registry cleanup",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have comprehensive registry cleanup",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113157480,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should use dynamic GUID variable",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should use dynamic GUID variable",
+          "duration": 3,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113157816,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should disable auto-run after installation",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should disable auto-run after installation",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113158152,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have GUID generation script",
+          "fullName": "Windows Installer Configuration Build Scripts should have GUID generation script",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113158488,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have VC++ Redistributable download script",
+          "fullName": "Windows Installer Configuration Build Scripts should have VC++ Redistributable download script",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113158824,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have installer assets creation script",
+          "fullName": "Windows Installer Configuration Build Scripts should have installer assets creation script",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113159160,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should include scripts in Windows build command",
+          "fullName": "Windows Installer Configuration Build Scripts should include scripts in Windows build command",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113159496,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have Windows-specific cleanup functions",
+          "fullName": "Windows Installer Configuration Main Process Cleanup should have Windows-specific cleanup functions",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257851392,
+            "heapTotal": 141541376,
+            "heapUsed": 113160192,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should track spawned child processes",
+          "fullName": "Windows Installer Configuration Main Process Cleanup should track spawned child processes",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113160528,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should use WMI for process cleanup on Windows",
+          "fullName": "Windows Installer Configuration Main Process Cleanup should use WMI for process cleanup on Windows",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113160864,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should handle uncaught exceptions on Windows",
+          "fullName": "Windows Installer Configuration Main Process Cleanup should handle uncaught exceptions on Windows",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113161200,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should prevent default close for cleanup on Windows",
+          "fullName": "Windows Installer Configuration Main Process Cleanup should prevent default close for cleanup on Windows",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113161536,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have required BMP files for installer",
+          "fullName": "Windows Installer Configuration Asset Files should have required BMP files for installer",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113161872,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have non-empty BMP files",
+          "fullName": "Windows Installer Configuration Asset Files should have non-empty BMP files",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113162208,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should unpack required modules",
+          "fullName": "Windows Installer Configuration ASAR Configuration should unpack required modules",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113162544,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should track all spawned processes",
+          "fullName": "Windows Process Management Child Process Tracking should track all spawned processes",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113162880,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should kill all tracked processes on cleanup",
+          "fullName": "Windows Process Management Child Process Tracking should kill all tracked processes on cleanup",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113163216,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should generate unique GUIDs",
+          "fullName": "Registry Management GUID Generation should generate unique GUIDs",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113163552,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should have proper delays in cleanup",
+          "fullName": "File System Tunneling Mitigation should have proper delays in cleanup",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113163888,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should prevent old installer.nsh from being used",
+          "fullName": "Integration Prevention Tests should prevent old installer.nsh from being used",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113164224,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        },
+        {
+          "title": "should not have conflicting compression settings",
+          "fullName": "Integration Prevention Tests should not have conflicting compression settings",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 257867776,
+            "heapTotal": 141541376,
+            "heapUsed": 113164560,
+            "external": 18038094,
+            "arrayBuffers": 14702809
+          }
+        }
+      ]
     }
   ],
   "summary": {
-    "totalDuration": 5852,
-    "avgTestDuration": 292.6,
+    "totalDuration": 516,
+    "avgTestDuration": 6.615384615384615,
     "slowestTests": [
       {
-        "name": "Security Test Suite 1. localStorage Data Sanitization should encrypt sensitive data in localStorage",
-        "duration": 55,
-        "suite": "/src/__tests__/security-tests.spec.ts"
+        "name": "7. Error Recovery and Timeouts should handle ETIMEDOUT errors",
+        "duration": 7,
+        "suite": "/src/__tests__/regression-tests-fixed.spec.ts"
       },
       {
-        "name": "Security Test Suite 7. Sensitive Data Encryption should use secure key derivation for passwords",
-        "duration": 31,
-        "suite": "/src/__tests__/security-tests.spec.ts"
-      },
-      {
-        "name": "Security Test Suite 1. localStorage Data Sanitization should limit localStorage data size to prevent DoS",
-        "duration": 8,
-        "suite": "/src/__tests__/security-tests.spec.ts"
-      },
-      {
-        "name": "Security Test Suite 4. Network Scanning Boundaries & Limits should rate limit scan requests from same source",
-        "duration": 6,
-        "suite": "/src/__tests__/security-tests.spec.ts"
-      },
-      {
-        "name": "Security Test Suite 1. localStorage Data Sanitization should sanitize XSS payloads before storing in localStorage",
+        "name": "Windows Installer Configuration NSIS Script Validation should use dynamic GUID variable",
         "duration": 3,
-        "suite": "/src/__tests__/security-tests.spec.ts"
+        "suite": "/src/__tests__/windows-installer-regression.spec.ts"
       },
       {
-        "name": "Security Test Suite 1. localStorage Data Sanitization should validate JSON structure before parsing from localStorage",
-        "duration": 1,
-        "suite": "/src/__tests__/security-tests.spec.ts"
+        "name": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should handle corrupted localStorage data gracefully",
+        "duration": 2,
+        "suite": "/src/__tests__/regression-tests.spec.ts"
       },
       {
-        "name": "Security Test Suite 2. Credential Handling Security should not log credentials in plaintext",
-        "duration": 1,
-        "suite": "/src/__tests__/security-tests.spec.ts"
+        "name": "Critical Regression Tests v0.9.178 MAC Address Flow should pass MAC through scanner results",
+        "duration": 2,
+        "suite": "/src/__tests__/regression-tests.spec.ts"
       },
       {
-        "name": "Security Test Suite 2. Credential Handling Security should use secure random tokens for session management",
+        "name": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should save state to localStorage on changes",
         "duration": 1,
-        "suite": "/src/__tests__/security-tests.spec.ts"
+        "suite": "/src/__tests__/regression-tests.spec.ts"
       },
       {
-        "name": "Security Test Suite 3. Input Validation & Injection Prevention should reject command injection in network range inputs",
+        "name": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should restore state from localStorage on component mount",
         "duration": 1,
-        "suite": "/src/__tests__/security-tests.spec.ts"
+        "suite": "/src/__tests__/regression-tests.spec.ts"
       },
       {
-        "name": "Security Test Suite 3. Input Validation & Injection Prevention should sanitize file paths to prevent path traversal",
+        "name": "Critical Regression Tests v0.9.178 2. Speaker Configuration Completion should save speaker configuration to localStorage",
         "duration": 1,
-        "suite": "/src/__tests__/security-tests.spec.ts"
+        "suite": "/src/__tests__/regression-tests.spec.ts"
+      },
+      {
+        "name": "Critical Regression Tests v0.9.178 3. AI Vision Audio Playback should construct valid WAV header for PCM data",
+        "duration": 1,
+        "suite": "/src/__tests__/regression-tests.spec.ts"
+      },
+      {
+        "name": "Critical Regression Tests v0.9.178 4. Camera Detection with POST Requests should correctly identify .121 as a SPEAKER when auth fails",
+        "duration": 1,
+        "suite": "/src/__tests__/regression-tests.spec.ts"
+      },
+      {
+        "name": "Critical Regression Tests v0.9.178 License Activation should pass MAC address to activateLicenseKey",
+        "duration": 1,
+        "suite": "/src/__tests__/regression-tests.spec.ts"
       }
     ],
     "memoryUsage": {
-      "rss": "124.00 MB",
-      "heapTotal": "34.89 MB",
-      "heapUsed": "29.46 MB",
-      "external": "1.99 MB"
+      "rss": "247.16 MB",
+      "heapTotal": "134.98 MB",
+      "heapUsed": "108.81 MB",
+      "external": "17.20 MB"
     }
   },
   "regressions": []

@@ -115,8 +115,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('push-system-config', params.cameraIp, params.username, params.password, params.systemConfig),
   getCameraSettings: (ip: string, username: string, password: string) =>
     ipcRenderer.invoke('get-camera-settings', ip, username, password),
-  getSceneDescription: (camera: any, apiKey: string, includeSpeaker?: boolean) =>
-    ipcRenderer.invoke('get-scene-description', camera, apiKey, includeSpeaker),
+  getSceneDescription: (camera: any, apiKey: string, includeSpeaker?: boolean, customPrompt?: string) =>
+    ipcRenderer.invoke('get-scene-description', camera, apiKey, includeSpeaker, customPrompt),
   activateLicenseKey: (ip: string, username: string, password: string, licenseKey: string, applicationName: string, macAddress?: string | null) =>
     ipcRenderer.invoke('activate-license-key', ip, username, password, licenseKey, applicationName, macAddress),
   testSpeakerAudio: (speakerIp: string, username: string, password: string) =>

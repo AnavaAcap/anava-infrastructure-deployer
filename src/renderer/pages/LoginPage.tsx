@@ -61,6 +61,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       
       console.log('Google sign-in successful:', profile.email);
       
+      // Store user's display name in localStorage for later use
+      if (profile.displayName) {
+        localStorage.setItem('userDisplayName', profile.displayName);
+        console.log('Stored user display name:', profile.displayName);
+      }
+      
       // Assign license with Google credentials
       const licenseResult = await window.electronAPI.license.assignWithGoogle({
         idToken: profile.idToken,

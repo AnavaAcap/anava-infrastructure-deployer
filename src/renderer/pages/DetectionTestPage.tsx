@@ -220,10 +220,20 @@ const DetectionTestPage: React.FC = () => {
         // No pre-fetched data or it's stale, fetch fresh
         console.log('Fetching fresh scene data');
         
+        // Get user's name for personalized prompt
+        const userDisplayName = localStorage.getItem('userDisplayName');
+        let customPrompt: string | undefined;
+        
+        if (userDisplayName) {
+          const firstName = userDisplayName.split(' ')[0];
+          customPrompt = `You are Anava, an AI vision assistant analyzing a live camera feed. The person testing you is named ${firstName}. Please: 1) Greet ${firstName} by name, 2) Introduce yourself as Anava, 3) Then describe what you see in this image, mentioning specific details like objects, people, colors, or activities to prove you're seeing their actual environment in real-time. Keep the entire response under 3 sentences and make it conversational.`;
+        }
+        
         const result = await window.electronAPI?.getSceneDescription(
           selectedCamera,
           apiKey,
-          selectedCamera.hasSpeaker // Pass speaker config if available
+          selectedCamera.hasSpeaker, // Pass speaker config if available
+          customPrompt
         );
 
         if (result.success) {

@@ -20,7 +20,7 @@ export class CameraConfigurationService {
   }
 
 
-  async getSceneDescription(camera: any, apiKey: string, includeSpeaker: boolean = false): Promise<any> {
+  async getSceneDescription(camera: any, apiKey: string, includeSpeaker: boolean = false, customPrompt?: string): Promise<any> {
     try {
       console.log('[getSceneDescription] Starting scene analysis for camera:', camera.ip);
       
@@ -29,6 +29,12 @@ export class CameraConfigurationService {
         GeminiApiKey: apiKey,
         replyMP3: true  // Request audio response
       };
+      
+      // Include custom prompt if provided
+      if (customPrompt) {
+        requestData.customPrompt = customPrompt;
+        console.log('[getSceneDescription] Using custom prompt:', customPrompt);
+      }
       
       // Include speaker credentials if requested and available
       if (includeSpeaker && camera.speaker) {
@@ -105,7 +111,8 @@ export class CameraConfigurationService {
     password: string,
     method: string,
     uri: string,
-    data?: any
+    data?: any,
+    timeout?: number
   ): Promise<any> {
     try {
       const baseUrl = await getCameraBaseUrl(ip, username, password);
@@ -132,7 +139,7 @@ export class CameraConfigurationService {
         url,
         data,
         validateStatus: () => true,
-        timeout: 20000,
+        timeout: timeout || 20000,
         httpsAgent: isHttps ? new (require('https').Agent)({
           rejectUnauthorized: false // Accept self-signed certificates
         }) : undefined,
@@ -332,8 +339,8 @@ export class CameraConfigurationService {
       return this.playSpeakerAudio(speakerIp, username, password, audioFile);
     });
     
-    ipcMain.handle('get-scene-description', async (_event, camera: any, apiKey: string, includeSpeaker: boolean = false) => {
-      return this.getSceneDescription(camera, apiKey, includeSpeaker);
+    ipcMain.handle('get-scene-description', async (_event, camera: any, apiKey: string, includeSpeaker: boolean = false, customPrompt?: string) => {
+      return this.getSceneDescription(camera, apiKey, includeSpeaker, customPrompt);
     });
   }
 
@@ -530,6 +537,13 @@ export class CameraConfigurationService {
     configPayload: any
   ): Promise<any> {
     try {
+      // First ensure the application is running before pushing config
+      console.log('[CameraConfig] Ensuring BatonAnalytic is running before config push...');
+      const startResult = await this.startApplication(ip, username, password, 'BatonAnalytic');
+      if (!startResult.success) {
+        console.warn('[CameraConfig] Warning: Could not start application, but will try to push config anyway');
+      }
+      
       // Use the setInstallerConfig endpoint for proper merging
       console.log('[CameraConfig] Pushing installer config to camera:', ip);
       console.log('[CameraConfig] Config payload:', JSON.stringify(configPayload, null, 2));
@@ -655,6 +669,110 @@ export class CameraConfigurationService {
       console.error('[CameraConfig] Error getting SystemConfig:', error);
       return { success: false, error: error.message };
     }
+  }
+
+  async startApplication(
+    ip: string,
+    username: string,
+    password: string,
+    packageName: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log(`[CameraConfig] Starting application ${packageName}...`);
+      
+      const startUrl = `/axis-cgi/applications/control.cgi?action=start&package=${packageName}`;
+      const response = await this.simpleDigestAuth(
+        ip,
+        username,
+        password,
+        'GET',
+        startUrl
+      );
+      
+      console.log(`[CameraConfig] Start application response:`, response.data);
+      
+      // Check if response indicates success
+      if (response.data && (response.data.includes('OK') || response.data.includes('ok'))) {
+        console.log(`[CameraConfig] Application ${packageName} started successfully`);
+        
+        // Wait for the application to be fully ready
+        await this.waitForApplicationReady(ip, username, password, packageName);
+        
+        return { success: true };
+      } else {
+        return { success: false, error: `Unexpected response: ${response.data}` };
+      }
+    } catch (error: any) {
+      console.error(`[CameraConfig] Error starting application:`, error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async waitForApplicationReady(
+    ip: string,
+    username: string,
+    password: string,
+    packageName: string,
+    maxAttempts: number = 10,
+    delayMs: number = 3000
+  ): Promise<boolean> {
+    console.log(`[CameraConfig] Waiting for ${packageName} to be ready...`);
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        console.log(`[CameraConfig] Checking application status (attempt ${attempt}/${maxAttempts})...`);
+        
+        // Use the list.cgi endpoint to check if app is running
+        const response = await this.simpleDigestAuth(
+          ip,
+          username,
+          password,
+          'GET',
+          '/axis-cgi/applications/list.cgi',
+          undefined,
+          5000 // 5 second timeout for status check
+        );
+        
+        if (response.data) {
+          const dataStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+          
+          // Look for our application in the list with Status="Running"
+          const appRegex = new RegExp(`<application[^>]*Name="${packageName}"[^>]*Status="Running"[^>]*>`, 'i');
+          if (appRegex.test(dataStr)) {
+            console.log(`[CameraConfig] ✅ Application ${packageName} is RUNNING!`);
+            
+            // Give it a bit more time to fully initialize after status shows Running
+            console.log(`[CameraConfig] Waiting 2 seconds for full initialization...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            return true;
+          } else {
+            // Check if app exists but is stopped
+            const stoppedRegex = new RegExp(`<application[^>]*Name="${packageName}"[^>]*Status="Stopped"[^>]*>`, 'i');
+            if (stoppedRegex.test(dataStr)) {
+              console.log(`[CameraConfig] Application ${packageName} is still STOPPED`);
+            } else {
+              console.log(`[CameraConfig] Application ${packageName} status unclear`);
+            }
+          }
+        }
+      } catch (error: any) {
+        // Network errors while checking status
+        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+          console.log(`[CameraConfig] Camera not responding while checking app status...`);
+        } else {
+          console.log(`[CameraConfig] Error checking app status: ${error.message}`);
+        }
+      }
+      
+      if (attempt < maxAttempts) {
+        console.log(`[CameraConfig] Waiting ${delayMs}ms before next check...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    
+    console.warn(`[CameraConfig] Application ${packageName} did not become ready after ${maxAttempts} attempts`);
+    return false;
   }
 
   async activateLicenseKey(
@@ -828,6 +946,16 @@ export class CameraConfigurationService {
           
           // If we got here, activation was accepted but we can't verify
           console.log('[CameraConfig] License activation accepted but verification uncertain');
+          
+          // Now start the application after license activation
+          console.log('[CameraConfig] Starting BatonAnalytic application after license activation...');
+          const startResult = await this.startApplication(ip, username, password, 'BatonAnalytic');
+          if (startResult.success) {
+            console.log('[CameraConfig] Application started successfully');
+          } else {
+            console.warn('[CameraConfig] Failed to start application:', startResult.error);
+          }
+          
           return { success: true, licensed: 'uncertain' };
           
         } else {
