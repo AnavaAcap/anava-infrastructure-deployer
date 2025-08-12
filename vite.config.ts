@@ -36,8 +36,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, './dist/renderer'),
     emptyOutDir: true,
-    // Use esbuild for faster builds (default in Vite)
-    minify: 'esbuild',
+    // TEMPORARILY DISABLE MINIFICATION to test if it's breaking Firebase
+    minify: false, // was 'esbuild'
     // Remove manual chunking that's causing issues
     // Increase chunk size warning limit since we're bundling for Electron
     chunkSizeWarningLimit: 2000,

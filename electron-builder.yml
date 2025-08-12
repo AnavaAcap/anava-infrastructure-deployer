@@ -57,31 +57,22 @@ win:
   timeStampServer: http://timestamp.digicert.com
 nsis:
   oneClick: false
-  perMachine: true  # Consistent per-machine installation
+  perMachine: false  # User installation to avoid UAC issues
   allowToChangeInstallationDirectory: true
   allowElevation: true
-  createDesktopShortcut: always
+  createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Anava Installer
   menuCategory: Anava AI
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
-  installerHeaderIcon: assets/icon.ico
   deleteAppDataOnUninstall: false
-  displayLanguageSelector: false
-  language: 1033
-  multiLanguageInstaller: false
-  packElevateHelper: true
-  preCompressedFileExtensions: [-.br, .webp]
   unicode: true
-  useZip: false
   warningsAsErrors: false
   license: LICENSE.md
-  include: installer-scripts/installer-fixed.nsh
-  guid: ${env.INSTALLER_GUID}  # Dynamic GUID from environment
-  runAfterFinish: false  # Prevent auto-launch to avoid process conflicts
-  installerHeader: assets/installerHeader.bmp
-  installerSidebar: assets/installerSidebar.bmp
+  include: installer-scripts/installer-safe.nsh
+  guid: 6B3E5A7C-9D4F-4E2A-8C1B-F9E8D3A2C5B7  # Fixed GUID
+  runAfterFinish: false
   uninstallDisplayName: Anava Installer ${version}
   
 linux:

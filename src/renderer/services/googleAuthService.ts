@@ -3,7 +3,9 @@ import {
   signInWithPopup, 
   GoogleAuthProvider,
   User,
-  Auth
+  Auth,
+  setPersistence,
+  indexedDBLocalPersistence
 } from 'firebase/auth';
 import { initializeApp, FirebaseApp } from 'firebase/app';
 
@@ -29,6 +31,16 @@ export class GoogleAuthService {
       // Initialize Firebase app for auth
       this.app = initializeApp(firebaseConfig, 'google-auth-app');
       this.auth = getAuth(this.app);
+      
+      // CRITICAL: Set persistence to IndexedDB for Electron environments
+      // This fixes the auth/internal-error in production builds
+      try {
+        await setPersistence(this.auth, indexedDBLocalPersistence);
+        console.log('Firebase Auth persistence set to IndexedDB for Electron compatibility');
+      } catch (persistenceError) {
+        console.error('Failed to set Firebase persistence:', persistenceError);
+        // Continue anyway - might work with default persistence
+      }
       
       // Configure Google provider
       this.provider = new GoogleAuthProvider();

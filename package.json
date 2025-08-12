@@ -1,6 +1,6 @@
 {
   "name": "anava-installer",
-  "version": "0.9.193",
+  "version": "0.9.194",
   "description": "Anava Installer - Deploy camera authentication infrastructure to Google Cloud Platform",
   "main": "dist/main/index.js",
   "scripts": {
@@ -17,7 +17,9 @@
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac",
-    "dist:win": "npm run build && npm run generate:guid && npm run download:vcredist && electron-builder --win",
+    "dist:win": "npm run build && npm run download:vcredist && electron-builder --win",
+    "dist:win:signed": "npm run build && npm run download:vcredist && electron-builder --win && node scripts/sign-windows-safe.js",
+    "win:submit": "node scripts/submit-to-microsoft.js",
     "download:vcredist": "node scripts/download-vcredist.js",
     "generate:guid": "node scripts/generate-guid.js",
     "dist:linux": "npm run build && electron-builder --linux",
