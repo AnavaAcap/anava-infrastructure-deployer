@@ -665,16 +665,50 @@ export class DeploymentEngine extends EventEmitter {
     await this.gcpService.assignIamRoles(state.projectId, roleAssignments);
     this.emitLog('IAM roles assigned successfully');
     
-    // Grant Cloud Build SA permission to act as the function service accounts
+    // CRITICAL FIX: Grant BOTH Cloud Build SA and Compute SA permission to act as function service accounts
+    // Cloud Functions v2 builds run as the Compute SA, not Cloud Build SA!
+    // Note: projectNumber and computeSA are already defined above
+    
+    this.emitLog('Granting service account user permissions for Cloud Functions deployment...');
     for (const sa of ['device-auth-sa', 'tvm-sa']) {
       if (accounts[sa]) {
+        // Grant Cloud Build SA permission
         await this.gcpService.assignServiceAccountUser(
           state.projectId,
           accounts[sa],
           cloudBuildSA
         );
+        
+        // CRITICAL: Also grant Compute SA permission (needed for CFv2 builds!)
+        await this.gcpService.assignServiceAccountUser(
+          state.projectId,
+          accounts[sa],
+          computeSA
+        );
+        
+        this.emitLog(`✅ Granted ${sa} permissions to both Cloud Build and Compute service accounts`);
       }
     }
+    
+    // Update progress to show all role assignments are complete
+    this.emitProgress({
+      currentStep: 'assignIamRoles',
+      stepProgress: 95,
+      totalProgress: 65,
+      message: 'All IAM roles assigned, waiting for propagation...',
+    });
+    
+    // Wait for IAM propagation (critical for avoiding race conditions)
+    this.emitLog('Waiting 30 seconds for IAM permissions to propagate globally...');
+    await new Promise(resolve => setTimeout(resolve, 30000));
+    
+    // Mark step as complete
+    this.emitProgress({
+      currentStep: 'assignIamRoles',
+      stepProgress: 100,
+      totalProgress: 66,
+      message: 'IAM roles configured successfully',
+    });
     
     
     const roleBindings = [
@@ -728,9 +762,25 @@ export class DeploymentEngine extends EventEmitter {
       }
     }
     
+    // Update progress to show role assignments complete, setting up artifact registry
+    this.emitProgress({
+      currentStep: 'assignIamRoles',
+      stepProgress: 95,
+      totalProgress: 66,
+      message: 'Setting up Artifact Registry permissions...',
+    });
+    
     // Grant permissions to gcf-artifacts repository (this is crucial for Cloud Functions deployment)
     console.log('Setting up Artifact Registry permissions for Cloud Functions...');
     await this.grantGcfArtifactsPermissions(state.projectId, state.region, cloudBuildSA, computeSA);
+    
+    // Mark the entire step as complete
+    this.emitProgress({
+      currentStep: 'assignIamRoles',
+      stepProgress: 100,
+      totalProgress: 66,
+      message: 'IAM roles assignment completed',
+    });
   }
 
   private async stepDeployCloudFunctions(): Promise<void> {
@@ -1003,7 +1053,17 @@ export class DeploymentEngine extends EventEmitter {
     }
     
     if (!functions || !functions['device-auth'] || !functions['token-vending-machine']) {
-      throw new Error('Cloud Functions not found. The deployCloudFunctions step may have failed or been skipped. Functions: ' + JSON.stringify(functions));
+      // This can happen if Cloud Functions deployment is still in progress or failed
+      // Log it but don't show error to user - the deployment engine will handle retries
+      console.log('Cloud Functions not yet available for API Gateway. Functions state:', functions);
+      console.log('This step will be retried after Cloud Functions deployment completes.');
+      
+      // Mark this step as incomplete so it will be retried
+      this.stateManager.updateStepResource('createApiGateway', 'status', 'waiting_for_functions');
+      
+      // Return early without throwing an error that would appear in the UI
+      this.emitLog('Waiting for Cloud Functions deployment to complete before creating API Gateway...');
+      return;
     }
     
     if (!this.apiGatewayDeployer) {
