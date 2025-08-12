@@ -1,77 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="78" failures="0" errors="0" time="0.59">
-  <testsuite name="Windows Installer Configuration" errors="0" failures="0" skipped="0" timestamp="2025-08-11T23:51:32" time="0.114" tests="32">
-    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have only one electron-builder configuration file" time="0.001">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have consistent perMachine setting" time="0.001">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should use dynamic GUID generation" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have installer-fixed.nsh as include script" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have proper Windows configuration" time="0.001">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have installer-fixed.nsh file" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should include Windows process cleanup functions" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have filesystem tunneling mitigation" time="0.001">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have Windows Defender handling" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have MOTW handling" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have Visual C++ Redistributable checks" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have comprehensive registry cleanup" time="0.001">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should use dynamic GUID variable" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should disable auto-run after installation" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Scripts" name="should have GUID generation script" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Scripts" name="should have VC++ Redistributable download script" time="0.001">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Scripts" name="should have installer assets creation script" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Scripts" name="should include scripts in Windows build command" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should have Windows-specific cleanup functions" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should track spawned child processes" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should use WMI for process cleanup on Windows" time="0.001">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should handle uncaught exceptions on Windows" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should prevent default close for cleanup on Windows" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Asset Files" name="should have required BMP files for installer" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Asset Files" name="should have non-empty BMP files" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › ASAR Configuration" name="should unpack required modules" time="0">
-    </testcase>
-    <testcase classname="Windows Process Management › Child Process Tracking" name="should track all spawned processes" time="0">
-    </testcase>
-    <testcase classname="Windows Process Management › Child Process Tracking" name="should kill all tracked processes on cleanup" time="0">
-    </testcase>
-    <testcase classname="Registry Management › GUID Generation" name="should generate unique GUIDs" time="0.001">
-    </testcase>
-    <testcase classname="File System Tunneling Mitigation" name="should have proper delays in cleanup" time="0">
-    </testcase>
-    <testcase classname="Integration Prevention Tests" name="should prevent old installer.nsh from being used" time="0">
-    </testcase>
-    <testcase classname="Integration Prevention Tests" name="should not have conflicting compression settings" time="0">
-    </testcase>
-  </testsuite>
-  <testsuite name="Critical Regression Tests v0.9.178" errors="0" failures="0" skipped="0" timestamp="2025-08-11T23:51:32" time="0.198" tests="28">
+<testsuites name="jest tests" tests="78" failures="0" errors="0" time="0.655">
+  <testsuite name="Critical Regression Tests v0.9.178" errors="0" failures="0" skipped="0" timestamp="2025-08-12T00:38:55" time="0.314" tests="28">
     <testcase classname="Critical Regression Tests v0.9.178 › 1. Camera Setup State Persistence" name="should save state to localStorage on changes" time="0.001">
     </testcase>
     <testcase classname="Critical Regression Tests v0.9.178 › 1. Camera Setup State Persistence" name="should restore state from localStorage on component mount" time="0">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 1. Camera Setup State Persistence" name="should clear state when &quot;Start Fresh Setup&quot; is clicked" time="0">
+    <testcase classname="Critical Regression Tests v0.9.178 › 1. Camera Setup State Persistence" name="should clear state when &quot;Start Fresh Setup&quot; is clicked" time="0.001">
     </testcase>
     <testcase classname="Critical Regression Tests v0.9.178 › 1. Camera Setup State Persistence" name="should preserve state when AI Vision test modal opens/closes" time="0">
     </testcase>
@@ -87,7 +21,7 @@
     </testcase>
     <testcase classname="Critical Regression Tests v0.9.178 › 3. AI Vision Audio Playback" name="should support legacy MP3 format" time="0">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 3. AI Vision Audio Playback" name="should support new PCM format (pcm_l16_24000)" time="0.001">
+    <testcase classname="Critical Regression Tests v0.9.178 › 3. AI Vision Audio Playback" name="should support new PCM format (pcm_l16_24000)" time="0">
     </testcase>
     <testcase classname="Critical Regression Tests v0.9.178 › 3. AI Vision Audio Playback" name="should construct valid WAV header for PCM data" time="0">
     </testcase>
@@ -103,13 +37,13 @@
     </testcase>
     <testcase classname="Critical Regression Tests v0.9.178 › MAC Address Flow" name="should extract MAC from SerialNumber in JSON response" time="0">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › MAC Address Flow" name="should pass MAC through scanner results" time="0.001">
+    <testcase classname="Critical Regression Tests v0.9.178 › MAC Address Flow" name="should pass MAC through scanner results" time="0.002">
     </testcase>
     <testcase classname="Critical Regression Tests v0.9.178 › UI Component Integration" name="should filter speakers from camera list" time="0">
     </testcase>
     <testcase classname="Critical Regression Tests v0.9.178 › UI Component Integration" name="should include MAC in formatted cameras" time="0">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › UI Component Integration" name="should mark auth-failed devices as not accessible" time="0">
+    <testcase classname="Critical Regression Tests v0.9.178 › UI Component Integration" name="should mark auth-failed devices as not accessible" time="0.001">
     </testcase>
     <testcase classname="Critical Regression Tests v0.9.178 › License Activation" name="should pass MAC address to activateLicenseKey" time="0">
     </testcase>
@@ -124,34 +58,34 @@
     <testcase classname="Edge Cases and Error Handling" name="should handle network timeouts gracefully" time="0">
     </testcase>
   </testsuite>
-  <testsuite name="1. Camera Setup State Persistence" errors="0" failures="0" skipped="0" timestamp="2025-08-11T23:51:32" time="0.16" tests="18">
+  <testsuite name="1. Camera Setup State Persistence" errors="0" failures="0" skipped="0" timestamp="2025-08-12T00:38:55" time="0.169" tests="18">
     <testcase classname="1. Camera Setup State Persistence" name="should persist camera setup state to localStorage" time="0.001">
     </testcase>
     <testcase classname="1. Camera Setup State Persistence" name="should restore camera setup state when component remounts" time="0">
     </testcase>
     <testcase classname="1. Camera Setup State Persistence" name="should clear state when &quot;Start Fresh Setup&quot; is clicked" time="0">
     </testcase>
-    <testcase classname="2. Speaker Configuration Completion" name="should mark Step 4 as completed when speaker config finishes" time="0">
+    <testcase classname="2. Speaker Configuration Completion" name="should mark Step 4 as completed when speaker config finishes" time="0.001">
     </testcase>
     <testcase classname="2. Speaker Configuration Completion" name="should persist speaker config completion state" time="0">
     </testcase>
-    <testcase classname="3. AI Vision Audio Playback Support" name="should support legacy MP3 format audio" time="0">
+    <testcase classname="3. AI Vision Audio Playback Support" name="should support legacy MP3 format audio" time="0.001">
     </testcase>
-    <testcase classname="3. AI Vision Audio Playback Support" name="should support new PCM format audio" time="0">
+    <testcase classname="3. AI Vision Audio Playback Support" name="should support new PCM format audio" time="0.001">
     </testcase>
     <testcase classname="3. AI Vision Audio Playback Support" name="should handle pre-fetched audio data correctly" time="0">
     </testcase>
-    <testcase classname="4. Camera Detection - POST Request Format" name="should use proper POST request format with propertyList" time="0.001">
+    <testcase classname="4. Camera Detection - POST Request Format" name="should use proper POST request format with propertyList" time="0">
     </testcase>
     <testcase classname="4. Camera Detection - POST Request Format" name="should extract MAC from SerialNumber field" time="0">
     </testcase>
-    <testcase classname="4. Camera Detection - POST Request Format" name="should properly identify speakers vs cameras" time="0">
+    <testcase classname="4. Camera Detection - POST Request Format" name="should properly identify speakers vs cameras" time="0.001">
     </testcase>
     <testcase classname="4. Camera Detection - POST Request Format" name="should handle non-Axis devices gracefully" time="0">
     </testcase>
     <testcase classname="5. MAC Address Flow Through System" name="should pass actual MAC from scanner to license activation" time="0">
     </testcase>
-    <testcase classname="5. MAC Address Flow Through System" name="should never use hardcoded MAC address" time="0.001">
+    <testcase classname="5. MAC Address Flow Through System" name="should never use hardcoded MAC address" time="0">
     </testcase>
     <testcase classname="6. Network Scanning IP Count" name="should calculate correct total IPs for progress display" time="0">
     </testcase>
@@ -160,6 +94,72 @@
     <testcase classname="7. Error Recovery and Timeouts" name="should handle network timeouts gracefully" time="0">
     </testcase>
     <testcase classname="7. Error Recovery and Timeouts" name="should handle ETIMEDOUT errors" time="0.007">
+    </testcase>
+  </testsuite>
+  <testsuite name="Windows Installer Configuration" errors="0" failures="0" skipped="0" timestamp="2025-08-12T00:38:55" time="0.039" tests="32">
+    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have only one electron-builder configuration file" time="0.001">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have consistent perMachine setting" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should use dynamic GUID generation" time="0.001">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have installer-fixed.nsh as include script" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have proper Windows configuration" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have installer-fixed.nsh file" time="0.001">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should include Windows process cleanup functions" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have filesystem tunneling mitigation" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have Windows Defender handling" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have MOTW handling" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have Visual C++ Redistributable checks" time="0.001">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have comprehensive registry cleanup" time="0.001">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should use dynamic GUID variable" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should disable auto-run after installation" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Build Scripts" name="should have GUID generation script" time="0.001">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Build Scripts" name="should have VC++ Redistributable download script" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Build Scripts" name="should have installer assets creation script" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Build Scripts" name="should include scripts in Windows build command" time="0.001">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should have Windows-specific cleanup functions" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should track spawned child processes" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should use WMI for process cleanup on Windows" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should handle uncaught exceptions on Windows" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should prevent default close for cleanup on Windows" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Asset Files" name="should have required BMP files for installer" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › Asset Files" name="should have non-empty BMP files" time="0">
+    </testcase>
+    <testcase classname="Windows Installer Configuration › ASAR Configuration" name="should unpack required modules" time="0.001">
+    </testcase>
+    <testcase classname="Windows Process Management › Child Process Tracking" name="should track all spawned processes" time="0">
+    </testcase>
+    <testcase classname="Windows Process Management › Child Process Tracking" name="should kill all tracked processes on cleanup" time="0">
+    </testcase>
+    <testcase classname="Registry Management › GUID Generation" name="should generate unique GUIDs" time="0.001">
+    </testcase>
+    <testcase classname="File System Tunneling Mitigation" name="should have proper delays in cleanup" time="0">
+    </testcase>
+    <testcase classname="Integration Prevention Tests" name="should prevent old installer.nsh from being used" time="0">
+    </testcase>
+    <testcase classname="Integration Prevention Tests" name="should not have conflicting compression settings" time="0">
     </testcase>
   </testsuite>
 </testsuites>

@@ -311,9 +311,9 @@ export class ACAPDeploymentService {
       logger.info('[deployACAPAuto] Getting firmware info', { cameraIp: camera.ip });
       
       // Add timeout handling for offline cameras
-      let firmwareInfo;
+      let firmwareInfo: { firmwareVersion: string; osVersion: 'OS11' | 'OS12'; architecture?: string; detectionMethod?: string };
       try {
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise<never>((_, reject) => 
           setTimeout(() => reject(new Error('Camera not responding - timeout after 15 seconds')), 15000)
         );
         
