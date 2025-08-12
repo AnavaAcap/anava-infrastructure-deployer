@@ -55,3 +55,4 @@ electron-builder.yml
 oauth-config.jsonworktrees/
 release-assets/
 release-artifacts/
+gh-artifacts/
