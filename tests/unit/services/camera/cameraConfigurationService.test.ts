@@ -172,16 +172,12 @@ describe('CameraConfigurationService', () => {
             'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
         } as any)
-        // Second call - successful app list response
+        // Second call - successful app list response (XML string)
         .mockResolvedValueOnce({
           status: 200,
-          data: {
-            reply: {
-              application: [
-                { Name: 'BatonAnalytic', Status: 'Running' }
-              ]
-            }
-          }
+          data: `<reply result="ok">
+            <application Name="BatonAnalytic" NiceName="Baton Analytic" Status="Running" License="None"/>
+          </reply>`
         } as any)
         // Third call - license activation with auth challenge
         .mockResolvedValueOnce({
@@ -389,12 +385,14 @@ describe('CameraConfigurationService', () => {
 
     it('should test speaker successfully', async () => {
       mockedAxios
+        // First call - auth challenge for device info
         .mockResolvedValueOnce({
           status: 401,
           headers: {
             'www-authenticate': 'Digest realm="AXIS", nonce="abc123"'
           }
         } as any)
+        // Second call - successful device info
         .mockResolvedValueOnce({
           status: 200,
           data: { 
@@ -403,6 +401,18 @@ describe('CameraConfigurationService', () => {
               transmitCapability: true
             }
           }
+        } as any)
+        // Third call - auth challenge for playSpeakerAudio
+        .mockResolvedValueOnce({
+          status: 401,
+          headers: {
+            'www-authenticate': 'Digest realm="AXIS", nonce="abc456"'
+          }
+        } as any)
+        // Fourth call - successful audio play
+        .mockResolvedValueOnce({
+          status: 200,
+          data: 'OK'
         } as any);
 
       const result = await service.testSpeaker(
@@ -412,11 +422,13 @@ describe('CameraConfigurationService', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.capabilities).toBeDefined();
+      expect(result.deviceInfo).toBeDefined();
     });
 
     it('should handle speaker test failures', async () => {
-      mockedAxios.mockRejectedValue(new Error('Connection refused'));
+      const error = new Error('Connection refused');
+      (error as any).code = 'ECONNREFUSED';
+      mockedAxios.mockRejectedValue(error);
 
       const result = await service.testSpeaker(
         mockSpeaker.ip,
@@ -425,7 +437,7 @@ describe('CameraConfigurationService', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Connection refused');
+      expect(result.error).toContain('Cannot connect to speaker');
     });
 
     it('should play audio on speaker', async () => {

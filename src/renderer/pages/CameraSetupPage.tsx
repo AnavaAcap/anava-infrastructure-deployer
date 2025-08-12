@@ -1792,7 +1792,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                     variant="outlined"
                     fullWidth
                     onClick={() => {
-                      const url = `http://${selectedCamera?.ip}/local/BatonAnalytic/local-events.html`;
+                      const url = `https://${selectedCamera?.ip}/local/BatonAnalytic/local-events.html`;
                       window.open(url, '_blank');
                     }}
                     startIcon={<OpenInNewIcon />}

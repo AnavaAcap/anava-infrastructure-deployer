@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Axis License Activator</title>
+    <script src="./axis-sdk.js"></script>
+</head>
+<body>
+    <script>
+        console.log('[Activator] Window loaded, waiting for license data...');
+        console.log('[Activator] Checking for ACAP object:', typeof window.ACAP);
+        
+        // The SDK loads asynchronously, so we need to wait for it
+        let sdkReady = false;
+        let pendingData = null;
+        
+        // Handle SDK async initialization
+        window.acapAsyncInit = function() {
+            console.log('[Activator] SDK async init completed');
+            console.log('[Activator] ACAP object available:', typeof window.ACAP);
+            sdkReady = true;
+            
+            // If we have pending data, process it now
+            if (pendingData) {
+                console.log('[Activator] Processing pending license data...');
+                processLicenseData(pendingData);
+                pendingData = null;
+            }
+        };
+        
+        function processLicenseData(data) {
+            console.log('[Activator] Processing license data:', data);
+            console.log('[Activator] ACAP object status:', typeof window.ACAP);
+            
+            // Check if ACAP is available
+            if (typeof window.ACAP === 'undefined') {
+                console.error('[Activator] ACAP SDK not loaded!');
+                window.electronAPI.sendLicenseResult({ 
+                    success: false, 
+                    error: 'ACAP SDK not loaded' 
+                });
+                return;
+            }
+            
+            // Call the SDK function
+            try {
+                console.log('[Activator] Calling ACAP.registerLicenseKey...');
+                window.ACAP.registerLicenseKey(
+                    {
+                        applicationId: data.applicationId || '415129',
+                        deviceId: data.deviceId,
+                        licenseCode: data.licenseCode
+                    },
+                    (result) => {
+                        console.log('[Activator] SDK callback received:', result);
+                        
+                        if (result && result.data) {
+                            // Success! Send the signed data back
+                            console.log('[Activator] License activation successful');
+                            window.electronAPI.sendLicenseResult({ 
+                                success: true, 
+                                data: result.data 
+                            });
+                        } else {
+                            // Failure. Send the error back.
+                            console.error('[Activator] License activation failed:', result?.error);
+                            window.electronAPI.sendLicenseResult({ 
+                                success: false, 
+                                error: result?.error || 'Unknown error' 
+                            });
+                        }
+                    }
+                );
+            } catch (e) {
+                console.error('[Activator] Error calling ACAP.registerLicenseKey:', e);
+                window.electronAPI.sendLicenseResult({ 
+                    success: false, 
+                    error: e.message || 'Failed to call SDK' 
+                });
+            }
+        }
+        
+        // Listen for the license data from the main process
+        window.electronAPI.onLicenseData((event, data) => {
+            console.log('[Activator] Received data from main process:', data);
+            
+            if (sdkReady) {
+                // SDK is ready, process immediately
+                processLicenseData(data);
+            } else {
+                // SDK not ready yet, save for later
+                console.log('[Activator] SDK not ready yet, saving data for later...');
+                pendingData = data;
+                
+                // Also set a timeout to check if SDK loads
+                setTimeout(() => {
+                    if (typeof window.ACAP !== 'undefined') {
+                        console.log('[Activator] SDK loaded after timeout');
+                        sdkReady = true;
+                        if (pendingData) {
+                            processLicenseData(pendingData);
+                            pendingData = null;
+                        }
+                    } else {
+                        console.error('[Activator] SDK failed to load after timeout');
+                        window.electronAPI.sendLicenseResult({ 
+                            success: false, 
+                            error: 'ACAP SDK failed to load' 
+                        });
+                    }
+                }, 8000); // Wait up to 8 seconds for SDK (increased from 5)
+            }
+        });
+    </script>
+</body>
+</html>

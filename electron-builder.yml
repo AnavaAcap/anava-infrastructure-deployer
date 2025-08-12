@@ -21,6 +21,9 @@ extraResources:
     filter:
       - "**/*"
     optional: true
+  - from: resources/vc_redist.x64.exe
+    to: resources/vc_redist.x64.exe
+    optional: true
 asarUnpack:
   - node_modules/ping/**/*
   - node_modules/puppeteer/**/*
@@ -28,6 +31,8 @@ asarUnpack:
   - node_modules/@puppeteer/**/*
   - node_modules/puppeteer/.local-chromium/**/*
   - node_modules/puppeteer/.cache/**/*
+  - node_modules/chromium/**/*
+  - terraform/**/*
 mac:
   category: public.app-category.developer-tools
   icon: assets/icon.icns
@@ -43,23 +48,41 @@ win:
     - target: nsis
       arch:
         - x64
-        - ia32
-  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
-  requestedExecutionLevel: requireAdministrator  # Required for network operations
-  publisherName: Anava Inc.
+  artifactName: ${productName}-Setup-${version}.${ext}
+  requestedExecutionLevel: requireAdministrator
+  publisherName: Anava AI Inc.
+  legalTrademarks: © 2025 Anava AI Inc.
+  signDlls: true
+  rfc3161TimeStampServer: http://timestamp.digicert.com
+  timeStampServer: http://timestamp.digicert.com
 nsis:
   oneClick: false
+  perMachine: true  # Consistent per-machine installation
   allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
+  allowElevation: true
+  createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: Anava Installer
+  menuCategory: Anava AI
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
   installerHeaderIcon: assets/icon.ico
-  perMachine: true
-  menuCategory: true
+  deleteAppDataOnUninstall: false
+  displayLanguageSelector: false
+  language: 1033
+  multiLanguageInstaller: false
+  packElevateHelper: true
+  preCompressedFileExtensions: [-.br, .webp]
+  unicode: true
+  useZip: false
   warningsAsErrors: false
-  license: LICENSE.md  # Add if you have a license file
+  license: LICENSE.md
+  include: installer-scripts/installer-fixed.nsh
+  guid: ${env.INSTALLER_GUID}  # Dynamic GUID from environment
+  runAfterFinish: false  # Prevent auto-launch to avoid process conflicts
+  installerHeader: assets/installerHeader.bmp
+  installerSidebar: assets/installerSidebar.bmp
+  uninstallDisplayName: Anava Installer ${version}
   
 linux:
   icon: assets/icon.png

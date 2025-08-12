@@ -1,8 +1,8 @@
 import { ipcMain, WebContents } from 'electron';
 import axios from 'axios';
+import https from 'https';
 import { spawn } from 'child_process';
 import os from 'os';
-import crypto from 'crypto';
 import net from 'net';
 
 export interface Camera {
@@ -282,29 +282,31 @@ export class CameraDiscoveryService {
       }
       
       // Check for Axis-specific endpoints with increased timeout
-      console.log(`  Checking for Axis camera at http://${ip}/axis-cgi/param.cgi...`);
+      console.log(`  Checking for Axis camera at https://${ip}/axis-cgi/param.cgi...`);
       try {
-        const axisCheck = await axios.get(`http://${ip}/axis-cgi/param.cgi`, {
+        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+        const axisCheck = await axios.get(`https://${ip}/axis-cgi/param.cgi`, {
+          httpsAgent,
           timeout: 5000, // Increased to 5000ms for slow networks
           validateStatus: () => true,
           maxRedirects: 0 // Don't follow redirects
         });
         
-        console.log(`  HTTP response from ${ip}: status=${axisCheck.status}`);
+        console.log(`  HTTPS response from ${ip}: status=${axisCheck.status}`);
         
         if (axisCheck.status === 401 || axisCheck.status === 200) {
           // This is likely an Axis device, validate it
-          console.log(`  ✓ Found Axis device at ${ip} (HTTP ${axisCheck.status})`);
+          console.log(`  ✓ Found Axis device at ${ip} (HTTPS ${axisCheck.status})`);
           // Cannot check without credentials
           console.log(`  Found potential Axis device at ${ip} but cannot verify without credentials`);
           return null;
         } else {
-          console.log(`  ❌ Not an Axis device at ${ip} (HTTP ${axisCheck.status})`);
+          console.log(`  ❌ Not an Axis device at ${ip} (HTTPS ${axisCheck.status})`);
         }
       } catch (e: any) {
-        console.log(`  ❌ HTTP check failed for ${ip}: ${e.message}`);
+        console.log(`  ❌ HTTPS check failed for ${ip}: ${e.message}`);
         
-        // If it's a timeout or connection error, try a basic HTTP check on port 80
+        // If it's a timeout or connection error, try a basic HTTPS check on port 443
         if (e.code === 'ECONNREFUSED' || e.code === 'ETIMEDOUT' || e.code === 'ENOTFOUND') {
           return null;
         }
@@ -312,7 +314,9 @@ export class CameraDiscoveryService {
         // For other errors, it might still be an Axis camera with different settings
         console.log(`  Attempting alternative check for ${ip}...`);
         try {
-          const basicCheck = await axios.get(`http://${ip}`, {
+          const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+          const basicCheck = await axios.get(`https://${ip}`, {
+            httpsAgent,
             timeout: 3000,
             validateStatus: () => true,
             maxRedirects: 0
@@ -370,7 +374,7 @@ export class CameraDiscoveryService {
           status: 'accessible',
           credentials: { username, password },
           rtspUrl: `rtsp://${username}:${password}@${ip}:554/axis-media/media.amp`,
-          httpUrl: `http://${ip}`,
+          httpUrl: `https://${ip}`,
           authenticated: true
         };
         
@@ -388,67 +392,30 @@ export class CameraDiscoveryService {
 
   private async digestAuth(ip: string, username: string, password: string, path: string): Promise<string | null> {
     try {
-      console.log(`    Attempting digest auth to ${ip}${path}...`);
+      console.log(`    Attempting auth to ${ip}${path}...`);
       
-      // First request to get the digest challenge
-      const response1 = await axios.get(`http://${ip}${path}`, {
+      // Use HTTPS with Basic auth
+      const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+      const auth = Buffer.from(`${username}:${password}`).toString('base64');
+      
+      const response = await axios.get(`https://${ip}${path}`, {
+        httpsAgent,
+        headers: { 'Authorization': `Basic ${auth}` },
         timeout: 5000, // 5s timeout for slow networks
         validateStatus: () => true
       });
 
-      console.log(`    Initial response: ${response1.status}`);
+      console.log(`    Response: ${response.status}`);
       
-      if (response1.status === 401) {
-        const wwwAuth = response1.headers['www-authenticate'];
-        console.log(`    WWW-Authenticate header: ${wwwAuth}`);
-        
-        if (wwwAuth && wwwAuth.includes('Digest')) {
-          const digestData = this.parseDigestAuth(wwwAuth);
-          const authHeader = this.buildDigestHeader(username, password, 'GET', path, digestData);
-          
-          console.log(`    Sending authenticated request...`);
-          const response2 = await axios.get(`http://${ip}${path}`, {
-            headers: { 'Authorization': authHeader },
-            timeout: 5000 // Increased timeout
-          });
-
-          console.log(`    Authenticated response: ${response2.status}`);
-          if (response2.status === 200) {
-            return response2.data;
-          }
-        }
-      } else if (response1.status === 200) {
-        // Some cameras might not require auth for certain endpoints
-        console.log(`    Endpoint accessible without auth`);
-        return response1.data;
+      if (response.status === 200) {
+        return response.data;
+      } else if (response.status === 401) {
+        console.log(`    Authentication failed`);
       }
     } catch (error: any) {
       console.log(`    Digest auth error: ${error.message}`);
     }
     return null;
-  }
-
-  private parseDigestAuth(authHeader: string): any {
-    const data: any = {};
-    const regex = /(\w+)=(?:"([^"]+)"|([^,]+))/g;
-    let match;
-    
-    while ((match = regex.exec(authHeader)) !== null) {
-      data[match[1]] = match[2] || match[3];
-    }
-    
-    return data;
-  }
-
-  private buildDigestHeader(username: string, password: string, method: string, uri: string, digestData: any): string {
-    const nc = '00000001';
-    const cnonce = crypto.randomBytes(8).toString('hex');
-    
-    const ha1 = crypto.createHash('md5').update(`${username}:${digestData.realm}:${password}`).digest('hex');
-    const ha2 = crypto.createHash('md5').update(`${method}:${uri}`).digest('hex');
-    const response = crypto.createHash('md5').update(`${ha1}:${digestData.nonce}:${nc}:${cnonce}:${digestData.qop}:${ha2}`).digest('hex');
-    
-    return `Digest username="${username}", realm="${digestData.realm}", nonce="${digestData.nonce}", uri="${uri}", qop=${digestData.qop}, nc=${nc}, cnonce="${cnonce}", response="${response}"`;
   }
 
   private async getMACAddress(ip: string): Promise<string | null> {

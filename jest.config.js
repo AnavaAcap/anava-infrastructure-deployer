@@ -83,20 +83,21 @@ module.exports = {
       displayName: 'regression',
       testMatch: [
         '<rootDir>/src/__tests__/regression-tests.spec.ts',
-        '<rootDir>/src/__tests__/regression-tests-fixed.spec.ts'
+        '<rootDir>/src/__tests__/regression-tests-fixed.spec.ts',
+        '<rootDir>/src/__tests__/windows-installer-regression.spec.ts'
       ],
       preset: 'ts-jest',
       testEnvironment: 'node',
       testTimeout: 30000,
-      globals: {
-        'ts-jest': {
+      transform: {
+        '^.+\\.tsx?$': ['ts-jest', {
           isolatedModules: true,
           tsconfig: {
             allowJs: true,
             esModuleInterop: true,
             skipLibCheck: true
           }
-        }
+        }]
       }
     },
     {

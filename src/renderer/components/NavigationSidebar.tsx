@@ -172,7 +172,7 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
             <ListItem disablePadding sx={{ mb: 0.5 }}>
               <ListItemButton
                 onClick={() => {
-                  const url = `http://${latestCameraIp}/local/BatonAnalytic/local-events.html`;
+                  const url = `https://${latestCameraIp}/local/BatonAnalytic/local-events.html`;
                   // Use Electron API to open in default browser
                   if (window.electronAPI?.openExternal) {
                     window.electronAPI.openExternal(url);
