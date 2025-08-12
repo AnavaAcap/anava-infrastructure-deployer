@@ -5,12 +5,12 @@
 - **Organization**: AnavaAcap
 - **Product Name**: Anava Installer
 - **Public Releases**: https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
-- **Current Version**: v0.9.179 (2025-01-11)
+- **Current Version**: v0.9.184 (2025-01-13)
 - **Electron**: v37.2.6 (latest)
 - **Node.js**: v20.x
 - **Build System**: Vite v7.x
 
-## Critical Fixes Applied (v0.9.179)
+## Critical Fixes Applied (v0.9.184)
 
 ### ✅ White Screen Issue - FIXED
 - **Problem**: React app not mounting in production builds
@@ -71,6 +71,16 @@
   - Gets properly signed XML from Axis servers with embedded Bearer token
   - Works on ANY Mac/Windows machine without external dependencies
 - **Critical**: The Axis SDK has authentication built-in, must use their SDK to get signed XML
+
+### ✅ License Activation Retry Logic - ADDED (v0.9.185)
+- **Problem**: ACAP may restart after deployment causing 503/connection errors during license activation
+- **Solution**: Added retry logic with 10-second delays between attempts
+- **Files**: `ACAPDeploymentPage.tsx` - Both automatic and manual retry functions
+- **Key Features**:
+  - Up to 3 retry attempts for license activation
+  - 10-second delay between retries when camera is restarting
+  - Handles ECONNREFUSED, ETIMEDOUT, and 503 errors gracefully
+  - User-friendly messages during retry process
 
 ### ✅ Windows Uninstall Issues - FIXED (v0.9.178)
 - **Problem**: "Failed to uninstall old application files: 2" error during reinstall

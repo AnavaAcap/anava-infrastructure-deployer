@@ -138,14 +138,46 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
         mac: camera.mac,
         hasMAC: !!camera.mac
       });
-      await window.electronAPI.activateLicenseKey(
-        currentIP,
-        credentials[camera.id].username,
-        credentials[camera.id].password,
-        deploymentConfig.anavaKey,
-        'BatonAnalytic',
-        camera.mac // Pass the MAC address for proper device ID
-      );
+      // Retry logic for license activation (camera may be restarting)
+      let retryCount = 0;
+      const maxRetries = 3;
+      let lastError = null;
+      
+      while (retryCount < maxRetries) {
+        try {
+          await window.electronAPI.activateLicenseKey(
+            currentIP,
+            credentials[camera.id].username,
+            credentials[camera.id].password,
+            deploymentConfig.anavaKey,
+            'BatonAnalytic',
+            camera.mac // Pass the MAC address for proper device ID
+          );
+          break; // Success, exit retry loop
+          
+        } catch (retryError: any) {
+          retryCount++;
+          lastError = retryError;
+          console.log(`[LICENSE RETRY] Attempt ${retryCount}/${maxRetries} failed:`, retryError.message);
+          
+          // Check if it's a network error (camera restarting)
+          if (retryError.message && (
+            retryError.message.includes('ECONNREFUSED') ||
+            retryError.message.includes('ETIMEDOUT') ||
+            retryError.message.includes('503')
+          ) && retryCount < maxRetries) {
+            console.log(`[LICENSE RETRY] Waiting 10 seconds before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            continue;
+          }
+          
+          throw retryError;
+        }
+      }
+      
+      if (retryCount >= maxRetries && lastError) {
+        throw lastError;
+      }
       
       // Remove from failures if successful
       setLicenseFailures(prev => {
@@ -458,16 +490,51 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
                 });
                 
                 console.log('[LICENSE] >>> CALLING activateLicenseKey NOW <<<');
-                const licenseResult = await window.electronAPI.activateLicenseKey(
-                  currentIP,
-                  credentials[camera.id].username,
-                  credentials[camera.id].password,
-                  deploymentConfig.anavaKey,
-                  'BatonAnalytic',
-                  camera.mac // Pass the MAC address from camera discovery
-                );
                 
-                console.log('[LICENSE] License activation result:', licenseResult);
+                // Retry logic for license activation (ACAP may restart after deployment)
+                let licenseResult = null;
+                let retryCount = 0;
+                const maxRetries = 3;
+                
+                while (retryCount < maxRetries) {
+                  try {
+                    licenseResult = await window.electronAPI.activateLicenseKey(
+                      currentIP,
+                      credentials[camera.id].username,
+                      credentials[camera.id].password,
+                      deploymentConfig.anavaKey,
+                      'BatonAnalytic',
+                      camera.mac // Pass the MAC address from camera discovery
+                    );
+                    
+                    console.log('[LICENSE] License activation result:', licenseResult);
+                    break; // Success, exit retry loop
+                    
+                  } catch (retryError: any) {
+                    retryCount++;
+                    console.log(`[LICENSE] Attempt ${retryCount}/${maxRetries} failed:`, retryError.message);
+                    
+                    // Check if it's a network error (camera restarting)
+                    if (retryError.message && (
+                      retryError.message.includes('ECONNREFUSED') ||
+                      retryError.message.includes('ETIMEDOUT') ||
+                      retryError.message.includes('503')
+                    )) {
+                      if (retryCount < maxRetries) {
+                        addLog(`⏳ Camera may be restarting, waiting 10 seconds before retry ${retryCount + 1}/${maxRetries}...`);
+                        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+                        continue;
+                      }
+                    }
+                    
+                    // If not a network error or max retries reached, throw the error
+                    throw retryError;
+                  }
+                }
+                
+                if (!licenseResult) {
+                  throw new Error('Failed to activate license after multiple attempts');
+                }
                 
                 // Check the result
                 if (licenseResult?.licensed === true) {
