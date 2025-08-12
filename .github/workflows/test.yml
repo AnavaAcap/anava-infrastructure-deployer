@@ -2,7 +2,8 @@ name: Test Suite
 
 on:
   push:
-    branches: [master, main, develop]
+    tags:
+      - 'v*'  # Only run on version tags
   pull_request:
     branches: [master, main]
   schedule:
