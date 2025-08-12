@@ -49,13 +49,34 @@ export class TerraformService {
     // Create work directory
     await fs.mkdir(this.workDir, { recursive: true });
     
-    // Verify Terraform binary exists
+    // Verify Terraform binary exists and is executable
     try {
+      await fs.access(this.terraformPath, fs.constants.F_OK);
+      console.log('[Terraform] ✅ Terraform binary exists');
+      
+      // Check if it's executable
       await fs.access(this.terraformPath, fs.constants.X_OK);
-      console.log('[Terraform] ✅ Terraform binary verified');
-    } catch (error) {
+      console.log('[Terraform] ✅ Terraform binary is executable');
+      
+      // Get file stats for debugging
+      const stats = await fs.stat(this.terraformPath);
+      console.log('[Terraform] Binary size:', stats.size, 'bytes');
+      console.log('[Terraform] Binary permissions:', stats.mode.toString(8));
+    } catch (error: any) {
       console.error('[Terraform] ❌ Terraform binary not accessible:', error);
-      throw new Error(`Terraform binary not found at ${this.terraformPath}`);
+      console.error('[Terraform] Error code:', error.code);
+      console.error('[Terraform] Error message:', error.message);
+      
+      // Try to list the directory contents for debugging
+      try {
+        const dir = path.dirname(this.terraformPath);
+        const files = await fs.readdir(dir);
+        console.error('[Terraform] Directory contents:', files);
+      } catch (dirError) {
+        console.error('[Terraform] Could not list directory:', dirError);
+      }
+      
+      throw new Error(`Terraform binary not found or not executable at ${this.terraformPath}. Error: ${error.message}`);
     }
   }
 
@@ -166,7 +187,7 @@ output "auth_enabled" {
     
     // Run Terraform init
     console.log('[Terraform] Running terraform init...');
-    await this.runTerraform(['init'], this.workDir);
+    await this.runTerraform(['init'], this.workDir, credentialsPath);
     console.log('[Terraform] ✅ Terraform initialized');
     
     // Try to import existing configuration (in case it was initialized manually)
@@ -174,7 +195,8 @@ output "auth_enabled" {
       console.log('[Terraform] Checking if Identity Platform config already exists...');
       await this.runTerraform(
         ['import', 'google_identity_platform_config.default', `projects/${projectId}`],
-        this.workDir
+        this.workDir,
+        credentialsPath
       );
       console.log('[Terraform] ✅ Existing Identity Platform config imported successfully');
     } catch (error: any) {
@@ -186,44 +208,62 @@ output "auth_enabled" {
     // Run Terraform apply
     console.log('[Terraform] Running terraform apply to create/update Firebase Auth configuration...');
     console.log('[Terraform] This will enable email/password and anonymous authentication...');
-    await this.runTerraform(['apply', '-auto-approve'], this.workDir);
+    await this.runTerraform(['apply', '-auto-approve'], this.workDir, credentialsPath);
     
     console.log('[Terraform] ✅ Firebase Auth initialized successfully with Terraform!');
   }
 
-  private runTerraform(args: string[], cwd: string): Promise<void> {
+  private runTerraform(args: string[], cwd: string, credentialsPath?: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      console.log(`Running: terraform ${args.join(' ')}`);
+      console.log(`[Terraform] Running: terraform ${args.join(' ')}`);
+      console.log(`[Terraform] Working directory: ${cwd}`);
+      console.log(`[Terraform] Terraform binary: ${this.terraformPath}`);
+      
+      // Collect all output for better error reporting
+      let stdoutBuffer = '';
+      let stderrBuffer = '';
       
       const terraform = spawn(this.terraformPath, args, {
         cwd,
         env: {
-          ...process.env
-          // TF_LOG: 'INFO' // Commented out to reduce verbose logging
+          ...process.env,
+          // Set Google credentials if provided
+          ...(credentialsPath ? { GOOGLE_APPLICATION_CREDENTIALS: credentialsPath } : {}),
+          // Enable more detailed logging for debugging
+          TF_LOG: 'ERROR' // Show only errors, not verbose info
         }
       });
       
       terraform.stdout.on('data', (data) => {
-        console.log(`[Terraform] ${data.toString()}`);
+        const output = data.toString();
+        stdoutBuffer += output;
+        console.log(`[Terraform stdout] ${output}`);
       });
       
       terraform.stderr.on('data', (data) => {
         const output = data.toString();
-        // Only show actual errors, not INFO logs
-        if (!output.includes('[INFO]') && !output.includes('Terraform will perform')) {
-          console.error(`[Terraform] ${output}`);
-        }
+        stderrBuffer += output;
+        // Always log stderr for debugging
+        console.error(`[Terraform stderr] ${output}`);
       });
       
       terraform.on('close', (code) => {
         if (code === 0) {
+          console.log('[Terraform] ✅ Command completed successfully');
           resolve();
         } else {
-          reject(new Error(`Terraform exited with code ${code}`));
+          console.error(`[Terraform] ❌ Command failed with exit code ${code}`);
+          console.error('[Terraform] Full stdout:', stdoutBuffer);
+          console.error('[Terraform] Full stderr:', stderrBuffer);
+          
+          // Create a more detailed error message
+          const errorDetails = stderrBuffer || stdoutBuffer || 'No error details available';
+          reject(new Error(`Terraform exited with code ${code}. Error: ${errorDetails}`));
         }
       });
       
       terraform.on('error', (error) => {
+        console.error('[Terraform] Failed to spawn process:', error);
         reject(error);
       });
     });
