@@ -829,7 +829,7 @@ export const MagicalDiscoveryPage: React.FC<MagicalDiscoveryPageProps> = ({
                     <Button
                       variant="contained"
                       size="small"
-                      onClick={() => window.open(`http://${camera.ip}/local/BatonAnalytic/events.html`, '_blank')}
+                      onClick={() => window.open(`https://${camera.ip}/local/BatonAnalytic/events.html`, '_blank')}
                       sx={{
                         height: 40,
                         px: 3,

@@ -1,35 +1,67 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="15" failures="0" errors="0" time="14.305">
-  <testsuite name="DeploymentEngine" errors="0" failures="0" skipped="0" timestamp="2025-08-11T22:09:19" time="8.572" tests="15">
-    <testcase classname="DeploymentEngine › Constructor and Initialization" name="should initialize with correct dependencies" time="0.004">
+<testsuites name="jest tests" tests="20" failures="1" errors="0" time="12.688">
+  <testsuite name="Security Test Suite" errors="0" failures="1" skipped="0" timestamp="2025-08-12T00:38:56" time="5.852" tests="20">
+    <testcase classname="Security Test Suite › 1. localStorage Data Sanitization" name="should sanitize XSS payloads before storing in localStorage" time="0.003">
+      <failure>Error: expect(received).toContain(expected) // indexOf
+
+Expected substring: &quot;javascript&amp;&quot;
+Received string:    &quot;javascript:alert(&amp;quot;XSS&amp;quot;)&quot;
+    at /Users/ryanwager/anava-infrastructure-deployer/src/__tests__/security-tests.spec.ts:126:26
+    at Array.forEach (&lt;anonymous&gt;)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/src/__tests__/security-tests.spec.ts:110:20)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="DeploymentEngine › Constructor and Initialization" name="should initialize deployers when OAuth client is available" time="0.001">
+    <testcase classname="Security Test Suite › 1. localStorage Data Sanitization" name="should validate JSON structure before parsing from localStorage" time="0.001">
     </testcase>
-    <testcase classname="DeploymentEngine › Constructor and Initialization" name="should handle missing OAuth client gracefully" time="0.001">
+    <testcase classname="Security Test Suite › 1. localStorage Data Sanitization" name="should limit localStorage data size to prevent DoS" time="0.008">
     </testcase>
-    <testcase classname="DeploymentEngine › startDeployment" name="should start a new deployment with valid config" time="0.002">
+    <testcase classname="Security Test Suite › 1. localStorage Data Sanitization" name="should encrypt sensitive data in localStorage" time="0.055">
     </testcase>
-    <testcase classname="DeploymentEngine › startDeployment" name="should initialize deployers before starting deployment" time="0.002">
+    <testcase classname="Security Test Suite › 2. Credential Handling Security" name="should not log credentials in plaintext" time="0.001">
     </testcase>
-    <testcase classname="DeploymentEngine › startDeployment" name="should reset pause state when starting new deployment" time="0.001">
+    <testcase classname="Security Test Suite › 2. Credential Handling Security" name="should clear credentials from memory after use" time="0">
     </testcase>
-    <testcase classname="DeploymentEngine › startDeployment" name="should emit progress events during deployment" time="0.002">
+    <testcase classname="Security Test Suite › 2. Credential Handling Security" name="should use secure random tokens for session management" time="0.001">
     </testcase>
-    <testcase classname="DeploymentEngine › resumeDeployment" name="should resume an existing deployment" time="0.001">
+    <testcase classname="Security Test Suite › 3. Input Validation &amp; Injection Prevention" name="should reject SQL injection attempts in camera IP inputs" time="0">
     </testcase>
-    <testcase classname="DeploymentEngine › resumeDeployment" name="should throw error if deployment not found" time="0.025">
+    <testcase classname="Security Test Suite › 3. Input Validation &amp; Injection Prevention" name="should reject command injection in network range inputs" time="0.001">
     </testcase>
-    <testcase classname="DeploymentEngine › resumeDeployment" name="should throw error if deployment ID does not match" time="0.001">
+    <testcase classname="Security Test Suite › 3. Input Validation &amp; Injection Prevention" name="should sanitize file paths to prevent path traversal" time="0.001">
     </testcase>
-    <testcase classname="DeploymentEngine › pauseDeployment" name="should pause deployment and emit progress event" time="0.001">
+    <testcase classname="Security Test Suite › 3. Input Validation &amp; Injection Prevention" name="should validate port numbers are within valid range" time="0">
     </testcase>
-    <testcase classname="DeploymentEngine › Error Handling" name="should handle deployment errors gracefully" time="0.001">
+    <testcase classname="Security Test Suite › 4. Network Scanning Boundaries &amp; Limits" name="should limit concurrent network connections to prevent DoS" time="0.001">
     </testcase>
-    <testcase classname="DeploymentEngine › Error Handling" name="should handle OAuth refresh errors" time="0.001">
+    <testcase classname="Security Test Suite › 4. Network Scanning Boundaries &amp; Limits" name="should enforce timeout on network scans" time="0">
     </testcase>
-    <testcase classname="DeploymentEngine › Event Emissions" name="should emit correct events during deployment lifecycle" time="0.001">
+    <testcase classname="Security Test Suite › 4. Network Scanning Boundaries &amp; Limits" name="should only scan private IP ranges" time="0">
     </testcase>
-    <testcase classname="DeploymentEngine › Service Account Propagation Handling" name="should handle IAM propagation delays correctly" time="0.002">
+    <testcase classname="Security Test Suite › 4. Network Scanning Boundaries &amp; Limits" name="should rate limit scan requests from same source" time="0.006">
+    </testcase>
+    <testcase classname="Security Test Suite › 5. Authorization Checks" name="should verify camera credentials before operations" time="0">
+    </testcase>
+    <testcase classname="Security Test Suite › 5. Authorization Checks" name="should implement session timeout for idle connections" time="0">
+    </testcase>
+    <testcase classname="Security Test Suite › 6. CSRF Protection" name="should generate and validate CSRF tokens" time="0">
+    </testcase>
+    <testcase classname="Security Test Suite › 7. Sensitive Data Encryption" name="should encrypt API keys before storage" time="0">
+    </testcase>
+    <testcase classname="Security Test Suite › 7. Sensitive Data Encryption" name="should use secure key derivation for passwords" time="0.031">
     </testcase>
   </testsuite>
 </testsuites>

@@ -1,5 +1,59 @@
 #!/usr/bin/env sh
 
+# Check for HTTP usage in camera communication - CRITICAL SECURITY CHECK
+echo "🔒 Checking for HTTP usage in camera communication..."
+CAMERA_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx)$' | grep -E '(camera|Camera|ACAP|acap|axis|Axis|speaker|Speaker|cgi)' || true)
+
+if [ -n "$CAMERA_FILES" ]; then
+  for file in $CAMERA_FILES; do
+    # Check for http:// usage with IP addresses (camera communication)
+    if grep -E 'http://\$\{.*ip' "$file" > /dev/null 2>&1; then
+      echo "❌ CRITICAL ERROR: Found HTTP usage in camera communication in $file"
+      echo "   All camera communication MUST use HTTPS for security!"
+      echo "   Replace http:// with https:// and ensure Basic auth is used."
+      grep -n -E 'http://\$\{.*ip' "$file"
+      exit 1
+    fi
+    
+    # Check for hardcoded http:// with IPs
+    if grep -E 'http://[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' "$file" > /dev/null 2>&1; then
+      echo "❌ CRITICAL ERROR: Found hardcoded HTTP IP address in $file"
+      echo "   All camera communication MUST use HTTPS for security!"
+      grep -n -E 'http://[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' "$file"
+      exit 1
+    fi
+    
+    # Check for axis-cgi with http
+    if grep -E 'http://.*axis-cgi' "$file" > /dev/null 2>&1; then
+      echo "❌ CRITICAL ERROR: Found HTTP usage with axis-cgi in $file"
+      echo "   All Axis camera API calls MUST use HTTPS!"
+      grep -n -E 'http://.*axis-cgi' "$file"
+      exit 1
+    fi
+    
+    # Check for /local/ paths with http (ACAP paths)
+    if grep -E 'http://.*\/local\/' "$file" > /dev/null 2>&1; then
+      echo "❌ CRITICAL ERROR: Found HTTP usage with ACAP paths in $file"
+      echo "   All ACAP communication MUST use HTTPS!"
+      grep -n -E 'http://.*\/local\/' "$file"
+      exit 1
+    fi
+  done
+  echo "✅ No HTTP usage found in camera communication files"
+fi
+
+# Check for missing https imports when using https.Agent
+HTTPS_USAGE=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' | xargs grep -l 'https\.Agent' 2>/dev/null || true)
+if [ -n "$HTTPS_USAGE" ]; then
+  for file in $HTTPS_USAGE; do
+    if ! grep -q "import.*https.*from.*'https'" "$file"; then
+      echo "❌ ERROR: File $file uses https.Agent but doesn't import https module"
+      echo "   Add: import https from 'https';"
+      exit 1
+    fi
+  done
+fi
+
 # Run signing validation if package.json or related files are changed
 if git diff --cached --name-only | grep -qE "(package\.json|electron-builder\.yml|notarize\.js|entitlements.*\.plist)"; then
   echo "📝 Changes detected in signing-related files, validating configuration..."
@@ -17,3 +71,5 @@ npm run lint
 if git diff --cached --name-only | grep -qE "\.(test|spec)\.(ts|tsx|js|jsx)$"; then
   npm test
 fi
+
+echo "✅ All pre-commit checks passed"
