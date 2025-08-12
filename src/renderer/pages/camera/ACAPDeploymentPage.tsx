@@ -423,7 +423,13 @@ export const ACAPDeploymentPage: React.FC<ACAPDeploymentPageProps> = ({
               addLog(`✓ Deployed correct ACAP for firmware ${result.firmwareVersion} (${result.osVersion})`);
             }
             // Apply license key if provided
+            console.log('[LICENSE] >>> CHECKING IF WE SHOULD ACTIVATE LICENSE <<<');
+            console.log('[LICENSE] deploymentConfig:', deploymentConfig);
+            console.log('[LICENSE] deploymentConfig?.anavaKey:', deploymentConfig?.anavaKey);
+            console.log('[LICENSE] Has anavaKey?:', !!deploymentConfig?.anavaKey);
+            
             if (deploymentConfig?.anavaKey) {
+              console.log('[LICENSE] ✅ WE HAVE A LICENSE KEY - PROCEEDING WITH ACTIVATION');
               console.log('[LICENSE] Starting license activation');
               console.log('[LICENSE] Deployment config has anavaKey:', !!deploymentConfig.anavaKey);
               console.log('[LICENSE] AnavaKey length:', deploymentConfig.anavaKey?.length);

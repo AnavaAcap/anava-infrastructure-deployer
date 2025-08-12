@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-08-11T23:51:32.042Z",
+  "timestamp": "2025-08-12T00:38:55.200Z",
   "environment": {
     "node": "v20.19.2",
     "platform": "darwin",
@@ -9,430 +9,8 @@
   },
   "testSuites": [
     {
-      "name": "/src/__tests__/windows-installer-regression.spec.ts",
-      "duration": 114,
-      "tests": [
-        {
-          "title": "should have only one electron-builder configuration file",
-          "fullName": "Windows Installer Configuration Build Configuration Consistency should have only one electron-builder configuration file",
-          "duration": 1,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173342720,
-            "heapTotal": 78872576,
-            "heapUsed": 50566056,
-            "external": 4465733,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have consistent perMachine setting",
-          "fullName": "Windows Installer Configuration Build Configuration Consistency should have consistent perMachine setting",
-          "duration": 1,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50567992,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should use dynamic GUID generation",
-          "fullName": "Windows Installer Configuration Build Configuration Consistency should use dynamic GUID generation",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50568296,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have installer-fixed.nsh as include script",
-          "fullName": "Windows Installer Configuration Build Configuration Consistency should have installer-fixed.nsh as include script",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50568600,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have proper Windows configuration",
-          "fullName": "Windows Installer Configuration Build Configuration Consistency should have proper Windows configuration",
-          "duration": 1,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50568904,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have installer-fixed.nsh file",
-          "fullName": "Windows Installer Configuration NSIS Script Validation should have installer-fixed.nsh file",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50569208,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should include Windows process cleanup functions",
-          "fullName": "Windows Installer Configuration NSIS Script Validation should include Windows process cleanup functions",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50569512,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have filesystem tunneling mitigation",
-          "fullName": "Windows Installer Configuration NSIS Script Validation should have filesystem tunneling mitigation",
-          "duration": 1,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50569816,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have Windows Defender handling",
-          "fullName": "Windows Installer Configuration NSIS Script Validation should have Windows Defender handling",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50570120,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have MOTW handling",
-          "fullName": "Windows Installer Configuration NSIS Script Validation should have MOTW handling",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50570424,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have Visual C++ Redistributable checks",
-          "fullName": "Windows Installer Configuration NSIS Script Validation should have Visual C++ Redistributable checks",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50570680,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have comprehensive registry cleanup",
-          "fullName": "Windows Installer Configuration NSIS Script Validation should have comprehensive registry cleanup",
-          "duration": 1,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50571096,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should use dynamic GUID variable",
-          "fullName": "Windows Installer Configuration NSIS Script Validation should use dynamic GUID variable",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50571432,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should disable auto-run after installation",
-          "fullName": "Windows Installer Configuration NSIS Script Validation should disable auto-run after installation",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50571768,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have GUID generation script",
-          "fullName": "Windows Installer Configuration Build Scripts should have GUID generation script",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50572104,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have VC++ Redistributable download script",
-          "fullName": "Windows Installer Configuration Build Scripts should have VC++ Redistributable download script",
-          "duration": 1,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50572440,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have installer assets creation script",
-          "fullName": "Windows Installer Configuration Build Scripts should have installer assets creation script",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50572776,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should include scripts in Windows build command",
-          "fullName": "Windows Installer Configuration Build Scripts should include scripts in Windows build command",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50573112,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have Windows-specific cleanup functions",
-          "fullName": "Windows Installer Configuration Main Process Cleanup should have Windows-specific cleanup functions",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50573808,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should track spawned child processes",
-          "fullName": "Windows Installer Configuration Main Process Cleanup should track spawned child processes",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50574144,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should use WMI for process cleanup on Windows",
-          "fullName": "Windows Installer Configuration Main Process Cleanup should use WMI for process cleanup on Windows",
-          "duration": 1,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50574480,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should handle uncaught exceptions on Windows",
-          "fullName": "Windows Installer Configuration Main Process Cleanup should handle uncaught exceptions on Windows",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50574816,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should prevent default close for cleanup on Windows",
-          "fullName": "Windows Installer Configuration Main Process Cleanup should prevent default close for cleanup on Windows",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50575152,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have required BMP files for installer",
-          "fullName": "Windows Installer Configuration Asset Files should have required BMP files for installer",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50575488,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have non-empty BMP files",
-          "fullName": "Windows Installer Configuration Asset Files should have non-empty BMP files",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50575824,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should unpack required modules",
-          "fullName": "Windows Installer Configuration ASAR Configuration should unpack required modules",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50576160,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should track all spawned processes",
-          "fullName": "Windows Process Management Child Process Tracking should track all spawned processes",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50576496,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should kill all tracked processes on cleanup",
-          "fullName": "Windows Process Management Child Process Tracking should kill all tracked processes on cleanup",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50576832,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should generate unique GUIDs",
-          "fullName": "Registry Management GUID Generation should generate unique GUIDs",
-          "duration": 1,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50577168,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should have proper delays in cleanup",
-          "fullName": "File System Tunneling Mitigation should have proper delays in cleanup",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50577504,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should prevent old installer.nsh from being used",
-          "fullName": "Integration Prevention Tests should prevent old installer.nsh from being used",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50577840,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        },
-        {
-          "title": "should not have conflicting compression settings",
-          "fullName": "Integration Prevention Tests should not have conflicting compression settings",
-          "duration": 0,
-          "status": "passed",
-          "memoryUsage": {
-            "rss": 173359104,
-            "heapTotal": 78872576,
-            "heapUsed": 50578176,
-            "external": 4465773,
-            "arrayBuffers": 1140752
-          }
-        }
-      ]
-    },
-    {
       "name": "/src/__tests__/regression-tests.spec.ts",
-      "duration": 198,
+      "duration": 314,
       "tests": [
         {
           "title": "should save state to localStorage on changes",
@@ -440,11 +18,11 @@
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70393808,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68992096,
+            "external": 10235681,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -453,24 +31,24 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70394296,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68994032,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
           "title": "should clear state when \"Start Fresh Setup\" is clicked",
           "fullName": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should clear state when \"Start Fresh Setup\" is clicked",
-          "duration": 0,
+          "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70394632,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68994336,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -479,11 +57,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70394968,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68994640,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -492,11 +70,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70395304,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68994944,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -505,11 +83,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70395640,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68995248,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -518,11 +96,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70395976,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68995552,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -531,11 +109,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70396312,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68995856,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -544,11 +122,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70396648,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68996160,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -557,24 +135,24 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70396984,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68996464,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
           "title": "should support new PCM format (pcm_l16_24000)",
           "fullName": "Critical Regression Tests v0.9.178 3. AI Vision Audio Playback should support new PCM format (pcm_l16_24000)",
-          "duration": 1,
+          "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70397320,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68996720,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -583,11 +161,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70397656,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68997136,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -596,11 +174,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70397992,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68997472,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -609,11 +187,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70398328,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68997808,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -622,11 +200,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70398664,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68998144,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -635,11 +213,11 @@
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70399000,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68998480,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -648,11 +226,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70399336,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68998816,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -661,24 +239,24 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70399672,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68999152,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
           "title": "should pass MAC through scanner results",
           "fullName": "Critical Regression Tests v0.9.178 MAC Address Flow should pass MAC through scanner results",
-          "duration": 1,
+          "duration": 2,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70400368,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 68999848,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -687,11 +265,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70400704,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 69000184,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -700,24 +278,24 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70401040,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 69000520,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
           "title": "should mark auth-failed devices as not accessible",
           "fullName": "Critical Regression Tests v0.9.178 UI Component Integration should mark auth-failed devices as not accessible",
-          "duration": 0,
+          "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70401376,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 69000856,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -726,11 +304,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70401712,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 69001192,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -739,11 +317,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70402048,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 69001528,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -752,11 +330,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70402384,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 69001864,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -765,11 +343,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70402720,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 69002200,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -778,11 +356,11 @@
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70403056,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 69002536,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         },
         {
@@ -791,18 +369,18 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 215138304,
-            "heapTotal": 104464384,
-            "heapUsed": 70403392,
-            "external": 10245444,
-            "arrayBuffers": 6910024
+            "rss": 207126528,
+            "heapTotal": 99614720,
+            "heapUsed": 69002872,
+            "external": 10235721,
+            "arrayBuffers": 6900436
           }
         }
       ]
     },
     {
       "name": "/src/__tests__/regression-tests-fixed.spec.ts",
-      "duration": 160,
+      "duration": 169,
       "tests": [
         {
           "title": "should persist camera setup state to localStorage",
@@ -810,11 +388,11 @@
           "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109975792,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107254552,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -823,11 +401,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109976280,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107255040,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -836,24 +414,24 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109976616,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107255376,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
           "title": "should mark Step 4 as completed when speaker config finishes",
           "fullName": "2. Speaker Configuration Completion should mark Step 4 as completed when speaker config finishes",
-          "duration": 0,
+          "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109976952,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107255712,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -862,37 +440,37 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109977288,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107256048,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
           "title": "should support legacy MP3 format audio",
           "fullName": "3. AI Vision Audio Playback Support should support legacy MP3 format audio",
-          "duration": 0,
+          "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109977624,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107256384,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
           "title": "should support new PCM format audio",
           "fullName": "3. AI Vision Audio Playback Support should support new PCM format audio",
-          "duration": 0,
+          "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109977960,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107256720,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -901,24 +479,24 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109978296,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107257056,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
           "title": "should use proper POST request format with propertyList",
           "fullName": "4. Camera Detection - POST Request Format should use proper POST request format with propertyList",
-          "duration": 1,
+          "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109978632,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107257392,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -927,24 +505,24 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109978968,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107257728,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
           "title": "should properly identify speakers vs cameras",
           "fullName": "4. Camera Detection - POST Request Format should properly identify speakers vs cameras",
-          "duration": 0,
+          "duration": 1,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109979304,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107258064,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -953,11 +531,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109979640,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107258400,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -966,24 +544,24 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109979976,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107258736,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
           "title": "should never use hardcoded MAC address",
           "fullName": "5. MAC Address Flow Through System should never use hardcoded MAC address",
-          "duration": 1,
+          "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109980312,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107259072,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -992,11 +570,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109980648,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107259408,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -1005,11 +583,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109980984,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107259744,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -1018,11 +596,11 @@
           "duration": 0,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109981320,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107260080,
+            "external": 17005519,
+            "arrayBuffers": 13668680
           }
         },
         {
@@ -1031,19 +609,441 @@
           "duration": 7,
           "status": "passed",
           "memoryUsage": {
-            "rss": 263159808,
-            "heapTotal": 144162816,
-            "heapUsed": 109981656,
-            "external": 17015224,
-            "arrayBuffers": 13678312
+            "rss": 247922688,
+            "heapTotal": 135118848,
+            "heapUsed": 107260416,
+            "external": 17005519,
+            "arrayBuffers": 13668680
+          }
+        }
+      ]
+    },
+    {
+      "name": "/src/__tests__/windows-installer-regression.spec.ts",
+      "duration": 39,
+      "tests": [
+        {
+          "title": "should have only one electron-builder configuration file",
+          "fullName": "Windows Installer Configuration Build Configuration Consistency should have only one electron-builder configuration file",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113731136,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have consistent perMachine setting",
+          "fullName": "Windows Installer Configuration Build Configuration Consistency should have consistent perMachine setting",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113731624,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should use dynamic GUID generation",
+          "fullName": "Windows Installer Configuration Build Configuration Consistency should use dynamic GUID generation",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113731960,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have installer-fixed.nsh as include script",
+          "fullName": "Windows Installer Configuration Build Configuration Consistency should have installer-fixed.nsh as include script",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113732296,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have proper Windows configuration",
+          "fullName": "Windows Installer Configuration Build Configuration Consistency should have proper Windows configuration",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113732632,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have installer-fixed.nsh file",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have installer-fixed.nsh file",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113732968,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should include Windows process cleanup functions",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should include Windows process cleanup functions",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113733304,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have filesystem tunneling mitigation",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have filesystem tunneling mitigation",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113733640,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have Windows Defender handling",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have Windows Defender handling",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113733976,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have MOTW handling",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have MOTW handling",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113734312,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have Visual C++ Redistributable checks",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have Visual C++ Redistributable checks",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113734648,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have comprehensive registry cleanup",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should have comprehensive registry cleanup",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113734984,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should use dynamic GUID variable",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should use dynamic GUID variable",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113735320,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should disable auto-run after installation",
+          "fullName": "Windows Installer Configuration NSIS Script Validation should disable auto-run after installation",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113735656,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have GUID generation script",
+          "fullName": "Windows Installer Configuration Build Scripts should have GUID generation script",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113735992,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have VC++ Redistributable download script",
+          "fullName": "Windows Installer Configuration Build Scripts should have VC++ Redistributable download script",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255311872,
+            "heapTotal": 141803520,
+            "heapUsed": 113736328,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have installer assets creation script",
+          "fullName": "Windows Installer Configuration Build Scripts should have installer assets creation script",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113736664,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should include scripts in Windows build command",
+          "fullName": "Windows Installer Configuration Build Scripts should include scripts in Windows build command",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113737000,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have Windows-specific cleanup functions",
+          "fullName": "Windows Installer Configuration Main Process Cleanup should have Windows-specific cleanup functions",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113737696,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should track spawned child processes",
+          "fullName": "Windows Installer Configuration Main Process Cleanup should track spawned child processes",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113738032,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should use WMI for process cleanup on Windows",
+          "fullName": "Windows Installer Configuration Main Process Cleanup should use WMI for process cleanup on Windows",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113738368,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should handle uncaught exceptions on Windows",
+          "fullName": "Windows Installer Configuration Main Process Cleanup should handle uncaught exceptions on Windows",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113738704,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should prevent default close for cleanup on Windows",
+          "fullName": "Windows Installer Configuration Main Process Cleanup should prevent default close for cleanup on Windows",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113739040,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have required BMP files for installer",
+          "fullName": "Windows Installer Configuration Asset Files should have required BMP files for installer",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113739376,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have non-empty BMP files",
+          "fullName": "Windows Installer Configuration Asset Files should have non-empty BMP files",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113739712,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should unpack required modules",
+          "fullName": "Windows Installer Configuration ASAR Configuration should unpack required modules",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113740048,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should track all spawned processes",
+          "fullName": "Windows Process Management Child Process Tracking should track all spawned processes",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113740384,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should kill all tracked processes on cleanup",
+          "fullName": "Windows Process Management Child Process Tracking should kill all tracked processes on cleanup",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113740720,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should generate unique GUIDs",
+          "fullName": "Registry Management GUID Generation should generate unique GUIDs",
+          "duration": 1,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113741056,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should have proper delays in cleanup",
+          "fullName": "File System Tunneling Mitigation should have proper delays in cleanup",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255328256,
+            "heapTotal": 141803520,
+            "heapUsed": 113741392,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should prevent old installer.nsh from being used",
+          "fullName": "Integration Prevention Tests should prevent old installer.nsh from being used",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255344640,
+            "heapTotal": 141803520,
+            "heapUsed": 113741728,
+            "external": 18037968,
+            "arrayBuffers": 14702683
+          }
+        },
+        {
+          "title": "should not have conflicting compression settings",
+          "fullName": "Integration Prevention Tests should not have conflicting compression settings",
+          "duration": 0,
+          "status": "passed",
+          "memoryUsage": {
+            "rss": 255344640,
+            "heapTotal": 141803520,
+            "heapUsed": 113742064,
+            "external": 18037968,
+            "arrayBuffers": 14702683
           }
         }
       ]
     }
   ],
   "summary": {
-    "totalDuration": 472,
-    "avgTestDuration": 6.051282051282051,
+    "totalDuration": 522,
+    "avgTestDuration": 6.6923076923076925,
     "slowestTests": [
       {
         "name": "7. Error Recovery and Timeouts should handle ETIMEDOUT errors",
@@ -1051,56 +1051,56 @@
         "suite": "/src/__tests__/regression-tests-fixed.spec.ts"
       },
       {
-        "name": "Windows Installer Configuration Build Configuration Consistency should have only one electron-builder configuration file",
-        "duration": 1,
-        "suite": "/src/__tests__/windows-installer-regression.spec.ts"
-      },
-      {
-        "name": "Windows Installer Configuration Build Configuration Consistency should have consistent perMachine setting",
-        "duration": 1,
-        "suite": "/src/__tests__/windows-installer-regression.spec.ts"
-      },
-      {
-        "name": "Windows Installer Configuration Build Configuration Consistency should have proper Windows configuration",
-        "duration": 1,
-        "suite": "/src/__tests__/windows-installer-regression.spec.ts"
-      },
-      {
-        "name": "Windows Installer Configuration NSIS Script Validation should have filesystem tunneling mitigation",
-        "duration": 1,
-        "suite": "/src/__tests__/windows-installer-regression.spec.ts"
-      },
-      {
-        "name": "Windows Installer Configuration NSIS Script Validation should have comprehensive registry cleanup",
-        "duration": 1,
-        "suite": "/src/__tests__/windows-installer-regression.spec.ts"
-      },
-      {
-        "name": "Windows Installer Configuration Build Scripts should have VC++ Redistributable download script",
-        "duration": 1,
-        "suite": "/src/__tests__/windows-installer-regression.spec.ts"
-      },
-      {
-        "name": "Windows Installer Configuration Main Process Cleanup should use WMI for process cleanup on Windows",
-        "duration": 1,
-        "suite": "/src/__tests__/windows-installer-regression.spec.ts"
-      },
-      {
-        "name": "Registry Management GUID Generation should generate unique GUIDs",
-        "duration": 1,
-        "suite": "/src/__tests__/windows-installer-regression.spec.ts"
+        "name": "Critical Regression Tests v0.9.178 MAC Address Flow should pass MAC through scanner results",
+        "duration": 2,
+        "suite": "/src/__tests__/regression-tests.spec.ts"
       },
       {
         "name": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should save state to localStorage on changes",
         "duration": 1,
         "suite": "/src/__tests__/regression-tests.spec.ts"
+      },
+      {
+        "name": "Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should clear state when \"Start Fresh Setup\" is clicked",
+        "duration": 1,
+        "suite": "/src/__tests__/regression-tests.spec.ts"
+      },
+      {
+        "name": "Critical Regression Tests v0.9.178 4. Camera Detection with POST Requests should correctly identify .121 as a SPEAKER when auth fails",
+        "duration": 1,
+        "suite": "/src/__tests__/regression-tests.spec.ts"
+      },
+      {
+        "name": "Critical Regression Tests v0.9.178 UI Component Integration should mark auth-failed devices as not accessible",
+        "duration": 1,
+        "suite": "/src/__tests__/regression-tests.spec.ts"
+      },
+      {
+        "name": "Edge Cases and Error Handling should handle devices that require POST but fail to provide data",
+        "duration": 1,
+        "suite": "/src/__tests__/regression-tests.spec.ts"
+      },
+      {
+        "name": "1. Camera Setup State Persistence should persist camera setup state to localStorage",
+        "duration": 1,
+        "suite": "/src/__tests__/regression-tests-fixed.spec.ts"
+      },
+      {
+        "name": "2. Speaker Configuration Completion should mark Step 4 as completed when speaker config finishes",
+        "duration": 1,
+        "suite": "/src/__tests__/regression-tests-fixed.spec.ts"
+      },
+      {
+        "name": "3. AI Vision Audio Playback Support should support legacy MP3 format audio",
+        "duration": 1,
+        "suite": "/src/__tests__/regression-tests-fixed.spec.ts"
       }
     ],
     "memoryUsage": {
-      "rss": "251.06 MB",
-      "heapTotal": "137.48 MB",
-      "heapUsed": "105.57 MB",
-      "external": "16.23 MB"
+      "rss": "243.94 MB",
+      "heapTotal": "135.23 MB",
+      "heapUsed": "109.27 MB",
+      "external": "17.20 MB"
     }
   },
   "regressions": []

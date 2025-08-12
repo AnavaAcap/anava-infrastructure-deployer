@@ -1,28 +1,28 @@
 # Performance Test Report
 
-**Date**: 2025-08-11T23:51:32.042Z
+**Date**: 2025-08-12T00:38:55.200Z
 **Platform**: darwin (arm64)
 **Node Version**: v20.19.2
 **CPUs**: 14
 
 ## Summary
 
-- **Total Duration**: 472ms
-- **Average Test Duration**: 6.051282051282051ms
-- **Memory Usage**: 105.57 MB / 137.48 MB
+- **Total Duration**: 522ms
+- **Average Test Duration**: 6.6923076923076925ms
+- **Memory Usage**: 109.27 MB / 135.23 MB
 
 ## Slowest Tests
 
 | Test | Duration | Suite |
 |------|----------|-------|
 | 7. Error Recovery and Timeouts should handle ETIMEDOUT errors | 7ms | /src/__tests__/regression-tests-fixed.spec.ts |
-| Windows Installer Configuration Build Configuration Consistency should have only one electron-builder configuration file | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
-| Windows Installer Configuration Build Configuration Consistency should have consistent perMachine setting | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
-| Windows Installer Configuration Build Configuration Consistency should have proper Windows configuration | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
-| Windows Installer Configuration NSIS Script Validation should have filesystem tunneling mitigation | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
-| Windows Installer Configuration NSIS Script Validation should have comprehensive registry cleanup | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
-| Windows Installer Configuration Build Scripts should have VC++ Redistributable download script | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
-| Windows Installer Configuration Main Process Cleanup should use WMI for process cleanup on Windows | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
-| Registry Management GUID Generation should generate unique GUIDs | 1ms | /src/__tests__/windows-installer-regression.spec.ts |
+| Critical Regression Tests v0.9.178 MAC Address Flow should pass MAC through scanner results | 2ms | /src/__tests__/regression-tests.spec.ts |
 | Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should save state to localStorage on changes | 1ms | /src/__tests__/regression-tests.spec.ts |
+| Critical Regression Tests v0.9.178 1. Camera Setup State Persistence should clear state when "Start Fresh Setup" is clicked | 1ms | /src/__tests__/regression-tests.spec.ts |
+| Critical Regression Tests v0.9.178 4. Camera Detection with POST Requests should correctly identify .121 as a SPEAKER when auth fails | 1ms | /src/__tests__/regression-tests.spec.ts |
+| Critical Regression Tests v0.9.178 UI Component Integration should mark auth-failed devices as not accessible | 1ms | /src/__tests__/regression-tests.spec.ts |
+| Edge Cases and Error Handling should handle devices that require POST but fail to provide data | 1ms | /src/__tests__/regression-tests.spec.ts |
+| 1. Camera Setup State Persistence should persist camera setup state to localStorage | 1ms | /src/__tests__/regression-tests-fixed.spec.ts |
+| 2. Speaker Configuration Completion should mark Step 4 as completed when speaker config finishes | 1ms | /src/__tests__/regression-tests-fixed.spec.ts |
+| 3. AI Vision Audio Playback Support should support legacy MP3 format audio | 1ms | /src/__tests__/regression-tests-fixed.spec.ts |
 
