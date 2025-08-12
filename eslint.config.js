@@ -16,6 +16,30 @@ export default [
         ecmaFeatures: {
           jsx: true
         }
+      },
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        setTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearTimeout: 'readonly',
+        clearInterval: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        global: 'readonly',
+        module: 'readonly',
+        require: 'readonly',
+        exports: 'readonly',
+        jest: 'readonly',
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly'
       }
     },
     plugins: {
@@ -39,6 +63,39 @@ export default [
     }
   },
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/build/**']
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/release/**',
+      '**/out/**',
+      '**/coverage/**',
+      '**/test-results/**',
+      '**/*.test.js',
+      '**/*.spec.js',
+      '**/*.test.ts',
+      '**/*.spec.ts',
+      '**/*.test.tsx',
+      '**/*.spec.tsx',
+      'src/__tests__/**',
+      'jest.config.js',
+      'jest.config.*.js',
+      'vite.config.ts',
+      'electron-builder.yml',
+      'functions/**',
+      'scripts/**',
+      '**/*.md',
+      'docs/**',
+      'assets/**',
+      'public/**',
+      '**/*.app/**',
+      'installer-scripts/**',
+      '**/*.nsh',
+      'src/main/activator/**',
+      '.eslintignore',
+      'src/main/helpers/**/*.js',
+      '**/*.js',
+      '2'
+    ]
   }
 ];
