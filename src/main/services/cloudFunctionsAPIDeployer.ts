@@ -139,14 +139,6 @@ export class CloudFunctionsAPIDeployer {
           console.log('Function is currently deploying, waiting for completion...');
           // Wait for the current deployment to finish
           await this.waitForFunctionReady(functionName);
-        } else if (state === 'ACTIVE') {
-          // Function is already active, just return its URL
-          const existingUrl = existingFunction.serviceConfig?.uri;
-          if (existingUrl) {
-            console.log(`Function ${config.name} already deployed at: ${existingUrl}`);
-            // Still update it to ensure latest code, but we have the URL
-            // Continue with update below
-          }
         }
       } catch (error: any) {
         if (error.code !== 404) {
@@ -238,15 +230,7 @@ export class CloudFunctionsAPIDeployer {
         auth: this.auth
       });
 
-      // The URL is in serviceConfig.uri
-      const functionUrl = functionData.serviceConfig?.uri;
-      if (!functionUrl) {
-        console.error('Function deployed but no URL found:', functionData);
-        throw new Error(`Function ${config.name} deployed but no URL returned`);
-      }
-      
-      console.log(`Function ${config.name} URL: ${functionUrl}`);
-      return functionUrl;
+      return functionData.serviceConfig?.uri || '';
     } catch (error: any) {
       console.error('Failed to deploy cloud function:', error);
       throw new Error(`Failed to deploy function ${config.name}: ${error.message}`);
@@ -344,7 +328,7 @@ export class CloudFunctionsAPIDeployer {
     const operations = google.cloudfunctions('v2').projects.locations.operations;
     let done = false;
     let retries = 0;
-    const maxRetries = 240; // 20 minutes (increased from 10)
+    const maxRetries = 120; // 10 minutes
 
     while (!done && retries < maxRetries) {
       const { data: operation } = await operations.get({
@@ -371,7 +355,7 @@ export class CloudFunctionsAPIDeployer {
     }
   }
 
-  private async waitForFunctionReady(functionName: string, maxRetries: number = 240): Promise<void> {
+  private async waitForFunctionReady(functionName: string, maxRetries: number = 120): Promise<void> {
     console.log('Waiting for function to be ready...');
     let retries = 0;
     

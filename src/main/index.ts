@@ -762,12 +762,6 @@ ipcMain.on('deployment:subscribe', async (event) => {
     deploymentEngine = new DeploymentEngineClass(stateManager, gcpOAuthService);
   }
   
-  // Remove all existing listeners first to prevent duplicates
-  deploymentEngine.removeAllListeners('progress');
-  deploymentEngine.removeAllListeners('error');
-  deploymentEngine.removeAllListeners('complete');
-  deploymentEngine.removeAllListeners('log');
-  
   deploymentEngine.on('progress', (progress) => {
     event.sender.send('deployment:progress', progress);
     
@@ -804,13 +798,7 @@ ipcMain.on('deployment:subscribe', async (event) => {
     
     // Save the deployment config to cache
     if (result.success) {
-      let user;
-      try {
-        user = await gcpOAuthService.getCurrentUser();
-      } catch (error) {
-        console.log('Could not get current user for caching, continuing...');
-        user = null;
-      }
+      const user = await gcpOAuthService.getCurrentUser();
       const state = stateManager.getState();
       if (state && user?.email) {
         // Lazy load config cache service
@@ -1295,21 +1283,6 @@ ipcMain.handle('auth:unified-google', async () => {
     return result;
   } catch (error: any) {
     logger.error('Unified authentication failed:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// Unified GCP OAuth handler - new single sign-on
-ipcMain.handle('auth:unified-gcp', async () => {
-  try {
-    const { getUnifiedGCPAuthService } = await import('./services/unifiedGCPAuthService');
-    const authService = getUnifiedGCPAuthService();
-    
-    // Initiate OAuth flow
-    const result = await authService.authenticate();
-    return result;
-  } catch (error: any) {
-    logger.error('Unified GCP auth failed:', error);
     return { success: false, error: error.message };
   }
 });

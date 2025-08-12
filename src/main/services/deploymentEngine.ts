@@ -42,30 +42,28 @@ export class DeploymentEngine extends EventEmitter {
     this.gcpAuth = gcpAuth;
     this.gcpService = new GCPApiServiceManager(gcpAuth);
     
-    // Deployers will be initialized when needed
+    // Initialize deployers with OAuth client
+    this.initializeDeployers();
   }
 
-  private async initializeDeployers(): Promise<void> {
-    try {
-      const oauth2Client = await this.gcpAuth.getOAuth2Client();
-      this.cloudFunctionsAPIDeployer = new CloudFunctionsAPIDeployer(oauth2Client);
-      this.apiGatewayDeployer = new ApiGatewayDeployer(oauth2Client);
-      this.firestoreRulesDeployer = new FirestoreRulesDeployer(oauth2Client);
-      this.workloadIdentityDeployer = new WorkloadIdentityDeployer(oauth2Client);
-      this.firebaseAppDeployer = new FirebaseAppDeployer(oauth2Client);
+  private initializeDeployers(): void {
+    if (this.gcpAuth.oauth2Client) {
+      this.cloudFunctionsAPIDeployer = new CloudFunctionsAPIDeployer(this.gcpAuth.oauth2Client);
+      this.apiGatewayDeployer = new ApiGatewayDeployer(this.gcpAuth.oauth2Client);
+      this.firestoreRulesDeployer = new FirestoreRulesDeployer(this.gcpAuth.oauth2Client);
+      this.workloadIdentityDeployer = new WorkloadIdentityDeployer(this.gcpAuth.oauth2Client);
+      this.firebaseAppDeployer = new FirebaseAppDeployer(this.gcpAuth.oauth2Client);
       this.terraformService = new TerraformService();
-      // this.iapOAuthService = new IAPOAuthService(oauth2Client); // Removed - not needed for email/password auth
-      this.aiStudioService = new AIStudioService(oauth2Client);
-    } catch (error) {
-      console.log('Could not initialize deployers - auth may not be ready yet');
+      // this.iapOAuthService = new IAPOAuthService(this.gcpAuth.oauth2Client); // Removed - not needed for email/password auth
+      this.aiStudioService = new AIStudioService(this.gcpAuth.oauth2Client);
     }
   }
 
   async startDeployment(config: DeploymentConfig): Promise<void> {
     this.isPaused = false;
     
-    // Ensure deployers are initialized with auth
-    await this.initializeDeployers();
+    // Ensure deployers are initialized
+    this.initializeDeployers();
     
     // Create new deployment state
     this.stateManager.createNewDeployment(
@@ -115,20 +113,7 @@ export class DeploymentEngine extends EventEmitter {
     try {
       while (!this.isPaused) {
         const nextStep = this.stateManager.getNextPendingStep();
-        
-        // Check if there are any in-progress steps (like API Gateway waiting for functions)
-        const hasInProgressSteps = this.stateManager.getState()?.steps && 
-          Object.values(this.stateManager.getState()!.steps).some(step => step.status === 'in_progress');
-        
-        if (!nextStep && !hasInProgressSteps) {
-          // Double-check that all steps are really completed
-          const currentState = this.stateManager.getState();
-          const stepStatuses = currentState?.steps ? Object.entries(currentState.steps).map(([name, step]) => 
-            `${name}: ${step.status}`
-          ).join(', ') : 'No steps';
-          
-          console.log(`No pending or in-progress steps found. Step statuses: ${stepStatuses}`);
-          
+        if (!nextStep) {
           // All steps completed
           const deployedFunctions = this.getResourceValue('deployCloudFunctions', 'functions') || {};
           const hasPlaceholderFunctions = Object.values(deployedFunctions).some((url: any) => 
@@ -181,14 +166,8 @@ export class DeploymentEngine extends EventEmitter {
           
           // Create admin user if password was provided
           let adminEmail: string | undefined;
-          let userEmail: string | undefined;
-          try {
-            const userInfo = await this.gcpAuth.getCurrentUser();
-            userEmail = userInfo?.email || undefined;
-          } catch (error) {
-            console.log('Could not get current user info, skipping admin setup');
-            userEmail = undefined;
-          }
+          const userInfo = await this.gcpAuth.getCurrentUser();
+          const userEmail = userInfo?.email;
           
           if (userEmail && state.configuration.adminPassword) {
             console.log('\nCreating admin user...');
@@ -259,12 +238,7 @@ export class DeploymentEngine extends EventEmitter {
           break;
         }
 
-        if (nextStep) {
-          await this.executeStep(nextStep);
-        } else {
-          // No pending steps but might have in-progress steps, wait a bit
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        }
+        await this.executeStep(nextStep);
       }
     } catch (error) {
       this.emitError(error);
@@ -365,21 +339,6 @@ export class DeploymentEngine extends EventEmitter {
       console.log(`✓ Step ${stepName} completed successfully`);
       this.emitLog(`✓ Step completed: ${stepName.replace(/([A-Z])/g, ' $1').trim()}`);
     } catch (error) {
-      // Check if this is a dependency waiting error
-      if ((error as Error).message?.startsWith('WAITING_FOR_DEPENDENCIES')) {
-        console.log(`Step ${stepName} is waiting for dependencies...`);
-        // Don't mark as failed, keep it as in_progress so it will be retried
-        this.stateManager.updateStep(stepName, { 
-          status: 'pending',
-          error: 'Waiting for dependencies' 
-        });
-        // Wait before retrying to avoid flooding the logs
-        console.log('Waiting 10 seconds before retrying...');
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        // Don't throw the error, just continue to next iteration
-        return;
-      }
-      
       console.error(`✗ Step ${stepName} failed after all retry attempts:`, error);
       this.stateManager.updateStep(stepName, { 
         status: 'failed',
@@ -1095,19 +1054,16 @@ export class DeploymentEngine extends EventEmitter {
     
     if (!functions || !functions['device-auth'] || !functions['token-vending-machine']) {
       // This can happen if Cloud Functions deployment is still in progress or failed
-      // Only log the first time to avoid flooding logs
-      const waitingStatus = this.getResourceValue('createApiGateway', 'status');
-      if (waitingStatus !== 'waiting_for_functions') {
-        console.log('Cloud Functions not yet available for API Gateway. Waiting for deployment to complete...');
-        this.emitLog('Waiting for Cloud Functions deployment to complete before creating API Gateway...');
-      }
+      // Log it but don't show error to user - the deployment engine will handle retries
+      console.log('Cloud Functions not yet available for API Gateway. Functions state:', functions);
+      console.log('This step will be retried after Cloud Functions deployment completes.');
       
       // Mark this step as incomplete so it will be retried
       this.stateManager.updateStepResource('createApiGateway', 'status', 'waiting_for_functions');
       
-      // Throw a special error that indicates we need to retry
-      // This will prevent the step from being marked as completed
-      throw new Error('WAITING_FOR_DEPENDENCIES: Cloud Functions not yet deployed');
+      // Return early without throwing an error that would appear in the UI
+      this.emitLog('Waiting for Cloud Functions deployment to complete before creating API Gateway...');
+      return;
     }
     
     if (!this.apiGatewayDeployer) {
@@ -1350,8 +1306,7 @@ export class DeploymentEngine extends EventEmitter {
     
     try {
       const { CloudStorageDeployer } = await import('./cloudStorageDeployer');
-      const oauth2Client = await this.gcpAuth.getOAuth2Client();
-      const storageDeployer = new CloudStorageDeployer(oauth2Client, state.projectId, state.region);
+      const storageDeployer = new CloudStorageDeployer(this.gcpAuth.oauth2Client!, state.projectId, state.region);
       const bucketName = `${state.projectId}-anava-analytics`;
       
       logCallback(`Creating GCS bucket: ${bucketName}`);
@@ -1627,16 +1582,18 @@ export class DeploymentEngine extends EventEmitter {
   }
 
   private async getAuthClient(): Promise<OAuth2Client> {
-    return this.gcpAuth.getOAuth2Client();
+    if (!this.gcpAuth.oauth2Client) {
+      throw new Error('OAuth client not initialized');
+    }
+    return this.gcpAuth.oauth2Client;
   }
 
   private async getProjectNumber(projectId: string): Promise<string> {
     // Get project details to extract project number
     const cloudResourceManager = (await import('googleapis')).google.cloudresourcemanager('v1');
-    const oauth2Client = await this.gcpAuth.getOAuth2Client();
     const { data: project } = await cloudResourceManager.projects.get({
       projectId: projectId,
-      auth: oauth2Client
+      auth: this.gcpAuth.oauth2Client!
     });
 
     if (!project.projectNumber) {

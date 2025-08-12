@@ -229,9 +229,6 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
       onComplete(result);
     };
 
-    // Subscribe to deployment events (this sets up the main process event forwarding)
-    window.electronAPI.deployment.subscribe();
-    
     // Set up event listeners and store cleanup functions
     const unsubscribeProgress = window.electronAPI.deployment.onProgress(handleProgress);
     const unsubscribeLog = window.electronAPI.deployment.onLog(handleLog);

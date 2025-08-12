@@ -83,19 +83,11 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
       setLoading(true);
       setError(null);
       
-      // Check if we have unified auth credentials stored
-      const gcpToken = await window.electronAPI.getConfigValue('gcpAccessToken');
-      const userEmail = await window.electronAPI.getConfigValue('userEmail');
+      const status = await window.electronAPI.auth.check();
+      setAuthStatus(status);
       
-      if (gcpToken && userEmail) {
-        // We have unified auth credentials, use them
-        console.log('Using unified auth credentials for:', userEmail);
-        setAuthStatus({
-          authenticated: true,
-          user: userEmail
-        });
-        
-        console.log('Getting project list with unified auth...');
+      if (status.authenticated) {
+        console.log('Getting project list...');
         const projectList = await window.electronAPI.auth.getProjects();
         console.log(`Received ${projectList.length} projects`);
         
@@ -114,32 +106,6 @@ const AuthenticationPage: React.FC<AuthenticationPageProps> = ({ onProjectSelect
         
         console.log(`${validProjects.length} valid projects after filtering`);
         setProjects(validProjects);
-      } else {
-        // Fall back to checking gcloud auth
-        const status = await window.electronAPI.auth.check();
-        setAuthStatus(status);
-        
-        if (status.authenticated) {
-          console.log('Getting project list...');
-          const projectList = await window.electronAPI.auth.getProjects();
-          console.log(`Received ${projectList.length} projects`);
-          
-          // Validate project data
-          const validProjects = projectList.filter(p => {
-            if (!p || typeof p !== 'object') {
-              console.error('Invalid project object:', p);
-              return false;
-            }
-            if (!p.projectId) {
-              console.error('Project missing projectId:', p);
-              return false;
-            }
-            return true;
-          });
-          
-          console.log(`${validProjects.length} valid projects after filtering`);
-          setProjects(validProjects);
-        }
       }
     } catch (err) {
       console.error('Authentication check error:', err);

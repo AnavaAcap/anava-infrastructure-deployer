@@ -13,7 +13,7 @@ import { CameraProvider } from './contexts/CameraContext';
 
 // Import essential pages directly for now
 import WelcomePage from './pages/WelcomePage';
-import UnifiedLoginPage from './pages/UnifiedLoginPage';
+import LoginPageUnified from './pages/LoginPageUnified';
 
 // Lazy load only heavy/less-used pages
 const AuthenticationPage = lazy(() => import('./pages/AuthenticationPage'));
@@ -67,8 +67,8 @@ function App() {
         console.error('Error clearing auth:', error);
       }
       
-      // Don't subscribe globally - let DeploymentPage handle its own subscriptions
-      // window.electronAPI.deployment.subscribe();
+      // Subscribe to deployment events
+      window.electronAPI.deployment.subscribe();
       console.timeEnd('App initialization');
     }, 0);
   }, []);
@@ -197,14 +197,22 @@ function App() {
         );
 
       case 'gcp-setup':
+        if (authState !== 'authenticated') {
+          return (
+            <AuthenticationPage
+              onProjectSelected={handleProjectSelected}
+              onBack={() => setCurrentView('welcome')}
+              onLogout={handleLogout}
+            />
+          );
+        }
+        
         // Always use Vertex AI for production deployments
         if (!selectedAIMode) {
           setSelectedAIMode('vertex');
           return null; // Will re-render with selectedAIMode set
         }
         
-        // After unified login, users already have GCP auth
-        // Go directly to project selection
         if (!selectedProject) {
           return (
             <AuthenticationPage
@@ -346,7 +354,7 @@ function App() {
           onAccept={() => setEulaAccepted(true)} 
         />
         <Suspense fallback={<AppLoader message="Loading login..." />}>
-          <UnifiedLoginPage 
+          <LoginPageUnified 
             onLoginSuccess={() => {
               setAuthState('authenticated');
               loadLicenseKey();

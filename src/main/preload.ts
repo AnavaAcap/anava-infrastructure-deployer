@@ -8,7 +8,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getProjects: () => ipcRenderer.invoke('auth:get-projects'),
     // Unified authentication
     unifiedGoogle: () => ipcRenderer.invoke('auth:unified-google'),
-    unifiedGCPAuth: () => ipcRenderer.invoke('auth:unified-gcp'),
     unifiedSignOut: () => ipcRenderer.invoke('auth:unified-signout'),
   },
   state: {
