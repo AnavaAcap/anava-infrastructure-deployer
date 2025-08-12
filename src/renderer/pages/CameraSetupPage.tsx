@@ -150,6 +150,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [showSpeakerPassword, setShowSpeakerPassword] = useState(false);
   const [availableSpeakers, setAvailableSpeakers] = useState<Array<{ ip: string; model?: string }>>(savedState?.availableSpeakers || []);
   const [testingSpeaker, setTestingSpeaker] = useState(false);
+  const [processingSpeakerConfig, setProcessingSpeakerConfig] = useState(false);
   const [showDetectionModal, setShowDetectionModal] = useState(false);
   const [validatingCredentials, setValidatingCredentials] = useState(false);
   
@@ -840,22 +841,37 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         };
         
         try {
+          // Get user's name from localStorage for personalized greeting
+          const userDisplayName = localStorage.getItem('userDisplayName');
+          let customPrompt: string | undefined;
+          
+          if (userDisplayName) {
+            // Extract first name from display name
+            const firstName = userDisplayName.split(' ')[0];
+            customPrompt = `You are Anava, an AI vision assistant analyzing a live camera feed. The person testing you is named ${firstName}. Please: 1) Greet ${firstName} by name, 2) Introduce yourself as Anava, 3) Then describe what you see in this image, mentioning specific details like objects, people, colors, or activities to prove you're seeing their actual environment in real-time. Keep the entire response under 3 sentences and make it conversational.`;
+            console.log('Using personalized prompt for:', firstName);
+          }
+          
           // Call the real getSceneDescription - app is now running!
           const result = await (window.electronAPI as any).getSceneDescription?.(
             cameraForCapture,
             sceneApiKey,
-            false // No speaker yet
+            false, // No speaker yet
+            customPrompt
           );
           
           if (result?.success) {
             console.log('Scene capture completed successfully');
             sceneResult = result;
             
-            // Store the pre-fetched scene data
+            // Store the pre-fetched scene data with camera info and timestamp
             (window.electronAPI as any).setConfigValue?.('preFetchedScene', {
               ...result,
               audioBase64: result.audioBase64 || result.audioMP3Base64,
-              audioFormat: result.audioFormat || 'mp3'
+              audioFormat: result.audioFormat || 'mp3',
+              cameraId: selectedCamera.id,
+              cameraIp: selectedCamera.ip,
+              timestamp: Date.now()
             });
           } else {
             console.log('Scene capture failed:', result?.error);
@@ -1459,7 +1475,35 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
       case 3:
         return (
-          <Box>
+          <Box sx={{ position: 'relative' }}>
+            {/* Loading overlay */}
+            {processingSpeakerConfig && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                  zIndex: 1000,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 1
+                }}
+              >
+                <CircularProgress size={60} thickness={4} />
+                <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>
+                  Configuring Speaker...
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Pushing configuration to camera, this may take up to 10 seconds
+                </Typography>
+              </Box>
+            )}
+            
             <Typography variant="h6" gutterBottom>
               Optional: Configure Audio Speaker
             </Typography>
@@ -1621,6 +1665,9 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               <Button
                 variant="contained"
                 onClick={async () => {
+                  // Set loading state
+                  setProcessingSpeakerConfig(true);
+                  
                   // Save speaker config if configured
                   if (configureSpeaker && speakerConfig.ip) {
                     console.log('Speaker configured:', speakerConfig);
@@ -1724,10 +1771,14 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   // Mark speaker config as completed and move to next step
                   setCompleted(prev => ({ ...prev, 3: true }));
                   setActiveStep(4);
+                  
+                  // Clear loading state
+                  setProcessingSpeakerConfig(false);
                 }}
-                disabled={configureSpeaker && (!speakerConfig.ip || !speakerConfig.password)}
+                disabled={processingSpeakerConfig || (configureSpeaker && (!speakerConfig.ip || !speakerConfig.password))}
+                startIcon={processingSpeakerConfig ? <CircularProgress size={20} color="inherit" /> : null}
               >
-                Continue
+                {processingSpeakerConfig ? 'Configuring Speaker...' : 'Continue'}
               </Button>
             </Box>
           </Box>

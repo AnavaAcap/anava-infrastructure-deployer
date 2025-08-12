@@ -20,7 +20,7 @@ export class CameraConfigurationService {
   }
 
 
-  async getSceneDescription(camera: any, apiKey: string, includeSpeaker: boolean = false): Promise<any> {
+  async getSceneDescription(camera: any, apiKey: string, includeSpeaker: boolean = false, customPrompt?: string): Promise<any> {
     try {
       console.log('[getSceneDescription] Starting scene analysis for camera:', camera.ip);
       
@@ -29,6 +29,12 @@ export class CameraConfigurationService {
         GeminiApiKey: apiKey,
         replyMP3: true  // Request audio response
       };
+      
+      // Include custom prompt if provided
+      if (customPrompt) {
+        requestData.customPrompt = customPrompt;
+        console.log('[getSceneDescription] Using custom prompt:', customPrompt);
+      }
       
       // Include speaker credentials if requested and available
       if (includeSpeaker && camera.speaker) {
@@ -333,8 +339,8 @@ export class CameraConfigurationService {
       return this.playSpeakerAudio(speakerIp, username, password, audioFile);
     });
     
-    ipcMain.handle('get-scene-description', async (_event, camera: any, apiKey: string, includeSpeaker: boolean = false) => {
-      return this.getSceneDescription(camera, apiKey, includeSpeaker);
+    ipcMain.handle('get-scene-description', async (_event, camera: any, apiKey: string, includeSpeaker: boolean = false, customPrompt?: string) => {
+      return this.getSceneDescription(camera, apiKey, includeSpeaker, customPrompt);
     });
   }
 

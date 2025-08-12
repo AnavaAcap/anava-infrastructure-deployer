@@ -66,6 +66,16 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
       // First check if we have pre-fetched data (note: key is 'preFetchedScene' not 'prefetchedSceneData')
       const preFetchedData = await (window.electronAPI as any).getConfigValue?.('preFetchedScene');
       
+      console.log('[DetectionTestModal] Pre-fetched data check:', {
+        hasData: !!preFetchedData,
+        preFetchedCameraId: preFetchedData?.cameraId,
+        currentCameraId: camera?.id,
+        timestamp: preFetchedData?.timestamp,
+        age: preFetchedData?.timestamp ? Date.now() - preFetchedData.timestamp : null,
+        isMatch: preFetchedData?.cameraId === camera?.id,
+        isFresh: preFetchedData?.timestamp ? (Date.now() - preFetchedData.timestamp < 300000) : false
+      });
+      
       if (preFetchedData && preFetchedData.cameraId === camera?.id && 
           (Date.now() - preFetchedData.timestamp < 300000)) { // Less than 5 minutes old
         console.log('Using pre-fetched scene data from background capture');
@@ -108,11 +118,29 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
       
       setApiKey(storedApiKey);
       
+      // Get user's name for personalized prompt
+      const userDisplayName = localStorage.getItem('userDisplayName');
+      console.log('[DetectionTestModal] userDisplayName from localStorage:', userDisplayName);
+      let customPrompt: string | undefined;
+      
+      if (userDisplayName) {
+        const firstName = userDisplayName.split(' ')[0];
+        customPrompt = `You are Anava, an AI vision assistant analyzing a live camera feed. The person testing you is named ${firstName}. Please: 1) Greet ${firstName} by name, 2) Introduce yourself as Anava, 3) Then describe what you see in this image, mentioning specific details like objects, people, colors, or activities to prove you're seeing their actual environment in real-time. Keep the entire response under 3 sentences and make it conversational.`;
+        console.log('[DetectionTestModal] Generated custom prompt for:', firstName);
+      } else {
+        console.log('[DetectionTestModal] No user display name found, using default personalized prompt');
+        // Use a default personalized prompt without a specific name
+        customPrompt = `You are Anava, an AI vision assistant analyzing a live camera feed. Please: 1) Greet the person testing you warmly, 2) Introduce yourself as Anava, 3) Then describe what you see in this image, mentioning specific details like objects, people, colors, or activities to prove you're seeing their actual environment in real-time. Keep the entire response under 3 sentences and make it conversational.`;
+      }
+      
+      console.log('[DetectionTestModal] Calling getSceneDescription with customPrompt:', !!customPrompt);
+      
       // Call the scene description API
       const result = await (window.electronAPI as any).getSceneDescription?.(
         camera,
         storedApiKey,
-        camera.hasSpeaker || !!speakerConfig
+        camera.hasSpeaker || !!speakerConfig,
+        customPrompt
       );
       
       if (result.success) {
@@ -279,11 +307,29 @@ const DetectionTestModal: React.FC<DetectionTestModalProps> = ({
         return;
       }
       
+      // Get user's name for personalized prompt
+      const userDisplayName = localStorage.getItem('userDisplayName');
+      console.log('[DetectionTestModal] userDisplayName from localStorage:', userDisplayName);
+      let customPrompt: string | undefined;
+      
+      if (userDisplayName) {
+        const firstName = userDisplayName.split(' ')[0];
+        customPrompt = `You are Anava, an AI vision assistant analyzing a live camera feed. The person testing you is named ${firstName}. Please: 1) Greet ${firstName} by name, 2) Introduce yourself as Anava, 3) Then describe what you see in this image, mentioning specific details like objects, people, colors, or activities to prove you're seeing their actual environment in real-time. Keep the entire response under 3 sentences and make it conversational.`;
+        console.log('[DetectionTestModal] Generated custom prompt for:', firstName);
+      } else {
+        console.log('[DetectionTestModal] No user display name found, using default personalized prompt');
+        // Use a default personalized prompt without a specific name
+        customPrompt = `You are Anava, an AI vision assistant analyzing a live camera feed. Please: 1) Greet the person testing you warmly, 2) Introduce yourself as Anava, 3) Then describe what you see in this image, mentioning specific details like objects, people, colors, or activities to prove you're seeing their actual environment in real-time. Keep the entire response under 3 sentences and make it conversational.`;
+      }
+      
+      console.log('[DetectionTestModal] runFreshTest: Calling getSceneDescription with customPrompt:', !!customPrompt);
+      
       // Force a fresh API call (bypassing cache)
       const result = await (window.electronAPI as any).getSceneDescription?.(
         camera,
         storedApiKey,
-        camera.hasSpeaker || !!speakerConfig
+        camera.hasSpeaker || !!speakerConfig,
+        customPrompt
       );
       
       if (result.success) {
