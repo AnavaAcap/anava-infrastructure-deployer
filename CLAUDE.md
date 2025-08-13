@@ -175,7 +175,24 @@ tail -f "$LATEST_LOG"  # Follow log in real-time
 - Config: `POST http://{ip}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`
 - License: `POST http://{ip}/local/{appName}/license.cgi`
 - AOA Control: `POST http://{ip}/local/objectanalytics/control.cgi`
+- Scene: `POST http://{ip}/local/BatonAnalytic/baton_analytic.cgi?command=getSceneDescription`
+- AOA Trigger: `POST http://{ip}/local/BatonAnalytic/baton_analytic.cgi?command=generateFromDescription`
 - Always use digest authentication
+
+### AOA Natural Language Processing (NEW)
+**Converts plain English descriptions to AOA scenarios automatically**
+
+- **Usage**: User types "Someone loitering near the ATM" → Creates AOA motion scenario with timeInArea filter
+- **AI Integration**: Uses Gemini to understand intent and map to AOA capabilities
+- **ACAP Integration**: After creating AOA scenario, sends trigger name and description to ACAP
+- **Endpoint**: `generateFromDescription` with `{ trigger: "scenario_name", description: "original_text" }`
+
+**Examples**:
+- "People running" → Motion detection with shortLivedLimit (1-2s)
+- "Cars parking" → Vehicle detection with timeInArea (10-30s)
+- "Crowd forming" → Occupancy scenario with threshold
+
+**Test Script**: `node test-aoa-nl-acap.js`
 
 ### ✅ Axis Object Analytics (AOA) Integration - NEW (2025-01-16)
 **Feature**: Programmatic control of AOA scenarios via VAPIX APIs
@@ -286,7 +303,9 @@ See `CAMERA_DETECTION_TROUBLESHOOTING.md` for detailed debugging guide.
 - `src/main/services/camera/fastNetworkScanner.ts` - Device detection (POST with propertyList)
 - `src/main/services/deploymentEngine.ts` - GCP deployment logic
 - `src/main/services/aoa/aoaService.ts` - AOA VAPIX implementation with Time in Area support
-- `src/main/services/aoa/aoaIntegration.ts` - AOA deployment integration
+- `src/main/services/aoa/aoaIntegration.ts` - AOA deployment integration  
+- `src/main/services/aoa/aoaNLProcessor.ts` - Natural language to AOA scenario converter with ACAP integration
+- `src/renderer/components/AOANaturalLanguageConfig.tsx` - UI for NL-based AOA configuration
 
 ## Test Commands
 ```bash

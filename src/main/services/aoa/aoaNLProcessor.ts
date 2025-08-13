@@ -388,6 +388,21 @@ export async function deployNLScenario(
     const result = await aoaService.createAdvancedScenario(nlResponse.scenario);
 
     if (result) {
+      // Send the scenario name and description to ACAP endpoint
+      try {
+        await sendScenarioToACAP(
+          cameraIp, 
+          username, 
+          password, 
+          nlResponse.scenario.name, 
+          description
+        );
+        logger.info(`[AOA NL] Successfully sent scenario '${nlResponse.scenario.name}' to ACAP`);
+      } catch (acapError: any) {
+        logger.warn('[AOA NL] Failed to send scenario to ACAP:', acapError.message);
+        // Don't fail the overall operation if ACAP notification fails
+      }
+
       return {
         success: true,
         message: `Successfully created scenario "${nlResponse.scenario.name}" from natural language`,
@@ -408,4 +423,131 @@ export async function deployNLScenario(
       message: error.message
     };
   }
+}
+
+/**
+ * Send AOA scenario configuration to ACAP endpoint
+ * This allows the ACAP to generate descriptions based on the created scenario
+ */
+async function sendScenarioToACAP(
+  cameraIp: string,
+  username: string,
+  password: string,
+  scenarioName: string,
+  description: string
+): Promise<void> {
+  const axios = require('axios');
+  const crypto = require('crypto');
+
+  logger.info(`[AOA NL] Sending scenario '${scenarioName}' to ACAP endpoint`);
+
+  const requestData = {
+    trigger: scenarioName,     // The AOA scenario name that was created
+    description: description   // The original natural language description
+  };
+
+  const url = `http://${cameraIp}/local/BatonAnalytic/baton_analytic.cgi?command=generateFromDescription`;
+
+  try {
+    // First request to get digest auth challenge
+    const response1 = await axios.post(url, JSON.stringify(requestData), {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      validateStatus: () => true,
+      timeout: 10000
+    });
+
+    if (response1.status === 401) {
+      // Handle digest authentication
+      const wwwAuth = response1.headers['www-authenticate'];
+      if (wwwAuth && wwwAuth.includes('Digest')) {
+        // Build digest auth header
+        const authHeader = buildDigestAuth(username, password, 'POST', 
+          `/local/BatonAnalytic/baton_analytic.cgi?command=generateFromDescription`, wwwAuth);
+
+        const response2 = await axios.post(url, JSON.stringify(requestData), {
+          headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+
+        if (response2.status === 200) {
+          logger.info('[AOA NL] Successfully sent scenario to ACAP');
+          if (response2.data) {
+            logger.info('[AOA NL] ACAP response:', response2.data);
+          }
+        } else {
+          logger.warn(`[AOA NL] ACAP responded with status ${response2.status}`);
+        }
+      }
+    } else if (response1.status === 200) {
+      logger.info('[AOA NL] Successfully sent scenario to ACAP (no auth)');
+      if (response1.data) {
+        logger.info('[AOA NL] ACAP response:', response1.data);
+      }
+    } else {
+      logger.warn(`[AOA NL] ACAP responded with status ${response1.status}`);
+    }
+  } catch (error: any) {
+    throw new Error(`Failed to send scenario to ACAP: ${error.message}`);
+  }
+}
+
+/**
+ * Build digest authentication header
+ */
+function buildDigestAuth(
+  username: string, 
+  password: string, 
+  method: string, 
+  uri: string, 
+  wwwAuth: string
+): string {
+  const crypto = require('crypto');
+  
+  // Parse the WWW-Authenticate header
+  const realm = wwwAuth.match(/realm="([^"]+)"/)?.[1] || '';
+  const nonce = wwwAuth.match(/nonce="([^"]+)"/)?.[1] || '';
+  const qop = wwwAuth.match(/qop="([^"]+)"/)?.[1] || '';
+  const opaque = wwwAuth.match(/opaque="([^"]+)"/)?.[1] || '';
+
+  // Generate client nonce
+  const cnonce = crypto.randomBytes(16).toString('hex');
+  const nc = '00000001';
+
+  // Calculate hashes
+  const ha1 = crypto.createHash('md5')
+    .update(`${username}:${realm}:${password}`)
+    .digest('hex');
+
+  const ha2 = crypto.createHash('md5')
+    .update(`${method}:${uri}`)
+    .digest('hex');
+
+  let response;
+  if (qop) {
+    response = crypto.createHash('md5')
+      .update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`)
+      .digest('hex');
+  } else {
+    response = crypto.createHash('md5')
+      .update(`${ha1}:${nonce}:${ha2}`)
+      .digest('hex');
+  }
+
+  // Build the Authorization header
+  let authHeader = `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"`;
+  
+  if (qop) {
+    authHeader += `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"`;
+  }
+  
+  if (opaque) {
+    authHeader += `, opaque="${opaque}"`;
+  }
+
+  return authHeader;
 }
