@@ -1,307 +1,184 @@
-import { BrowserWindow, session } from 'electron';
+import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import crypto from 'crypto';
-import Store from 'electron-store';
+import { app } from 'electron';
+import * as path from 'path';
+import * as fs from 'fs/promises';
 
-interface AuthResult {
-  success: boolean;
-  user?: {
-    email: string;
-    name: string;
-    picture: string;
-    idToken: string;
-    accessToken: string;
-  };
-  error?: string;
-}
+let cachedOAuthClient: OAuth2Client | null = null;
+let cachedConfig: any = null;
 
-export class UnifiedAuthService {
-  private store: Store;
-  private oauth2Client: OAuth2Client;
-  private authWindow: BrowserWindow | null = null;
-  
-  // Use the same OAuth client for consistency
-  private readonly CLIENT_ID = '392865621461-3332mfpeb245vp56raok2mmp4aqssv15.apps.googleusercontent.com';
-  private readonly CLIENT_SECRET = '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';
-  private readonly REDIRECT_URI = 'http://localhost:8085/auth/callback';
-  
-  constructor() {
-    this.store = new Store();
-    this.oauth2Client = new OAuth2Client(
-      this.CLIENT_ID,
-      this.CLIENT_SECRET,
-      this.REDIRECT_URI
-    );
-  }
-
-  /**
-   * Authenticate user using embedded secure webview
-   */
-  async authenticate(parentWindow: BrowserWindow): Promise<AuthResult> {
-    return new Promise((resolve) => {
-      // Generate PKCE parameters for enhanced security
-      const codeVerifier = this.generateCodeVerifier();
-      const codeChallenge = this.generateCodeChallenge(codeVerifier);
-      
-      // Create auth window
-      this.authWindow = new BrowserWindow({
-        width: 500,
-        height: 600,
-        title: 'Sign in with Google',
-        parent: parentWindow,
-        modal: false, // Don't block the parent window
-        show: false,
-        closable: true, // Allow closing
-        minimizable: true, // Allow minimizing
-        maximizable: false,
-        resizable: false,
-        alwaysOnTop: true, // Keep on top but not modal
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-          sandbox: true, // Auth window can be sandboxed
-          // Use a separate session for auth to ensure clean state
-          partition: 'auth-session'
-        }
-      });
-
-      // Clear session data to ensure fresh login
-      const authSession = session.fromPartition('auth-session');
-      authSession.clearStorageData();
-
-      // Generate auth URL with proper scopes
-      const authUrl = this.oauth2Client.generateAuthUrl({
-        access_type: 'offline',
-        scope: [
-          'openid',
-          'email',
-          'profile',
-          'https://www.googleapis.com/auth/userinfo.email',
-          'https://www.googleapis.com/auth/userinfo.profile'
-        ],
-        prompt: 'select_account',
-        code_challenge_method: 'S256' as any,
-        code_challenge: codeChallenge
-      });
-
-      // Handle auth window events
-      this.authWindow.once('ready-to-show', () => {
-        this.authWindow!.show();
-      });
-
-      this.authWindow.on('closed', () => {
-        this.authWindow = null;
-        resolve({
-          success: false,
-          error: 'Authentication cancelled by user'
-        });
-      });
-      
-      // Add ESC key handler to close the window
-      this.authWindow.webContents.on('before-input-event', (event, input) => {
-        if (input.key === 'Escape') {
-          event.preventDefault();
-          this.closeAuthWindow();
-          resolve({
-            success: false,
-            error: 'Authentication cancelled by user'
-          });
-        }
-      });
-
-      // Intercept navigation to capture auth code
-      this.authWindow.webContents.on('will-redirect', async (event, url) => {
-        if (url.startsWith(this.REDIRECT_URI)) {
-          event.preventDefault();
-          
-          const urlParams = new URL(url);
-          const code = urlParams.searchParams.get('code');
-          const error = urlParams.searchParams.get('error');
-
-          if (error) {
-            this.closeAuthWindow();
-            resolve({
-              success: false,
-              error: `Authentication failed: ${error}`
-            });
-            return;
-          }
-
-          if (code) {
-            try {
-              // Exchange code for tokens
-              const { tokens } = await this.oauth2Client.getToken({
-                code,
-                codeVerifier: codeVerifier
-              });
-
-              this.oauth2Client.setCredentials(tokens);
-
-              // Get user info
-              const ticket = await this.oauth2Client.verifyIdToken({
-                idToken: tokens.id_token!,
-                audience: this.CLIENT_ID
-              });
-
-              const payload = ticket.getPayload();
-              if (!payload) {
-                throw new Error('Failed to get user info');
-              }
-
-              // Store tokens securely
-              this.store.set('authTokens', {
-                ...tokens,
-                timestamp: Date.now()
-              });
-
-              this.closeAuthWindow();
-
-              resolve({
-                success: true,
-                user: {
-                  email: payload.email!,
-                  name: payload.name || '',
-                  picture: payload.picture || '',
-                  idToken: tokens.id_token!,
-                  accessToken: tokens.access_token!
-                }
-              });
-            } catch (error) {
-              this.closeAuthWindow();
-              resolve({
-                success: false,
-                error: `Token exchange failed: ${error}`
-              });
-            }
-          }
-        }
-      });
-
-      // Load auth URL
-      this.authWindow.loadURL(authUrl);
-    });
-  }
-
-  /**
-   * Get stored authentication if valid
-   */
-  async getStoredAuth(): Promise<AuthResult | null> {
-    const stored = this.store.get('authTokens') as any;
+/**
+ * Gets the unified OAuth client using tokens from config.json
+ * This is THE SINGLE SOURCE OF TRUTH for Google API authentication
+ */
+export async function getUnifiedOAuthClient(): Promise<OAuth2Client | null> {
+  try {
+    const userDataPath = app.getPath('userData');
+    const configPath = path.join(userDataPath, 'config.json');
     
-    if (!stored || !stored.id_token) {
+    // Read config file
+    const data = await fs.readFile(configPath, 'utf8');
+    const config = JSON.parse(data);
+    
+    // Check if we have tokens
+    if (!config.gcpAccessToken || !config.gcpRefreshToken) {
+      console.log('[UnifiedAuth] No tokens found in config');
       return null;
     }
-
-    // Check if token is expired (tokens typically last 1 hour)
-    const tokenAge = Date.now() - stored.timestamp;
-    if (tokenAge > 50 * 60 * 1000) { // 50 minutes
-      // Try to refresh
-      if (stored.refresh_token) {
-        try {
-          this.oauth2Client.setCredentials(stored);
-          const { credentials } = await this.oauth2Client.refreshAccessToken();
-          
-          // Update stored tokens
-          this.store.set('authTokens', {
-            ...credentials,
-            timestamp: Date.now()
-          });
-
-          // Verify and return user info
-          const ticket = await this.oauth2Client.verifyIdToken({
-            idToken: credentials.id_token!,
-            audience: this.CLIENT_ID
-          });
-
-          const payload = ticket.getPayload();
-          if (payload) {
-            return {
-              success: true,
-              user: {
-                email: payload.email!,
-                name: payload.name || '',
-                picture: payload.picture || '',
-                idToken: credentials.id_token!,
-                accessToken: credentials.access_token!
-              }
-            };
-          }
-        } catch (error) {
-          console.error('Failed to refresh token:', error);
-          this.store.delete('authTokens');
-        }
-      }
-      return null;
+    
+    // Check if tokens changed
+    if (cachedOAuthClient && cachedConfig && 
+        cachedConfig.gcpAccessToken === config.gcpAccessToken &&
+        cachedConfig.gcpRefreshToken === config.gcpRefreshToken) {
+      return cachedOAuthClient;
     }
-
-    // Token still valid, verify and return
-    try {
-      const ticket = await this.oauth2Client.verifyIdToken({
-        idToken: stored.id_token,
-        audience: this.CLIENT_ID
-      });
-
-      const payload = ticket.getPayload();
-      if (payload) {
-        return {
-          success: true,
-          user: {
-            email: payload.email!,
-            name: payload.name || '',
-            picture: payload.picture || '',
-            idToken: stored.id_token,
-            accessToken: stored.access_token
-          }
-        };
-      }
-    } catch (error) {
-      console.error('Stored token validation failed:', error);
-      this.store.delete('authTokens');
-    }
-
+    
+    // Get OAuth config for client ID/secret
+    const oauthConfigPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'oauth-config.json')
+      : path.join(__dirname, '..', '..', 'oauth-config.json');
+      
+    const oauthData = await fs.readFile(oauthConfigPath, 'utf8');
+    const oauthConfig = JSON.parse(oauthData);
+    
+    // Create OAuth client
+    const oauth2Client = new google.auth.OAuth2(
+      oauthConfig.installed.client_id,
+      oauthConfig.installed.client_secret,
+      'http://localhost:8085'
+    );
+    
+    // Set credentials
+    oauth2Client.setCredentials({
+      access_token: config.gcpAccessToken,
+      refresh_token: config.gcpRefreshToken
+    });
+    
+    // Cache for reuse
+    cachedOAuthClient = oauth2Client;
+    cachedConfig = config;
+    
+    console.log('[UnifiedAuth] OAuth client created successfully');
+    return oauth2Client;
+    
+  } catch (error: any) {
+    console.error('[UnifiedAuth] Failed to get OAuth client:', error.message);
     return null;
   }
+}
 
-  /**
-   * Sign out and clear stored credentials
-   */
-  async signOut(): Promise<void> {
-    this.store.delete('authTokens');
-    this.oauth2Client.revokeCredentials();
-    
-    // Clear auth session
-    const authSession = session.fromPartition('auth-session');
-    await authSession.clearStorageData();
+/**
+ * Gets project list using unified auth
+ */
+export async function listProjects(): Promise<any[]> {
+  const oauth2Client = await getUnifiedOAuthClient();
+  if (!oauth2Client) {
+    throw new Error('Not authenticated. Please sign in.');
   }
+  
+  const cloudResourceManager = google.cloudresourcemanager({
+    version: 'v1',
+    auth: oauth2Client
+  });
+  
+  const response = await cloudResourceManager.projects.list({
+    pageSize: 200,
+    filter: 'lifecycleState:ACTIVE'
+  });
+  
+  if (response.data.projects) {
+    return response.data.projects.map((project: any) => ({
+      projectId: project.projectId,
+      projectNumber: project.projectNumber,
+      name: project.name,
+      createTime: project.createTime,
+      lifecycleState: project.lifecycleState
+    }));
+  }
+  return [];
+}
 
-  /**
-   * Clear auth cache on startup to prevent race conditions
-   */
-  async clearAuthCache(): Promise<void> {
-    this.store.delete('authTokens');
-    if (this.oauth2Client) {
-      this.oauth2Client.setCredentials({});
+/**
+ * Checks billing status using unified auth
+ */
+export async function checkBilling(projectId: string): Promise<any> {
+  const oauth2Client = await getUnifiedOAuthClient();
+  if (!oauth2Client) {
+    throw new Error('Not authenticated. Please sign in.');
+  }
+  
+  const cloudbilling = google.cloudbilling({
+    version: 'v1',
+    auth: oauth2Client
+  });
+  
+  const response = await cloudbilling.projects.getBillingInfo({
+    name: `projects/${projectId}`
+  });
+  
+  return {
+    enabled: !!response.data.billingEnabled,
+    billingAccountName: response.data.billingAccountName
+  };
+}
+
+/**
+ * Lists billing accounts using unified auth
+ */
+export async function listBillingAccounts(): Promise<any[]> {
+  const oauth2Client = await getUnifiedOAuthClient();
+  if (!oauth2Client) {
+    throw new Error('Not authenticated. Please sign in.');
+  }
+  
+  const cloudbilling = google.cloudbilling({
+    version: 'v1',
+    auth: oauth2Client
+  });
+  
+  const response = await cloudbilling.billingAccounts.list({
+    pageSize: 100
+  });
+  
+  if (response.data.billingAccounts) {
+    return response.data.billingAccounts.map((account: any) => ({
+      name: account.name,
+      displayName: account.displayName,
+      open: account.open
+    }));
+  }
+  return [];
+}
+
+/**
+ * Links billing account using unified auth
+ */
+export async function linkBillingAccount(projectId: string, billingAccountName: string): Promise<any> {
+  const oauth2Client = await getUnifiedOAuthClient();
+  if (!oauth2Client) {
+    throw new Error('Not authenticated. Please sign in.');
+  }
+  
+  const cloudbilling = google.cloudbilling({
+    version: 'v1',
+    auth: oauth2Client
+  });
+  
+  await cloudbilling.projects.updateBillingInfo({
+    name: `projects/${projectId}`,
+    requestBody: {
+      billingAccountName: billingAccountName
     }
-    
-    // Clear auth session
-    const authSession = session.fromPartition('auth-session');
-    await authSession.clearStorageData();
-    
-    console.log('Unified auth cache cleared');
-  }
+  });
+  
+  return { success: true };
+}
 
-  private closeAuthWindow(): void {
-    if (this.authWindow && !this.authWindow.isDestroyed()) {
-      this.authWindow.close();
-    }
-    this.authWindow = null;
-  }
-
-  private generateCodeVerifier(): string {
-    return crypto.randomBytes(32).toString('base64url');
-  }
-
-  private generateCodeChallenge(verifier: string): string {
-    return crypto.createHash('sha256').update(verifier).digest('base64url');
-  }
+/**
+ * Clears cached OAuth client
+ */
+export function clearCache(): void {
+  cachedOAuthClient = null;
+  cachedConfig = null;
+  console.log('[UnifiedAuth] Cache cleared');
 }

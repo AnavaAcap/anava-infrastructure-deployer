@@ -5,7 +5,6 @@ import path from 'path';
 import http from 'http';
 import fs from 'fs/promises';
 import crypto from 'crypto';
-import os from 'os';
 import Store from 'electron-store';
 
 const log = console;
@@ -248,27 +247,9 @@ export class GCPOAuthService {
   }
 
   async setupApplicationDefaultCredentials(tokens: any) {
-    try {
-      const adcPath = path.join(os.homedir(), '.config', 'gcloud', 'application_default_credentials.json');
-      const adcDir = path.dirname(adcPath);
-      
-      await fs.mkdir(adcDir, { recursive: true });
-      
-      const adcCredentials = {
-        client_id: this.authConfig.client_id,
-        client_secret: this.authConfig.client_secret,
-        refresh_token: tokens.refresh_token,
-        type: 'authorized_user'
-      };
-      
-      await fs.writeFile(adcPath, JSON.stringify(adcCredentials, null, 2));
-      
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = adcPath;
-      
-      console.log('Application Default Credentials configured successfully');
-    } catch (error) {
-      console.error('Failed to set up ADC:', error);
-    }
+    // Use centralized auth service to save ADC with proper Windows support
+    const { saveTokensAsADC } = await import('./googleAuthService');
+    await saveTokensAsADC(tokens, this.authConfig.client_id, this.authConfig.client_secret);
   }
 
   async authenticate() {

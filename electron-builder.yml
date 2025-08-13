@@ -1,5 +1,5 @@
-appId: com.anava.infrastructure-deployer
-productName: Anava Installer
+appId: com.anava.vision
+productName: Anava Vision
 directories:
   output: release
 afterSign: scripts/notarize.js
@@ -12,8 +12,8 @@ files:
   - !**/*.ts
   - !**/tsconfig.json
 extraResources:
-  - from: terraform
-    to: terraform
+  - from: terraform-bin
+    to: terraform-bin
     filter:
       - "**/*"
   - from: node_modules/puppeteer/.local-chromium
@@ -32,7 +32,7 @@ asarUnpack:
   - node_modules/puppeteer/.local-chromium/**/*
   - node_modules/puppeteer/.cache/**/*
   - node_modules/chromium/**/*
-  - terraform/**/*
+  - terraform-bin/**/*
 mac:
   category: public.app-category.developer-tools
   icon: assets/icon.icns
@@ -42,46 +42,78 @@ mac:
   entitlementsInherit: assets/entitlements.mac.plist
   notarize:
     teamId: 3JVZNWGRYT
+compression: store  # Global compression setting
 win:
   icon: assets/icon.ico
+  compression: store  # Windows-specific compression override
   target:
     - target: nsis
       arch:
         - x64
   artifactName: ${productName}-Setup-${version}.${ext}
-  requestedExecutionLevel: requireAdministrator
+  requestedExecutionLevel: asInvoker
   publisherName: Anava AI Inc.
   legalTrademarks: © 2025 Anava AI Inc.
   signDlls: true
   rfc3161TimeStampServer: http://timestamp.digicert.com
   timeStampServer: http://timestamp.digicert.com
 nsis:
+  # Settings for NSIS installer
+  artifactName: ${productName}-Setup-${version}.${ext}
+  # Use NSIS web installer mode for no initial compression
+  differentialPackage: false
+  
+  # Installation behavior
   oneClick: false
-  perMachine: true  # Consistent per-machine installation
+  perMachine: false  # Install per-user to fix auth issues
   allowToChangeInstallationDirectory: true
   allowElevation: true
+  
+  # Shortcuts
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: Anava Installer
+  shortcutName: Anava Vision
   menuCategory: Anava AI
+  
+  # Visual assets
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
   installerHeaderIcon: assets/icon.ico
+  installerHeader: assets/installerHeader.bmp
+  installerSidebar: assets/installerSidebar.bmp
+  
+  # Uninstall behavior
   deleteAppDataOnUninstall: false
+  uninstallDisplayName: Anava Vision ${version}
+  
+  # Language settings
   displayLanguageSelector: false
   language: 1033
   multiLanguageInstaller: false
+  
+  # Technical settings
   packElevateHelper: true
   preCompressedFileExtensions: [-.br, .webp]
   unicode: true
   useZip: false
   warningsAsErrors: false
+  differentialCompression: true  # Optimize for future updates
+  
+  # Legal and identification
   license: LICENSE.md
   guid: ${env.INSTALLER_GUID}  # Dynamic GUID from environment
+  
+  # Behavior
   runAfterFinish: false  # Prevent auto-launch to avoid process conflicts
-  installerHeader: assets/installerHeader.bmp
-  installerSidebar: assets/installerSidebar.bmp
-  uninstallDisplayName: Anava Installer ${version}
+  
+  # Custom installer script for progress messages
+  include: build/installer.nsh
+  
+  # Show installation details
+  # CRITICAL: installerMode refers to per-machine vs per-user, NOT detail display!
+  # Using 'both' allows users to choose between per-machine and per-user installation
+  installerMode: both  # Allows both per-machine and per-user installation options
+  uninstallerMode: both
   
 linux:
   icon: assets/icon.png

@@ -11,30 +11,35 @@ export class TerraformService {
   constructor() {
     // Terraform binary location
     const platform = os.platform();
+    const arch = os.arch();
     
-    // Map Node.js platform/arch to Terraform naming
-    let tfBinary = 'terraform';
+    // Determine the correct binary name based on platform
+    let tfBinary: string;
     if (platform === 'win32') {
       tfBinary = 'terraform.exe';
+    } else if (platform === 'darwin') {
+      tfBinary = arch === 'arm64' ? 'terraform-darwin-arm64' : 'terraform-darwin-x64';
+    } else if (platform === 'linux') {
+      tfBinary = 'terraform-linux';
+    } else {
+      // Fallback to generic terraform
+      tfBinary = 'terraform';
     }
     
     // In production, terraform would be in app resources
     // In development, it would be in terraform-bin directory
-    if (app.isPackaged) {
-      this.terraformPath = path.join(
-        process.resourcesPath,
-        'terraform-bin',
-        tfBinary
-      );
-    } else {
-      this.terraformPath = path.join(
-        __dirname,
-        '..',
-        '..',
-        '..',
-        'terraform-bin',
-        tfBinary
-      );
+    const baseDir = app.isPackaged 
+      ? process.resourcesPath
+      : path.join(__dirname, '..', '..', '..');
+    
+    this.terraformPath = path.join(baseDir, 'terraform-bin', tfBinary);
+    
+    // For Windows, also check if just terraform.exe exists (for compatibility)
+    if (platform === 'win32' && !require('fs').existsSync(this.terraformPath)) {
+      const altPath = path.join(baseDir, 'terraform-bin', 'terraform.exe');
+      if (require('fs').existsSync(altPath)) {
+        this.terraformPath = altPath;
+      }
     }
     
     // Work directory for Terraform files - use timestamp to ensure unique
@@ -43,40 +48,80 @@ export class TerraformService {
 
   async initialize(): Promise<void> {
     console.log('[Terraform] Initializing Terraform service...');
+    console.log('[Terraform] Platform:', os.platform(), 'Arch:', os.arch());
     console.log('[Terraform] Terraform binary path:', this.terraformPath);
     console.log('[Terraform] Working directory:', this.workDir);
     
     // Create work directory
     await fs.mkdir(this.workDir, { recursive: true });
     
-    // Verify Terraform binary exists and is executable
+    // Verify Terraform binary exists
     try {
       await fs.access(this.terraformPath, fs.constants.F_OK);
       console.log('[Terraform] ✅ Terraform binary exists');
       
-      // Check if it's executable
-      await fs.access(this.terraformPath, fs.constants.X_OK);
-      console.log('[Terraform] ✅ Terraform binary is executable');
+      // On Windows, skip X_OK check as it's not reliable
+      // Windows determines executability by file extension
+      if (os.platform() !== 'win32') {
+        try {
+          await fs.access(this.terraformPath, fs.constants.X_OK);
+          console.log('[Terraform] ✅ Terraform binary is executable');
+        } catch (execError) {
+          console.warn('[Terraform] ⚠️ Binary may not be executable, attempting to fix...');
+          // Try to make it executable
+          const fs_sync = require('fs');
+          fs_sync.chmodSync(this.terraformPath, '755');
+          console.log('[Terraform] ✅ Set executable permissions');
+        }
+      } else {
+        console.log('[Terraform] ✅ Windows binary (.exe) assumed executable');
+      }
       
       // Get file stats for debugging
       const stats = await fs.stat(this.terraformPath);
-      console.log('[Terraform] Binary size:', stats.size, 'bytes');
+      console.log('[Terraform] Binary size:', Math.round(stats.size / 1024 / 1024), 'MB');
       console.log('[Terraform] Binary permissions:', stats.mode.toString(8));
+      
+      // Verify it's a real binary (not empty or too small)
+      if (stats.size < 1000000) { // Less than 1MB is suspicious
+        throw new Error(`Terraform binary appears to be corrupted (size: ${stats.size} bytes)`);
+      }
+      
     } catch (error: any) {
-      console.error('[Terraform] ❌ Terraform binary not accessible:', error);
+      console.error('[Terraform] ❌ Terraform binary problem:', error);
       console.error('[Terraform] Error code:', error.code);
       console.error('[Terraform] Error message:', error.message);
       
       // Try to list the directory contents for debugging
       try {
         const dir = path.dirname(this.terraformPath);
+        console.error('[Terraform] Looking in directory:', dir);
         const files = await fs.readdir(dir);
         console.error('[Terraform] Directory contents:', files);
+        
+        // Check sizes of files found
+        for (const file of files) {
+          const filePath = path.join(dir, file);
+          try {
+            const fileStats = await fs.stat(filePath);
+            console.error(`[Terraform]   - ${file}: ${Math.round(fileStats.size / 1024)}KB`);
+          } catch (e) {
+            console.error(`[Terraform]   - ${file}: (unable to stat)`);
+          }
+        }
       } catch (dirError) {
         console.error('[Terraform] Could not list directory:', dirError);
       }
       
-      throw new Error(`Terraform binary not found or not executable at ${this.terraformPath}. Error: ${error.message}`);
+      // Provide helpful error message based on the platform
+      let helpMessage = '';
+      if (os.platform() === 'win32') {
+        helpMessage = '\n\nFor Windows: Ensure terraform.exe is present in the terraform-bin directory. Run "npm run download-terraform-win" to download it.';
+      } else {
+        helpMessage = '\n\nRun "npm run download-terraform" to download the Terraform binary for your platform.';
+      }
+      
+      throw new Error(`Terraform binary not found or not valid at ${this.terraformPath}. ${error.message}${helpMessage}`);
     }
   }
 
@@ -115,7 +160,7 @@ terraform {
 }
 
 provider "google" {
-  credentials = file("${credentialsPath}")
+  credentials = file("${credentialsPath.replace(/\\/g, '/')}")
   project     = "${projectId}"
 }
 
@@ -215,24 +260,43 @@ output "auth_enabled" {
 
   private runTerraform(args: string[], cwd: string, credentialsPath?: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      console.log(`[Terraform] Running: terraform ${args.join(' ')}`);
+      console.log(`[Terraform] Running: ${path.basename(this.terraformPath)} ${args.join(' ')}`);
       console.log(`[Terraform] Working directory: ${cwd}`);
-      console.log(`[Terraform] Terraform binary: ${this.terraformPath}`);
+      console.log(`[Terraform] Full binary path: ${this.terraformPath}`);
       
       // Collect all output for better error reporting
       let stdoutBuffer = '';
       let stderrBuffer = '';
       
-      const terraform = spawn(this.terraformPath, args, {
+      // Windows-specific spawn options
+      const spawnOptions: any = {
         cwd,
         env: {
           ...process.env,
           // Set Google credentials if provided
           ...(credentialsPath ? { GOOGLE_APPLICATION_CREDENTIALS: credentialsPath } : {}),
           // Enable more detailed logging for debugging
-          TF_LOG: 'ERROR' // Show only errors, not verbose info
+          TF_LOG: 'ERROR', // Show only errors, not verbose info
+          // Windows-specific: Ensure proper PATH
+          ...(os.platform() === 'win32' ? { 
+            PATH: `${process.env.PATH};${path.dirname(this.terraformPath)}` 
+          } : {})
         }
-      });
+      };
+      
+      // On Windows, we need special handling
+      if (os.platform() === 'win32') {
+        // Use windowsHide to prevent console window popup
+        spawnOptions.windowsHide = true;
+        // Don't use shell:true on Windows as it can cause path issues
+        spawnOptions.shell = false;
+        // Ensure Windows uses proper path separators
+        spawnOptions.cwd = cwd.replace(/\//g, '\\');
+      }
+      
+      console.log('[Terraform] Spawn options:', JSON.stringify(spawnOptions, null, 2));
+      
+      const terraform = spawn(this.terraformPath, args, spawnOptions);
       
       terraform.stdout.on('data', (data) => {
         const output = data.toString();

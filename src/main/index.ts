@@ -6,13 +6,11 @@ import { getLogger } from './utils/logger';
 import type { DeploymentEngine } from './services/deploymentEngine';
 import type { StateManager } from './services/stateManager';
 import type { GCPOAuthService } from './services/gcpOAuthService';
-import type { UnifiedAuthService } from './services/unifiedAuthService';
 
 // These will be lazy loaded when needed
 let DeploymentEngineClass: typeof import('./services/deploymentEngine').DeploymentEngine;
 let StateManagerClass: typeof import('./services/stateManager').StateManager;
 let GCPOAuthServiceClass: typeof import('./services/gcpOAuthService').GCPOAuthService;
-let UnifiedAuthServiceClass: typeof import('./services/unifiedAuthService').UnifiedAuthService;
 let configCacheService: typeof import('./services/configCache').configCacheService;
 let fastStartService: typeof import('./services/fastStartService').fastStartService;
 let AIStudioServiceClass: typeof import('./services/aiStudioService').AIStudioService;
@@ -36,7 +34,6 @@ let mainWindow: BrowserWindow | null = null;
 let deploymentEngine: DeploymentEngine;
 let stateManager: StateManager;
 let gcpOAuthService: GCPOAuthService;
-let unifiedAuthService: UnifiedAuthService;
 
 // Track all spawned child processes for cleanup
 const childProcesses = new Set<any>();
@@ -248,6 +245,44 @@ function checkWindowsDefender() {
 app.whenReady().then(async () => {
   logger.info('App ready, starting fast initialization...');
   
+  // CRITICAL: Clear GCP OAuth tokens on startup to force fresh login
+  // This ensures users always have the latest scopes and permissions
+  try {
+    const Store = (await import('electron-store')).default;
+    const store = new Store();
+    
+    // Clear all GCP OAuth related tokens
+    store.delete('gcpTokens');
+    store.delete('gcpAccessToken'); 
+    store.delete('gcpRefreshToken');
+    store.delete('gcpUser');
+    
+    // Also clear from config.json
+    const userDataPath = app.getPath('userData');
+    const configPath = path.join(userDataPath, 'config.json');
+    const fs = await import('fs');
+    
+    if (fs.existsSync(configPath)) {
+      try {
+        const configData = await fs.promises.readFile(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        
+        // Remove GCP OAuth tokens but keep other config
+        delete config.gcpAccessToken;
+        delete config.gcpRefreshToken;
+        delete config.gcpTokens;
+        
+        await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2));
+        logger.info('Cleared cached GCP OAuth tokens to force fresh login');
+      } catch (e) {
+        logger.debug('Could not clear config.json tokens:', e);
+      }
+    }
+  } catch (error) {
+    logger.debug('Could not clear OAuth cache:', error);
+    // Non-critical, continue
+  }
+  
   // Windows-specific DPI scaling
   if (process.platform === 'win32') {
     app.commandLine.appendSwitch('high-dpi-support', '1');
@@ -266,16 +301,14 @@ app.whenReady().then(async () => {
   
   // Load core services
   logger.info('Loading core services...');
-  [StateManagerClass, GCPOAuthServiceClass, UnifiedAuthServiceClass] = await Promise.all([
+  [StateManagerClass, GCPOAuthServiceClass] = await Promise.all([
     import('./services/stateManager').then(m => m.StateManager),
-    import('./services/gcpOAuthService').then(m => m.GCPOAuthService),
-    import('./services/unifiedAuthService').then(m => m.UnifiedAuthService)
+    import('./services/gcpOAuthService').then(m => m.GCPOAuthService)
   ]);
   
   // Initialize essential services
   stateManager = new StateManagerClass();
   gcpOAuthService = new GCPOAuthServiceClass();
-  unifiedAuthService = new UnifiedAuthServiceClass();
   
   // Initialize deployment logger FIRST to capture all events
   await import('./services/deploymentLogger');
@@ -302,13 +335,8 @@ app.whenReady().then(async () => {
       logger.error('Critical: Auth logout failed:', err);
       // Log error but continue
       return null;
-    }),
-    unifiedAuthService.clearAuthCache().catch(err => {
-      logger.error('Critical: Clear auth cache failed:', err);
-      // Log error but continue
-      return null;
     })
-  ]).catch(err => {
+  ]).catch((err: any) => {
     logger.error('Critical initialization error:', err);
     // Show user notification
     dialog.showErrorBox('Initialization Error', 
@@ -743,7 +771,27 @@ ipcMain.handle('auth:get-projects', async () => {
     const config = JSON.parse(data);
     
     // If we have unified auth tokens, use them to list projects
-    if (config.gcpAccessToken) {
+    if (config.gcpAccessToken && config.gcpRefreshToken) {
+      // CRITICAL: Save tokens as ADC so billing service can use them
+      const { saveTokensAsADC } = await import('./services/googleAuthService');
+      
+      // Get OAuth config for client ID/secret
+      const oauthConfigPath = app.isPackaged
+        ? path.join(process.resourcesPath, 'oauth-config.json')
+        : path.join(__dirname, '..', '..', 'oauth-config.json');
+      const oauthData = await fs.promises.readFile(oauthConfigPath, 'utf8');
+      const oauthConfig = JSON.parse(oauthData);
+      
+      // Save as ADC for all Google API services to use
+      await saveTokensAsADC(
+        {
+          access_token: config.gcpAccessToken,
+          refresh_token: config.gcpRefreshToken
+        },
+        oauthConfig.client_id,
+        oauthConfig.client_secret
+      );
+      
       const { google } = await import('googleapis');
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({
@@ -782,16 +830,151 @@ ipcMain.handle('auth:get-projects', async () => {
 
 // Billing check handlers
 ipcMain.handle('billing:check-project', async (_, projectId: string) => {
-  const { billingService } = await import('./services/billingService');
-  return billingService.checkProjectBilling(projectId);
+  try {
+    console.log('[Billing Check] Starting for project:', projectId);
+    
+    // Use the SAME unified auth that works for projects!
+    const userDataPath = app.getPath('userData');
+    const configPath = path.join(userDataPath, 'config.json');
+    
+    const fs = await import('fs');
+    const data = await fs.promises.readFile(configPath, 'utf8');
+    const config = JSON.parse(data);
+    
+    console.log('[Billing Check] Config loaded, has tokens:', !!(config.gcpAccessToken && config.gcpRefreshToken));
+    
+    if (!config.gcpAccessToken || !config.gcpRefreshToken) {
+      throw new Error('Google Cloud credentials not found. Please sign in with Google first.');
+    }
+    
+    const { google } = await import('googleapis');
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({
+      access_token: config.gcpAccessToken,
+      refresh_token: config.gcpRefreshToken
+    });
+    
+    console.log('[Billing Check] OAuth client configured with tokens');
+    
+    const cloudbilling = google.cloudbilling({
+      version: 'v1',
+      auth: oauth2Client
+    });
+    
+    console.log('[Billing Check] Making API call to get billing info...');
+    const response = await cloudbilling.projects.getBillingInfo({
+      name: `projects/${projectId}`
+    });
+    
+    console.log('[Billing Check] Response received:', {
+      enabled: !!response.data.billingEnabled,
+      accountName: response.data.billingAccountName
+    });
+    
+    return {
+      enabled: !!response.data.billingEnabled,
+      billingAccountName: response.data.billingAccountName
+    };
+  } catch (error: any) {
+    console.error('[Billing Check] Failed:', error.message);
+    console.error('[Billing Check] Full error:', error);
+    
+    // NO FALLBACK TO ADC! Return the actual error to the user
+    if (error.message?.includes('401') || error.message?.includes('Invalid Credentials')) {
+      throw new Error('Authentication failed. Please sign out and sign in again with Google.');
+    } else if (error.message?.includes('403') || error.message?.includes('Permission')) {
+      throw new Error('Permission denied. Please ensure your Google account has billing permissions for this project.');
+    } else if (error.message?.includes('credentials not found')) {
+      throw error; // Pass through our custom error
+    } else {
+      throw new Error(`Failed to check billing status: ${error.message}`);
+    }
+  }
 });
 
 ipcMain.handle('billing:list-accounts', async () => {
+  try {
+    // Use the SAME unified auth!
+    const userDataPath = app.getPath('userData');
+    const configPath = path.join(userDataPath, 'config.json');
+    
+    const fs = await import('fs');
+    const data = await fs.promises.readFile(configPath, 'utf8');
+    const config = JSON.parse(data);
+    
+    if (config.gcpAccessToken && config.gcpRefreshToken) {
+      const { google } = await import('googleapis');
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({
+        access_token: config.gcpAccessToken,
+        refresh_token: config.gcpRefreshToken
+      });
+      
+      const cloudbilling = google.cloudbilling({
+        version: 'v1',
+        auth: oauth2Client
+      });
+      
+      const response = await cloudbilling.billingAccounts.list({
+        pageSize: 100
+      });
+      
+      if (response.data.billingAccounts) {
+        return response.data.billingAccounts.map((account: any) => ({
+          name: account.name,
+          displayName: account.displayName,
+          open: account.open
+        }));
+      }
+      return [];
+    }
+  } catch (error: any) {
+    console.error('List billing accounts error:', error);
+  }
+  
+  // Fall back (but this will likely fail)
   const { billingService } = await import('./services/billingService');
   return billingService.listBillingAccounts();
 });
 
 ipcMain.handle('billing:link-account', async (_, projectId: string, billingAccountName: string) => {
+  try {
+    // Use the SAME unified auth!
+    const userDataPath = app.getPath('userData');
+    const configPath = path.join(userDataPath, 'config.json');
+    
+    const fs = await import('fs');
+    const data = await fs.promises.readFile(configPath, 'utf8');
+    const config = JSON.parse(data);
+    
+    if (config.gcpAccessToken && config.gcpRefreshToken) {
+      const { google } = await import('googleapis');
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({
+        access_token: config.gcpAccessToken,
+        refresh_token: config.gcpRefreshToken
+      });
+      
+      const cloudbilling = google.cloudbilling({
+        version: 'v1',
+        auth: oauth2Client
+      });
+      
+      await cloudbilling.projects.updateBillingInfo({
+        name: `projects/${projectId}`,
+        requestBody: {
+          billingAccountName: billingAccountName
+        }
+      });
+      
+      return { success: true };
+    }
+  } catch (error: any) {
+    console.error('Link billing account error:', error);
+    return { success: false, error: error.message };
+  }
+  
+  // Fall back (but this will likely fail)
   const { billingService } = await import('./services/billingService');
   return billingService.linkBillingAccount(projectId, billingAccountName);
 });
@@ -1413,13 +1596,15 @@ ipcMain.handle('auth:unified-google', async () => {
     }
     
     // Check for existing valid auth first
-    const existingAuth = await unifiedAuthService.getStoredAuth();
+    // Check if already authenticated
+    const existingAuth = null; // Removed unifiedAuthService
     if (existingAuth) {
       return existingAuth;
     }
     
     // Perform new authentication
-    const result = await unifiedAuthService.authenticate(mainWindow);
+    // Use old auth for now
+    const result = await gcpOAuthService.authenticate();
     return result;
   } catch (error: any) {
     logger.error('Unified authentication failed:', error);
@@ -1445,7 +1630,8 @@ ipcMain.handle('auth:unified-gcp', async () => {
 // Unified auth sign out
 ipcMain.handle('auth:unified-signout', async () => {
   try {
-    await unifiedAuthService.signOut();
+    // Sign out using old auth
+    await gcpOAuthService.logout();
     return { success: true };
   } catch (error: any) {
     logger.error('Sign out failed:', error);
