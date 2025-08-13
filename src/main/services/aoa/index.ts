@@ -6,6 +6,7 @@
 export { default as AOAService } from './aoaService';
 export { default as AOAIntegration } from './aoaIntegration';
 export { AOADiscovery } from './aoaDiscovery';
+export { AOANaturalLanguageProcessor, deployNLScenario } from './aoaNLProcessor';
 
 export type {
   AOAScenario,
@@ -24,6 +25,11 @@ export type {
 export type {
   AOAEndpoint
 } from './aoaDiscovery';
+
+export type {
+  NLScenarioRequest,
+  NLScenarioResponse
+} from './aoaNLProcessor';
 
 /**
  * Quick start example:

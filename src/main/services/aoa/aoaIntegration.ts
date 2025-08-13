@@ -5,6 +5,7 @@
 
 import { ipcMain } from 'electron';
 import AOAService from './aoaService';
+import { AOANaturalLanguageProcessor, deployNLScenario } from './aoaNLProcessor';
 import { logger } from '../../utils/logger';
 import { Camera } from '../camera/cameraDiscoveryService';
 
@@ -57,6 +58,29 @@ export class AOAIntegration {
     // Test AOA connection
     ipcMain.handle('test-aoa-connection', async (_event, cameraIp: string, username: string, password: string) => {
       return this.testConnection(cameraIp, username, password);
+    });
+
+    // Natural Language Processing for AOA scenarios
+    ipcMain.handle('aoa-process-natural-language', async (_event, geminiApiKey: string, description: string, context?: string) => {
+      return this.processNaturalLanguageScenario(geminiApiKey, description, context);
+    });
+
+    // Deploy NL-generated scenario to camera
+    ipcMain.handle('aoa-deploy-nl-scenario', async (
+      _event, 
+      cameraIp: string, 
+      username: string, 
+      password: string, 
+      geminiApiKey: string, 
+      description: string, 
+      context?: string
+    ) => {
+      return deployNLScenario(cameraIp, username, password, geminiApiKey, description, context);
+    });
+
+    // Get common scenario templates
+    ipcMain.handle('aoa-get-common-scenarios', async (_event, geminiApiKey: string) => {
+      return this.getCommonScenarios(geminiApiKey);
     });
   }
 
@@ -364,6 +388,57 @@ export class AOAIntegration {
       enableAOA: true,
       useDefaultScenarios: true
     });
+  }
+
+  /**
+   * Process natural language description into AOA scenario
+   */
+  async processNaturalLanguageScenario(
+    geminiApiKey: string, 
+    description: string, 
+    context?: string
+  ): Promise<any> {
+    try {
+      logger.info('[AOA Integration] Processing NL description:', description);
+      
+      const processor = new AOANaturalLanguageProcessor(geminiApiKey);
+      const result = await processor.processNaturalLanguage({
+        description,
+        cameraContext: context,
+        strictness: 'medium'
+      });
+
+      return result;
+    } catch (error: any) {
+      logger.error('[AOA Integration] NL processing failed:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Get common scenario templates using AI
+   */
+  async getCommonScenarios(geminiApiKey: string): Promise<any> {
+    try {
+      logger.info('[AOA Integration] Generating common scenario templates...');
+      
+      const processor = new AOANaturalLanguageProcessor(geminiApiKey);
+      const scenarios = await processor.generateCommonScenarios();
+      
+      return {
+        success: true,
+        scenarios
+      };
+    } catch (error: any) {
+      logger.error('[AOA Integration] Failed to generate common scenarios:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
   }
 }
 
