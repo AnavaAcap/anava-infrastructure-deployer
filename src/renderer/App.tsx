@@ -354,7 +354,7 @@ function App() {
           onAccept={() => setEulaAccepted(true)} 
         />
         <Suspense fallback={<AppLoader message="Loading login..." />}>
-          <LoginPageUnified 
+          <UnifiedLoginPage 
             onLoginSuccess={() => {
               setAuthState('authenticated');
               loadLicenseKey();

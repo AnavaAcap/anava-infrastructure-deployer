@@ -19,7 +19,21 @@ export class GCPOAuthService {
   private cleanupHandlersRegistered = false;
 
   constructor() {
-    this.store = new Store();
+    try {
+      this.store = new Store();
+    } catch (error) {
+      console.error('Failed to load config store, clearing and recreating:', error);
+      // Clear corrupted store by removing the file
+      const configPath = path.join(app.getPath('userData'), 'config.json');
+      try {
+        require('fs').unlinkSync(configPath);
+      } catch (e) {
+        // File might not exist
+      }
+      // Create new store
+      this.store = new Store();
+    }
+    
     // Initialize asynchronously after construction
     this.initialize().catch(error => {
       console.error('Failed to initialize GCPOAuthService:', error);
@@ -674,10 +688,84 @@ export class GCPOAuthService {
     console.log('Logged out successfully');
   }
 
+  /**
+   * Initialize OAuth client with existing tokens (for unified auth)
+   */
+  async initializeWithTokens(tokens: { access_token: string; refresh_token: string }) {
+    console.log('[GCP OAuth] initializeWithTokens called with tokens:', {
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+      accessTokenLength: tokens.access_token?.length,
+      refreshTokenLength: tokens.refresh_token?.length
+    });
+
+    // Validate tokens
+    if (!tokens.access_token || !tokens.refresh_token) {
+      console.error('[GCP OAuth] ERROR: Missing tokens!', {
+        access_token: tokens.access_token ? 'present' : 'missing',
+        refresh_token: tokens.refresh_token ? 'present' : 'missing'
+      });
+      throw new Error('Cannot initialize OAuth client without valid tokens');
+    }
+
+    // Ensure OAuth config is loaded first
+    if (!this.authConfig) {
+      console.log('[GCP OAuth] Loading OAuth config...');
+      await this.loadOAuthConfig();
+    }
+    
+    if (!this.oauth2Client) {
+      console.log('[GCP OAuth] Creating new OAuth2Client instance');
+      this.oauth2Client = new OAuth2Client(
+        this.authConfig.client_id,
+        this.authConfig.client_secret,
+        this.authConfig.redirect_uris[0]
+      );
+    } else {
+      console.log('[GCP OAuth] OAuth2Client already exists, updating credentials');
+    }
+
+    // Set credentials with proper key names (no underscores)
+    this.oauth2Client.setCredentials({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token
+    });
+
+    // Verify credentials were set
+    const creds = this.oauth2Client.credentials;
+    console.log('[GCP OAuth] Credentials after setting:', {
+      hasAccessToken: !!creds.access_token,
+      hasRefreshToken: !!creds.refresh_token,
+      accessTokenLength: creds.access_token?.length,
+      refreshTokenLength: creds.refresh_token?.length
+    });
+
+    // Listen for token refresh events
+    this.oauth2Client.on('tokens', (tokens) => {
+      console.log('[GCP OAuth] Tokens refreshed, saving to store');
+      if (tokens.refresh_token) {
+        this.store.set('gcpRefreshToken', tokens.refresh_token);
+      }
+      this.store.set('gcpAccessToken', tokens.access_token);
+    });
+
+    console.log('[GCP OAuth] Successfully initialized with unified auth tokens');
+    return true;
+  }
+
+  /**
+   * Check if OAuth client has valid credentials
+   */
+  hasCredentials(): boolean {
+    return !!(
+      this.oauth2Client && 
+      this.oauth2Client.credentials && 
+      this.oauth2Client.credentials.refresh_token
+    );
+  }
+
   isAuthenticated(): boolean {
-    return !!(this.oauth2Client && 
-             this.oauth2Client.credentials && 
-             this.oauth2Client.credentials.refresh_token);
+    return this.hasCredentials();
   }
 
   getCredentials() {

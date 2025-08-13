@@ -132,7 +132,8 @@ function createWindow() {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           "default-src 'self' blob:; " +
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://*.firebaseapp.com https://*.googleapis.com; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://*.firebaseapp.com https://*.googleapis.com; " +
+          "worker-src 'self' blob:; " +
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
           "font-src 'self' https://fonts.gstatic.com; " +
           "connect-src 'self' http: https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com; " +
@@ -174,8 +175,20 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   } else {
     const indexPath = path.join(__dirname, '../renderer/index.html');
-    console.log(`[Main Process] Loading file from: ${indexPath}`);
-    mainWindow.loadFile(indexPath);
+    logger.info(`[Main Process] Loading file from: ${indexPath}`);
+    logger.info(`[Main Process] __dirname: ${__dirname}`);
+    logger.info(`[Main Process] File exists: ${require('fs').existsSync(indexPath)}`);
+    
+    mainWindow.loadFile(indexPath).catch((error) => {
+      logger.error(`Failed to load index.html: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
+      // Try alternative path in case of packaging issues
+      const altPath = path.join(app.getAppPath(), 'dist/renderer/index.html');
+      logger.info(`Trying alternative path: ${altPath}`);
+      if (require('fs').existsSync(altPath)) {
+        mainWindow?.loadFile(altPath);
+      }
+    });
     // Don't open DevTools in production - only for development
     // mainWindow.webContents.openDevTools();
   }
@@ -597,6 +610,28 @@ ipcMain.handle('network:check-permission', async () => {
 });
 
 ipcMain.handle('auth:check', async () => {
+  // First check for unified auth tokens
+  try {
+    const userDataPath = app.getPath('userData');
+    const configPath = path.join(userDataPath, 'config.json');
+    
+    const fs = await import('fs');
+    const data = await fs.promises.readFile(configPath, 'utf8');
+    const config = JSON.parse(data);
+    
+    // Check if we have unified auth tokens
+    if (config.gcpAccessToken && config.userEmail) {
+      return {
+        authenticated: true,
+        user: config.userEmail,
+        error: null
+      };
+    }
+  } catch (error) {
+    // Config doesn't exist or tokens not found, fall back to old auth
+  }
+  
+  // Fall back to old OAuth service check
   const isAuthenticated = gcpOAuthService.isAuthenticated();
   const user = isAuthenticated ? await gcpOAuthService.getCurrentUser() : null;
   return {
@@ -698,6 +733,50 @@ ipcMain.handle('app:get-version', () => {
 });
 
 ipcMain.handle('auth:get-projects', async () => {
+  // First check for unified auth tokens
+  try {
+    const userDataPath = app.getPath('userData');
+    const configPath = path.join(userDataPath, 'config.json');
+    
+    const fs = await import('fs');
+    const data = await fs.promises.readFile(configPath, 'utf8');
+    const config = JSON.parse(data);
+    
+    // If we have unified auth tokens, use them to list projects
+    if (config.gcpAccessToken) {
+      const { google } = await import('googleapis');
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({
+        access_token: config.gcpAccessToken,
+        refresh_token: config.gcpRefreshToken
+      });
+      
+      const cloudResourceManager = google.cloudresourcemanager({
+        version: 'v1',
+        auth: oauth2Client
+      });
+      
+      const response = await cloudResourceManager.projects.list({
+        pageSize: 200
+      });
+      
+      if (response.data.projects) {
+        return response.data.projects.map((project: any) => ({
+          projectId: project.projectId,
+          projectNumber: project.projectNumber,
+          name: project.name,
+          createTime: project.createTime,
+          lifecycleState: project.lifecycleState
+        }));
+      }
+      return [];
+    }
+  } catch (error) {
+    console.error('Error using unified auth for projects:', error);
+    // Fall back to old auth
+  }
+  
+  // Fall back to old OAuth service
   return gcpOAuthService.listProjects();
 });
 
@@ -798,7 +877,25 @@ ipcMain.on('deployment:subscribe', async (event) => {
     
     // Save the deployment config to cache
     if (result.success) {
-      const user = await gcpOAuthService.getCurrentUser();
+      // Try to get user from unified auth first
+      let user: any = null;
+      try {
+        const userDataPath = app.getPath('userData');
+        const configPath = path.join(userDataPath, 'config.json');
+        const fs = await import('fs');
+        const data = await fs.promises.readFile(configPath, 'utf8');
+        const config = JSON.parse(data);
+        if (config.userEmail) {
+          user = { email: config.userEmail };
+        }
+      } catch (error) {
+        // Fall back to old auth
+        try {
+          user = await gcpOAuthService.getCurrentUser();
+        } catch (e) {
+          console.log('Could not get user info for cache');
+        }
+      }
       const state = stateManager.getState();
       if (state && user?.email) {
         // Lazy load config cache service
@@ -899,8 +996,51 @@ ipcMain.handle('deployment:validate', async (_, params: {
 // Magical Experience IPC Handlers
 ipcMain.handle('magical:generate-api-key', async () => {
   try {
-    // Check if authenticated first before trying to get user
-    if (!gcpOAuthService.oauth2Client || !gcpOAuthService.isAuthenticated()) {
+    // Check for unified auth tokens first
+    let config: any = {};
+    try {
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'config.json');
+      const fs = await import('fs');
+      const data = await fs.promises.readFile(configPath, 'utf8');
+      config = JSON.parse(data);
+    } catch (err) {
+      // Config doesn't exist yet
+      config = {};
+    }
+    
+    const hasUnifiedAuth = config.gcpAccessToken && config.gcpRefreshToken;
+    
+    // If we have unified auth tokens, set them in the OAuth service
+    if (hasUnifiedAuth) {
+      logger.info('[Magical] Using unified auth tokens for API key generation');
+      logger.info('[Magical] Token check:', {
+        hasAccessToken: !!config.gcpAccessToken,
+        hasRefreshToken: !!config.gcpRefreshToken,
+        accessTokenLength: config.gcpAccessToken?.length,
+        refreshTokenLength: config.gcpRefreshToken?.length
+      });
+      
+      // Always initialize or update tokens - don't skip based on client existence
+      // The hasCredentials check inside gcpOAuthService will prevent redundant work
+      try {
+        await gcpOAuthService.initializeWithTokens({
+          access_token: config.gcpAccessToken,
+          refresh_token: config.gcpRefreshToken
+        });
+        logger.info('[Magical] OAuth service initialized with tokens');
+      } catch (error) {
+        logger.error('[Magical] Failed to initialize OAuth service with tokens:', error);
+        return {
+          success: false,
+          needsManual: true,
+          message: 'Failed to initialize authentication'
+        };
+      }
+    }
+    
+    // Check if authenticated (either way)
+    if (!gcpOAuthService.oauth2Client || (!gcpOAuthService.isAuthenticated() && !hasUnifiedAuth)) {
       logger.info('[Magical] User not authenticated with Google, will need manual API key creation');
       return { 
         success: false, 

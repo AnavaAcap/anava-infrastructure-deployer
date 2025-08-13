@@ -237,9 +237,28 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
 
   const loadLicenseKey = async () => {
     try {
-      const result = await (window.electronAPI as any).license?.getAssignedKey?.();
-      if (result.success && result.key) {
-        setLicenseKey(result.key);
+      // Try to load from unified auth config first
+      const axisKey = await window.electronAPI?.getConfigValue('axisLicenseKey');
+      const licenseKeyFromConfig = await window.electronAPI?.getConfigValue('licenseKey');
+      
+      // Use axisLicenseKey first, then fall back to licenseKey
+      const key = axisKey || licenseKeyFromConfig;
+      
+      if (key && !key.startsWith('ANAVA-')) {
+        console.log('✅ Loaded real license key from config:', key);
+        setLicenseKey(key);
+      } else if (key && key.startsWith('ANAVA-')) {
+        console.error('❌ Fake license detected in config:', key);
+        setError('Invalid license key. Please sign out and sign in again to get a valid license.');
+      } else {
+        // Fall back to old API if no key in config
+        const result = await (window.electronAPI as any).license?.getAssignedKey?.();
+        if (result?.success && result?.key && !result.key.startsWith('ANAVA-')) {
+          console.log('✅ Loaded license key from old API:', result.key);
+          setLicenseKey(result.key);
+        } else {
+          console.warn('⚠️ No valid license key found');
+        }
       }
     } catch (error) {
       console.error('Failed to load license key:', error);

@@ -44,15 +44,26 @@ class Logger {
     this.stream = fs.createWriteStream(this.logFile, { flags: 'a' });
     this.standardStream = fs.createWriteStream(this.standardLogFile, { flags: 'a' });
     
-    // Log startup info
-    this.log('=== Anava Vision Started ===');
-    this.log(`Version: ${app.getVersion()}`);
-    this.log(`Electron: ${process.versions.electron}`);
-    this.log(`Platform: ${process.platform} ${process.arch}`);
-    this.log(`DEBUG Log file: ${this.logFile}`);
-    this.log(`Standard Log file: ${this.standardLogFile}`);
-    this.log(`User data: ${app.getPath('userData')}`);
-    this.log('=========================================\n');
+    // Add error handlers to prevent EPIPE crashes
+    this.stream.on('error', (err) => {
+      console.error('Debug log stream error:', err.message);
+    });
+    this.standardStream.on('error', (err) => {
+      console.error('Standard log stream error:', err.message);
+    });
+    
+    // Wait for streams to be ready before logging
+    this.stream.once('open', () => {
+      // Log startup info
+      this.log('=== Anava Vision Started ===');
+      this.log(`Version: ${app.getVersion()}`);
+      this.log(`Electron: ${process.versions.electron}`);
+      this.log(`Platform: ${process.platform} ${process.arch}`);
+      this.log(`DEBUG Log file: ${this.logFile}`);
+      this.log(`Standard Log file: ${this.standardLogFile}`);
+      this.log(`User data: ${app.getPath('userData')}`);
+      this.log('=========================================\n');
+    });
   }
 
   formatMessage(level: string, message: string, ...args: any[]): string {
@@ -64,19 +75,46 @@ class Logger {
   }
 
   writeToFile(message: string) {
-    // Write to BOTH log files
-    if (this.stream && !this.stream.destroyed) {
-      this.stream.write(message + '\n');
+    // Write to BOTH log files with error handling
+    try {
+      if (this.stream && !this.stream.destroyed && this.stream.writable) {
+        this.stream.write(message + '\n', (err) => {
+          if (err && (err as any).code !== 'EPIPE') {
+            console.error('Debug log write error:', err.message);
+          }
+        });
+      }
+    } catch (err: any) {
+      // Silently ignore write errors to prevent crashes
+      if (err?.code !== 'EPIPE') {
+        console.error('Debug log write exception:', err?.message || err);
+      }
     }
-    if (this.standardStream && !this.standardStream.destroyed) {
-      this.standardStream.write(message + '\n');
+    
+    try {
+      if (this.standardStream && !this.standardStream.destroyed && this.standardStream.writable) {
+        this.standardStream.write(message + '\n', (err) => {
+          if (err && (err as any).code !== 'EPIPE') {
+            console.error('Standard log write error:', err.message);
+          }
+        });
+      }
+    } catch (err: any) {
+      // Silently ignore write errors to prevent crashes
+      if (err?.code !== 'EPIPE') {
+        console.error('Standard log write exception:', err?.message || err);
+      }
     }
   }
 
   log(message: string, ...args: any[]) {
     const formatted = this.formatMessage('INFO', message, ...args);
     if (isDevelopment) {
-      process.stdout.write(formatted + '\n');
+      try {
+        process.stdout.write(formatted + '\n');
+      } catch (err) {
+        // Ignore stdout errors
+      }
     }
     this.writeToFile(formatted);
   }
@@ -88,7 +126,11 @@ class Logger {
   warn(message: string, ...args: any[]) {
     const formatted = this.formatMessage('WARN', message, ...args);
     if (isDevelopment) {
-      process.stderr.write(formatted + '\n');
+      try {
+        process.stderr.write(formatted + '\n');
+      } catch (err) {
+        // Ignore stderr errors
+      }
     }
     this.writeToFile(formatted);
   }
@@ -96,7 +138,11 @@ class Logger {
   error(message: string, ...args: any[]) {
     const formatted = this.formatMessage('ERROR', message, ...args);
     if (isDevelopment) {
-      process.stderr.write(formatted + '\n');
+      try {
+        process.stderr.write(formatted + '\n');
+      } catch (err) {
+        // Ignore stderr errors
+      }
     }
     this.writeToFile(formatted);
   }
@@ -104,7 +150,11 @@ class Logger {
   debug(message: string, ...args: any[]) {
     if (isDevelopment) {
       const formatted = this.formatMessage('DEBUG', message, ...args);
-      process.stdout.write(formatted + '\n');
+      try {
+        process.stdout.write(formatted + '\n');
+      } catch (err) {
+        // Ignore stdout errors
+      }
       this.writeToFile(formatted);
     }
   }

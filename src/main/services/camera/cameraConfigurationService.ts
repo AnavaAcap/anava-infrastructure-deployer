@@ -890,8 +890,12 @@ export class CameraConfigurationService {
         const licenseXML = await this.generateLicenseXMLDirect(deviceId, licenseKey);
         
         if (!licenseXML) {
-          console.error('[CameraConfig] Failed to generate license XML');
-          throw new Error('Failed to generate license XML');
+          console.error('[CameraConfig] Failed to generate license XML - BrowserWindow approach failed');
+          console.error('[CameraConfig] This usually means:');
+          console.error('[CameraConfig] 1. The activator files are missing from dist/main/activator/');
+          console.error('[CameraConfig] 2. The Axis SDK failed to load');
+          console.error('[CameraConfig] 3. The device ID or license key is invalid');
+          throw new Error('Failed to generate license XML. The Axis license activation system could not be initialized. Please check the logs for details.');
         }
         
         console.log('[CameraConfig] Generated license XML (length):', licenseXML.length);
@@ -1453,13 +1457,36 @@ export class CameraConfigurationService {
       let resolved = false;
       
       try {
+        // Determine correct path for activator files
+        // In dist: dist/main/services/camera/ -> dist/main/activator/
+        // __dirname goes up 2 levels to get to main, then into activator
+        const activatorDir = path.join(__dirname, '..', '..', 'activator');
+        const preloadPath = path.join(activatorDir, 'preload.js');
+        const htmlPath = path.join(activatorDir, 'activator.html');
+        
+        console.log('[CameraConfig] Activator directory:', activatorDir);
+        console.log('[CameraConfig] Preload path:', preloadPath);
+        console.log('[CameraConfig] HTML path:', htmlPath);
+        
+        // Check if files exist
+        const fs = require('fs');
+        if (!fs.existsSync(htmlPath)) {
+          console.error('[CameraConfig] ERROR: activator.html not found at:', htmlPath);
+          console.error('[CameraConfig] Current __dirname:', __dirname);
+          throw new Error('License activation files not found. Please ensure the application is properly installed.');
+        }
+        if (!fs.existsSync(preloadPath)) {
+          console.error('[CameraConfig] ERROR: preload.js not found at:', preloadPath);
+          throw new Error('License activation files not found. Please ensure the application is properly installed.');
+        }
+        
         // Create hidden window - NEVER show this to users!
         activatorWindow = new BrowserWindow({
           show: false, // ALWAYS hidden - this is just for SDK execution
           width: 800,
           height: 600,
           webPreferences: {
-            preload: path.join(__dirname, '..', '..', 'activator', 'preload.js'),
+            preload: preloadPath,
             contextIsolation: true,
             nodeIntegration: false,
             webSecurity: false, // Allow cross-origin requests to Axis
@@ -1468,7 +1495,6 @@ export class CameraConfigurationService {
         });
         
         // Load the HTML file with Axis SDK
-        const htmlPath = path.join(__dirname, '..', '..', 'activator', 'activator.html');
         console.log('[CameraConfig] Loading activator from:', htmlPath);
         activatorWindow.loadFile(htmlPath);
         
@@ -1559,12 +1585,16 @@ export class CameraConfigurationService {
         
       } catch (error: any) {
         console.error('[CameraConfig] Failed to create BrowserWindow:', error.message);
+        console.error('[CameraConfig] Stack trace:', error.stack);
         resolved = true;
-        resolve(null);
         
         if (activatorWindow && !activatorWindow.isDestroyed()) {
           activatorWindow.close();
         }
+        
+        // Return null but log clear error
+        console.error('[CameraConfig] License activation cannot proceed without BrowserWindow');
+        resolve(null);
       }
     });
   }

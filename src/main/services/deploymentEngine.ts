@@ -42,28 +42,63 @@ export class DeploymentEngine extends EventEmitter {
     this.gcpAuth = gcpAuth;
     this.gcpService = new GCPApiServiceManager(gcpAuth);
     
-    // Initialize deployers with OAuth client
-    this.initializeDeployers();
+    // Deployers will be initialized on first use
   }
 
-  private initializeDeployers(): void {
-    if (this.gcpAuth.oauth2Client) {
-      this.cloudFunctionsAPIDeployer = new CloudFunctionsAPIDeployer(this.gcpAuth.oauth2Client);
-      this.apiGatewayDeployer = new ApiGatewayDeployer(this.gcpAuth.oauth2Client);
-      this.firestoreRulesDeployer = new FirestoreRulesDeployer(this.gcpAuth.oauth2Client);
-      this.workloadIdentityDeployer = new WorkloadIdentityDeployer(this.gcpAuth.oauth2Client);
-      this.firebaseAppDeployer = new FirebaseAppDeployer(this.gcpAuth.oauth2Client);
+  private deployersInitialized = false;
+  
+  private async initializeDeployers(): Promise<void> {
+    if (this.deployersInitialized) {
+      return; // Already initialized
+    }
+    
+    // First try to get unified auth tokens
+    let oauth2Client = this.gcpAuth.oauth2Client;
+    
+    try {
+      const { app } = await import('electron');
+      const path = await import('path');
+      const fs = await import('fs/promises');
+      const { google } = await import('googleapis');
+      
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'config.json');
+      
+      const data = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(data);
+      
+      // If we have unified auth tokens, create a new OAuth client
+      if (config.gcpAccessToken && config.gcpRefreshToken) {
+        oauth2Client = new google.auth.OAuth2();
+        oauth2Client.setCredentials({
+          access_token: config.gcpAccessToken,
+          refresh_token: config.gcpRefreshToken
+        });
+        console.log('Using unified auth tokens for deployers');
+      }
+    } catch (error) {
+      // Fall back to old auth
+      console.log('No unified auth tokens found for deployers, using old auth');
+    }
+    
+    if (oauth2Client) {
+      this.cloudFunctionsAPIDeployer = new CloudFunctionsAPIDeployer(oauth2Client);
+      this.apiGatewayDeployer = new ApiGatewayDeployer(oauth2Client);
+      this.firestoreRulesDeployer = new FirestoreRulesDeployer(oauth2Client);
+      this.workloadIdentityDeployer = new WorkloadIdentityDeployer(oauth2Client);
+      this.firebaseAppDeployer = new FirebaseAppDeployer(oauth2Client);
       this.terraformService = new TerraformService();
       // this.iapOAuthService = new IAPOAuthService(this.gcpAuth.oauth2Client); // Removed - not needed for email/password auth
-      this.aiStudioService = new AIStudioService(this.gcpAuth.oauth2Client);
+      this.aiStudioService = new AIStudioService(oauth2Client);
+      this.deployersInitialized = true;
     }
   }
 
   async startDeployment(config: DeploymentConfig): Promise<void> {
     this.isPaused = false;
     
-    // Ensure deployers are initialized
-    this.initializeDeployers();
+    // Initialize deployers with correct auth
+    await this.initializeDeployers();
     
     // Create new deployment state
     this.stateManager.createNewDeployment(
@@ -138,8 +173,27 @@ export class DeploymentEngine extends EventEmitter {
           if (!firebaseConfig?.apiKey) missingResources.push('Firebase API Key');
           
           if (missingResources.length > 0) {
-            const errorMessage = `Deployment completed but critical resources are missing: ${missingResources.join(', ')}`;
-            console.error(`❌ ${errorMessage}`);
+            const errorMessage = `Critical resources are missing: ${missingResources.join(', ')}`;
+            console.log(`⚠️ ${errorMessage}`);
+            console.log('Checking for pending steps that may provide missing resources...');
+            
+            // Check if there are failed steps that need to be retried
+            const failedSteps = Object.entries(state.steps)
+              .filter(([_, step]) => step.status === 'failed')
+              .map(([name, _]) => name);
+            
+            if (failedSteps.length > 0) {
+              console.log(`Found failed steps that need retry: ${failedSteps.join(', ')}`);
+              // Reset failed steps to pending so they can be retried
+              failedSteps.forEach(stepName => {
+                this.stateManager.updateStep(stepName, { status: 'pending' });
+              });
+              // Continue the deployment loop
+              continue;
+            }
+            
+            // If no failed steps but resources are missing, deployment truly failed
+            console.error(`❌ Deployment failed: ${errorMessage}`);
             this.emitComplete({
               success: false,
               error: errorMessage,
@@ -166,8 +220,28 @@ export class DeploymentEngine extends EventEmitter {
           
           // Create admin user if password was provided
           let adminEmail: string | undefined;
-          const userInfo = await this.gcpAuth.getCurrentUser();
-          const userEmail = userInfo?.email;
+          let userEmail: string | undefined;
+          
+          // Try to get user from unified auth first
+          try {
+            const { app } = await import('electron');
+            const path = await import('path');
+            const fs = await import('fs/promises');
+            
+            const userDataPath = app.getPath('userData');
+            const configPath = path.join(userDataPath, 'config.json');
+            const data = await fs.readFile(configPath, 'utf8');
+            const config = JSON.parse(data);
+            userEmail = config.userEmail;
+          } catch (error) {
+            // Fall back to old auth
+            try {
+              const userInfo = await this.gcpAuth.getCurrentUser();
+              userEmail = userInfo?.email || undefined;
+            } catch (e) {
+              console.log('Could not get user email for admin setup');
+            }
+          }
           
           if (userEmail && state.configuration.adminPassword) {
             console.log('\nCreating admin user...');
@@ -365,7 +439,31 @@ export class DeploymentEngine extends EventEmitter {
       message: 'Verifying authentication...',
     });
 
-    if (!this.gcpAuth.isAuthenticated()) {
+    // First check for unified auth tokens
+    let isAuthenticated = false;
+    try {
+      const { app } = await import('electron');
+      const path = await import('path');
+      const fs = await import('fs/promises');
+      
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'config.json');
+      
+      const data = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(data);
+      
+      // Check if we have unified auth tokens
+      if (config.gcpAccessToken && config.userEmail) {
+        isAuthenticated = true;
+        console.log('Using unified auth tokens for deployment');
+      }
+    } catch (error) {
+      // Config doesn't exist or tokens not found, fall back to old auth
+      console.log('No unified auth tokens found, checking old auth');
+    }
+
+    // Fall back to old auth check if unified auth not found
+    if (!isAuthenticated && !this.gcpAuth.isAuthenticated()) {
       throw new Error('Not authenticated. Please login first.');
     }
 
@@ -1061,9 +1159,9 @@ export class DeploymentEngine extends EventEmitter {
       // Mark this step as incomplete so it will be retried
       this.stateManager.updateStepResource('createApiGateway', 'status', 'waiting_for_functions');
       
-      // Return early without throwing an error that would appear in the UI
-      this.emitLog('Waiting for Cloud Functions deployment to complete before creating API Gateway...');
-      return;
+      // Throw a specific error that will cause a retry
+      // This prevents the step from being marked as completed
+      throw new Error('Waiting for Cloud Functions deployment to complete');
     }
     
     if (!this.apiGatewayDeployer) {
@@ -1198,13 +1296,26 @@ export class DeploymentEngine extends EventEmitter {
     // Get current user email for admin setup
     let userEmail: string | undefined;
     try {
-      const userInfo = await this.gcpAuth.getCurrentUser();
-      userEmail = userInfo?.email || undefined;
+      // Try to get user from unified auth first
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'config.json');
+      const configData = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(configData);
+      userEmail = config.userEmail;
       if (userEmail) {
         logCallback(`Setting up admin access for: ${userEmail}`);
       }
     } catch (error) {
-      console.warn('Could not get current user email:', error);
+      // Fall back to old auth
+      try {
+        const userInfo = await this.gcpAuth.getCurrentUser();
+        userEmail = userInfo?.email || undefined;
+        if (userEmail) {
+          logCallback(`Setting up admin access for: ${userEmail}`);
+        }
+      } catch (e) {
+        console.warn('Could not get current user email from old auth');
+      }
     }
 
     // Initialize Firebase Authentication
@@ -1232,7 +1343,36 @@ export class DeploymentEngine extends EventEmitter {
       // Create service account key for Terraform
       logCallback('Step 2: Creating service account credentials for Terraform...');
       const keyFile = path.join(app.getPath('userData'), 'terraform-sa-key.json');
-      const keyContent = await this.gcpAuth.getServiceAccountKey();
+      
+      // Try to get unified auth credentials first
+      let keyContent: any;
+      try {
+        const userDataPath = app.getPath('userData');
+        const configPath = path.join(userDataPath, 'config.json');
+        const configData = await fs.readFile(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        
+        if (config.gcpRefreshToken) {
+          // Create ADC-formatted credentials from unified auth
+          const oauthConfigPath = path.join(app.getAppPath(), 'oauth-config.json');
+          const oauthConfig = JSON.parse(await fs.readFile(oauthConfigPath, 'utf8'));
+          
+          keyContent = {
+            type: 'authorized_user',
+            client_id: oauthConfig.installed.client_id,
+            client_secret: oauthConfig.installed.client_secret,
+            refresh_token: config.gcpRefreshToken
+          };
+          logCallback('✅ Using unified auth credentials for Terraform');
+        } else {
+          throw new Error('No unified refresh token available');
+        }
+      } catch (error) {
+        // Fall back to old auth service
+        console.log('Falling back to old auth for Terraform credentials');
+        keyContent = await this.gcpAuth.getServiceAccountKey();
+      }
+      
       await fs.writeFile(keyFile, JSON.stringify(keyContent, null, 2));
       logCallback('✅ Service account key created');
       
@@ -1582,6 +1722,33 @@ export class DeploymentEngine extends EventEmitter {
   }
 
   private async getAuthClient(): Promise<OAuth2Client> {
+    // First try to get unified auth tokens
+    try {
+      const { app } = await import('electron');
+      const path = await import('path');
+      const fs = await import('fs/promises');
+      const { google } = await import('googleapis');
+      
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'config.json');
+      
+      const data = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(data);
+      
+      // If we have unified auth tokens, create a new OAuth client
+      if (config.gcpAccessToken && config.gcpRefreshToken) {
+        const oauth2Client = new google.auth.OAuth2();
+        oauth2Client.setCredentials({
+          access_token: config.gcpAccessToken,
+          refresh_token: config.gcpRefreshToken
+        });
+        console.log('Using unified auth tokens in getAuthClient');
+        return oauth2Client;
+      }
+    } catch (error) {
+      console.log('No unified auth tokens found in getAuthClient, using old auth');
+    }
+    
     if (!this.gcpAuth.oauth2Client) {
       throw new Error('OAuth client not initialized');
     }
@@ -1589,11 +1756,46 @@ export class DeploymentEngine extends EventEmitter {
   }
 
   private async getProjectNumber(projectId: string): Promise<string> {
+    // Ensure deployers are initialized to get proper auth client
+    await this.initializeDeployers();
+    
+    // Get auth client that may have unified tokens
+    let authClient = this.gcpAuth.oauth2Client;
+    
+    try {
+      const { app } = await import('electron');
+      const path = await import('path');
+      const fs = await import('fs/promises');
+      const { google } = await import('googleapis');
+      
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'config.json');
+      
+      const data = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(data);
+      
+      // If we have unified auth tokens, create a new OAuth client
+      if (config.gcpAccessToken && config.gcpRefreshToken) {
+        authClient = new google.auth.OAuth2();
+        authClient.setCredentials({
+          access_token: config.gcpAccessToken,
+          refresh_token: config.gcpRefreshToken
+        });
+        console.log('Using unified auth tokens for getProjectNumber');
+      }
+    } catch (error) {
+      console.log('No unified auth tokens found for getProjectNumber, using old auth');
+    }
+    
+    if (!authClient) {
+      throw new Error('No auth client available');
+    }
+    
     // Get project details to extract project number
     const cloudResourceManager = (await import('googleapis')).google.cloudresourcemanager('v1');
     const { data: project } = await cloudResourceManager.projects.get({
       projectId: projectId,
-      auth: this.gcpAuth.oauth2Client!
+      auth: authClient
     });
 
     if (!project.projectNumber) {

@@ -141,25 +141,23 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "assets/icon.ico",
-      "publisherName": "Anava Inc.",
-      "certificateSubjectName": "Anava Inc.",
-      "nsis": {
-        "oneClick": false,
-        "perMachine": false,
-        "allowToChangeInstallationDirectory": true,
-        "deleteAppDataOnUninstall": false,
-        "createDesktopShortcut": true,
-        "createStartMenuShortcut": true,
-        "shortcutName": "Anava Vision",
-        "guid": "{8A7B3C2D-9E4F-5A6B-7C8D-1E2F3A4B5C6D}",
-        "installerIcon": "assets/icon.ico",
-        "uninstallerIcon": "assets/icon.ico",
-        "installerHeaderIcon": "assets/icon.ico",
-        "artifactName": "Anava.Installer.Setup.${version}.exe",
-        "unicode": true,
-        "warningsAsErrors": false
-      }
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Anava Vision",
+      "guid": "{8A7B3C2D-9E4F-5A6B-7C8D-1E2F3A4B5C6D}",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "artifactName": "Anava.Installer.Setup.${version}.exe",
+      "unicode": true,
+      "warningsAsErrors": false
     }
   },
   "devDependencies": {

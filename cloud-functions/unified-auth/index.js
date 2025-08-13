@@ -33,13 +33,67 @@ const REDIRECT_URI = process.env.REDIRECT_URI || 'http://localhost:3000/auth/cal
 const apiKeysClient = new ApiKeysClient();
 
 /**
- * Generate a unique license key for a user
+ * Get a real Axis license key from Firestore
  */
-function generateLicenseKey(userId) {
-  const prefix = 'ANAVA';
-  const timestamp = Date.now().toString(36).toUpperCase();
-  const userHash = userId.substring(0, 6).toUpperCase();
-  return `${prefix}-${userHash}-${timestamp}`;
+async function getAxisLicenseFromFirestore(userId, email) {
+  try {
+    // Start a transaction to ensure atomic assignment
+    const result = await db.runTransaction(async (transaction) => {
+      // Check if user already has a key assigned
+      const userRef = db.collection('users').doc(userId);
+      const userDoc = await transaction.get(userRef);
+      
+      if (userDoc.exists && userDoc.data().assigned_axis_key) {
+        const existingKey = userDoc.data().assigned_axis_key;
+        // Check if it's a real key (not ANAVA-prefixed)
+        if (!existingKey.startsWith('ANAVA-')) {
+          console.log(`Existing real Axis key found for user ${userId}: ${existingKey}`);
+          return existingKey;
+        } else {
+          console.log(`Fake Axis key found ${existingKey}, will get a real one`);
+        }
+      }
+
+      // Query for an available key
+      const availableKeysQuery = db.collection('axis_keys')
+        .where('status', '==', 'available')
+        .limit(1);
+      
+      const availableKeys = await transaction.get(availableKeysQuery);
+      
+      if (availableKeys.empty) {
+        console.warn('No Axis keys available in Firestore');
+        return null;
+      }
+
+      // Get the first available key
+      const keyDoc = availableKeys.docs[0];
+      const keyData = keyDoc.data();
+
+      // Update the key status
+      transaction.update(keyDoc.ref, {
+        status: 'assigned',
+        assigned_to_email: email,
+        assigned_to_uid: userId,
+        assigned_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Update user document
+      transaction.set(userRef, {
+        email: email,
+        assigned_axis_key: keyData.key_string,
+        key_assigned_at: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      console.log(`New Axis key ${keyData.key_string} assigned to user ${userId}`);
+      return keyData.key_string;
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('Error getting Axis license from Firestore:', error);
+    return null;
+  }
 }
 
 /**
@@ -50,16 +104,39 @@ async function handleLicense(userId, email) {
     const userDoc = await db.collection('users').doc(userId).get();
     
     if (userDoc.exists && userDoc.data().licenseKey) {
-      console.log(`Existing license found for user ${userId}`);
-      return {
-        key: userDoc.data().licenseKey,
-        isNew: false,
-        email: email
-      };
+      const existingKey = userDoc.data().licenseKey;
+      
+      // Check if it's a fake ANAVA-prefixed key
+      if (existingKey.startsWith('ANAVA-')) {
+        console.log(`Fake license detected for user ${userId}: ${existingKey}, getting real one`);
+        // Delete the fake license
+        await db.collection('users').doc(userId).update({
+          licenseKey: admin.firestore.FieldValue.delete(),
+          assigned_axis_key: admin.firestore.FieldValue.delete()
+        });
+      } else {
+        // Real license exists
+        console.log(`Real license found for user ${userId}`);
+        return {
+          key: existingKey,
+          isNew: false,
+          email: email
+        };
+      }
     }
     
-    // Generate new license
-    const licenseKey = generateLicenseKey(userId);
+    // Get a real Axis license from Firestore
+    const licenseKey = await getAxisLicenseFromFirestore(userId, email);
+    
+    if (!licenseKey) {
+      console.error('Failed to get Axis license key');
+      return {
+        key: null,
+        isNew: false,
+        email: email,
+        error: 'No licenses available'
+      };
+    }
     
     // Store in Firestore
     await db.collection('users').doc(userId).set({
@@ -104,49 +181,36 @@ async function handleAIStudioKey(userId, accessToken) {
       return userDoc.data().geminiApiKey;
     }
     
-    // Try to create a new API key using the service
-    try {
-      const projectId = 'anava-ai';
-      const keyName = `anava-user-${userId.substring(0, 8)}`;
+    // Check if we have a stored API key in Firestore
+    const apiKeysQuery = await db.collection('gemini_api_keys')
+      .where('status', '==', 'available')
+      .limit(1)
+      .get();
+    
+    if (!apiKeysQuery.empty) {
+      const apiKeyDoc = apiKeysQuery.docs[0];
+      const apiKeyData = apiKeyDoc.data();
       
-      // Create API key using gcloud API
-      const parent = `projects/${projectId}/locations/global`;
-      const request = {
-        parent: parent,
-        key: {
-          displayName: keyName,
-          restrictions: {
-            apiTargets: [
-              { service: 'generativelanguage.googleapis.com' }
-            ]
-          }
-        },
-        keyId: `key-${userId.substring(0, 16)}`
-      };
-      
-      const [operation] = await apiKeysClient.createKey(request);
-      
-      // Wait for operation to complete
-      const [key] = await operation.promise();
-      
-      // Get the key string
-      const keyString = key.keyString;
+      // Mark as assigned
+      await apiKeyDoc.ref.update({
+        status: 'assigned',
+        assigned_to: userId,
+        assigned_at: admin.firestore.FieldValue.serverTimestamp()
+      });
       
       // Store in user document
       await db.collection('users').doc(userId).update({
-        geminiApiKey: keyString,
+        geminiApiKey: apiKeyData.key,
         geminiApiKeyCreatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       
-      console.log(`New API key created for user ${userId}`);
-      return keyString;
-      
-    } catch (apiKeyError) {
-      console.warn('Could not create API key automatically:', apiKeyError.message);
-      
-      // Return a placeholder - user will need to create manually
-      return null;
+      console.log(`API key assigned to user ${userId}`);
+      return apiKeyData.key;
     }
+    
+    // Return null to trigger local generation
+    console.log('No API keys available in Firestore, client will generate locally');
+    return null;
   } catch (error) {
     console.error('AI Studio key handling error:', error);
     return null;

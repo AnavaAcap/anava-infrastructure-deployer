@@ -19,6 +19,34 @@ export class GCPApiServiceManager {
   constructor(private gcpOAuthService: GCPOAuthService) {}
 
   private async getAuthClient(): Promise<OAuth2Client> {
+    // First check for unified auth tokens
+    try {
+      const { app } = await import('electron');
+      const path = await import('path');
+      const fs = await import('fs/promises');
+      
+      const userDataPath = app.getPath('userData');
+      const configPath = path.join(userDataPath, 'config.json');
+      
+      const data = await fs.readFile(configPath, 'utf8');
+      const config = JSON.parse(data);
+      
+      // If we have unified auth tokens, create a new OAuth client with them
+      if (config.gcpAccessToken && config.gcpRefreshToken) {
+        const oauth2Client = new google.auth.OAuth2();
+        oauth2Client.setCredentials({
+          access_token: config.gcpAccessToken,
+          refresh_token: config.gcpRefreshToken
+        });
+        console.log('Using unified auth tokens in GCPApiServiceManager');
+        return oauth2Client;
+      }
+    } catch (error) {
+      // Fall back to old auth
+      console.log('No unified auth tokens found in GCPApiServiceManager, using old auth');
+    }
+    
+    // Fall back to old OAuth client
     // Wait a bit for OAuth to initialize if needed
     let retries = 0;
     while (!this.gcpOAuthService.oauth2Client && retries < 5) {

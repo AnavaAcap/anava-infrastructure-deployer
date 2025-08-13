@@ -1,5 +1,4 @@
 import { BrowserWindow, app, shell } from 'electron';
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as http from 'http';
@@ -19,10 +18,38 @@ export class UnifiedGCPAuthService {
   private authWindow: BrowserWindow | null = null;
   
   constructor() {
-    // Load OAuth config
-    const configPath = path.join(app.getAppPath(), 'oauth-config.json');
+    // Load OAuth config - check multiple locations
+    const possiblePaths = [
+      // Production: resources folder
+      process.resourcesPath ? path.join(process.resourcesPath, 'oauth-config.json') : null,
+      // Development: app path
+      path.join(app.getAppPath(), 'oauth-config.json'),
+      // Alternative paths
+      path.join(__dirname, '../../../oauth-config.json'),
+      path.join(process.cwd(), 'oauth-config.json')
+    ].filter(p => p);
+
+    let configData = null;
+    let configPath = null;
+    
+    for (const testPath of possiblePaths) {
+      if (!testPath) continue;
+      try {
+        configData = require(testPath);
+        configPath = testPath;
+        console.log('Found OAuth config at:', configPath);
+        break;
+      } catch (error) {
+        // Try next path
+      }
+    }
+    
+    if (!configData) {
+      console.error('OAuth config not found in any of:', possiblePaths);
+      throw new Error('OAuth configuration not found');
+    }
+    
     try {
-      const configData = require(configPath);
       this.config = {
         clientId: configData.installed.client_id,
         clientSecret: configData.installed.client_secret,
@@ -31,8 +58,8 @@ export class UnifiedGCPAuthService {
         tokenUri: configData.installed.token_uri
       };
     } catch (error) {
-      console.error('Failed to load OAuth config:', error);
-      throw new Error('OAuth configuration not found');
+      console.error('Failed to parse OAuth config:', error);
+      throw new Error('Invalid OAuth configuration format');
     }
   }
   
@@ -40,7 +67,7 @@ export class UnifiedGCPAuthService {
    * Initiate GCP OAuth flow
    */
   async authenticate(): Promise<{ success: boolean; code?: string; error?: string }> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       // Generate state for CSRF protection
       const state = crypto.randomBytes(32).toString('hex');
       

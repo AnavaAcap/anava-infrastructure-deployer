@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Button, Typography, Paper, Stack, Chip, Alert, Card, CardContent, Grid, Divider } from '@mui/material';
-import { Add, RestoreOutlined, Security, Cloud, Videocam, Key as KeyIcon, Rocket as RocketIcon } from '@mui/icons-material';
+import { Box, Button, Typography, Paper, Stack, Chip, Alert, Card, CardContent, Grid, Divider, CircularProgress } from '@mui/material';
+import { Add, RestoreOutlined, Security, Cloud, Videocam, Key as KeyIcon, Rocket as RocketIcon, CheckCircle, Warning, Error as ErrorIcon } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import anavaLogo from '../assets/anava-logo.png';
 
@@ -33,7 +33,10 @@ interface WelcomePageProps {
 const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExisting, onNavigate }) => {
   const [version, setVersion] = useState('0.8.0');
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
+  const [axisLicenseKey, setAxisLicenseKey] = useState<string | null>(null);
   const [licenseEmail, setLicenseEmail] = useState<string | null>(null);
+  const [apiKeyStatus, setApiKeyStatus] = useState<'loading' | 'present' | 'missing'>('loading');
+  const [authStatus, setAuthStatus] = useState<any>(null);
 
   useEffect(() => {
     // Get app version from main process
@@ -43,12 +46,45 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
       // Fallback to default if not available
     });
 
-    // Get license key if assigned
-    loadLicenseKey();
-    
-    // Check Google auth and generate API key on page load
-    checkAuthAndGenerateApiKey();
+    // Load all credentials and status
+    loadCredentials();
   }, []);
+  
+  const loadCredentials = async () => {
+    try {
+      // Load auth status
+      const status = await window.electronAPI?.getConfigValue('authStatus');
+      setAuthStatus(status);
+      
+      // Load license keys
+      const anavaKey = await window.electronAPI?.getConfigValue('licenseKey');
+      const axisKey = await window.electronAPI?.getConfigValue('axisLicenseKey');
+      const email = await window.electronAPI?.getConfigValue('licenseEmail');
+      
+      if (anavaKey) {
+        setLicenseKey(anavaKey);
+        setLicenseEmail(email);
+      }
+      if (axisKey) {
+        setAxisLicenseKey(axisKey);
+      }
+      
+      // Check API key status
+      const apiKey = await window.electronAPI?.getConfigValue('geminiApiKey');
+      setApiKeyStatus(apiKey ? 'present' : 'missing');
+      
+      // If missing, try to generate
+      if (!apiKey) {
+        await checkAuthAndGenerateApiKey();
+        // Re-check after generation attempt
+        const newApiKey = await window.electronAPI?.getConfigValue('geminiApiKey');
+        setApiKeyStatus(newApiKey ? 'present' : 'missing');
+      }
+    } catch (error) {
+      console.error('Failed to load credentials:', error);
+      setApiKeyStatus('missing');
+    }
+  };
   
   const checkAuthAndGenerateApiKey = async () => {
     try {
@@ -129,27 +165,106 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
         <Chip label={`v${version}`} size="small" color="primary" />
       </Stack>
 
-      {licenseKey && (
-        <Card sx={{ mb: 4, maxWidth: 600, mx: 'auto', backgroundColor: 'primary.50' }}>
-          <CardContent>
-            <Stack direction="row" spacing={2} alignItems="center" justifyContent="center">
-              <KeyIcon color="primary" />
-              <Box textAlign="left">
-                <Typography variant="subtitle2" color="text.secondary">
-                  Your Trial License Key
-                </Typography>
-                <Typography variant="h6" fontFamily="monospace">
-                  {licenseKey}
-                </Typography>
-                {licenseEmail && (
-                  <Typography variant="caption" color="text.secondary">
-                    Assigned to: {licenseEmail}
-                  </Typography>
+      {/* Status Cards */}
+      <Grid container spacing={2} sx={{ mb: 4, maxWidth: 800, mx: 'auto' }}>
+        {/* API Key Status */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ 
+            backgroundColor: apiKeyStatus === 'present' ? 'success.50' : 'warning.50',
+            borderLeft: `4px solid ${apiKeyStatus === 'present' ? '#4caf50' : '#ff9800'}`
+          }}>
+            <CardContent>
+              <Stack direction="row" spacing={2} alignItems="center">
+                {apiKeyStatus === 'loading' ? (
+                  <CircularProgress size={24} />
+                ) : apiKeyStatus === 'present' ? (
+                  <CheckCircle color="success" />
+                ) : (
+                  <Warning color="warning" />
                 )}
-              </Box>
-            </Stack>
-          </CardContent>
-        </Card>
+                <Box flex={1}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    AI Studio API Key
+                  </Typography>
+                  <Typography variant="body2" fontWeight="bold">
+                    {apiKeyStatus === 'loading' ? 'Checking...' : 
+                     apiKeyStatus === 'present' ? 'Configured' : 'Not Configured'}
+                  </Typography>
+                  {apiKeyStatus === 'missing' && (
+                    <Typography variant="caption" color="warning.main">
+                      Will be configured during deployment
+                    </Typography>
+                  )}
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        {/* License Key Status */}
+        <Grid item xs={12} md={6}>
+          <Card sx={{ 
+            backgroundColor: (licenseKey || axisLicenseKey) ? 'success.50' : 'warning.50',
+            borderLeft: `4px solid ${(licenseKey || axisLicenseKey) ? '#4caf50' : '#ff9800'}`
+          }}>
+            <CardContent>
+              <Stack direction="row" spacing={2} alignItems="center">
+                {(licenseKey || axisLicenseKey) ? (
+                  <CheckCircle color="success" />
+                ) : (
+                  <Warning color="warning" />
+                )}
+                <Box flex={1}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Axis Camera License
+                  </Typography>
+                  <Typography variant="body2" fontWeight="bold">
+                    {axisLicenseKey ? 'Trial License Ready' : 
+                     licenseKey ? 'License Available' : 'Not Configured'}
+                  </Typography>
+                  {axisLicenseKey && (
+                    <Typography variant="caption" fontFamily="monospace" sx={{ 
+                      display: 'block',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {axisLicenseKey}
+                    </Typography>
+                  )}
+                  {!licenseKey && !axisLicenseKey && (
+                    <Typography variant="caption" color="warning.main">
+                      Will be fetched during deployment
+                    </Typography>
+                  )}
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+      
+      {/* Warning Alert if items missing */}
+      {authStatus?.missingItems?.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 3, maxWidth: 600, mx: 'auto' }}>
+          <Typography variant="body2">
+            Some items could not be automatically configured:
+          </Typography>
+          <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+            {authStatus.missingItems.map((item: string) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            These will be configured during the deployment process.
+          </Typography>
+        </Alert>
+      )}
+
+      {licenseEmail && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mb: 2 }}>
+          Authenticated as: {licenseEmail}
+        </Typography>
       )}
       
       <Box sx={{ maxWidth: 800, mx: 'auto', mb: 4 }}>
