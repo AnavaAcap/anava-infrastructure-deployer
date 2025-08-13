@@ -125,6 +125,7 @@ declare global {
         start: (config: DeploymentConfig) => Promise<void>;
         resume: (deploymentId: string) => Promise<void>;
         pause: () => Promise<void>;
+        cancel: () => Promise<{ success: boolean; action?: string; error?: string }>;
         onProgress: (callback: (progress: DeploymentProgress) => void) => void;
         onError: (callback: (error: any) => void) => void;
         onComplete: (callback: (result: DeploymentResult) => void) => void;

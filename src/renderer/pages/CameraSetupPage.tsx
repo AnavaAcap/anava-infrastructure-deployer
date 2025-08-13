@@ -37,6 +37,8 @@ import {
   Select,
 } from '@mui/material';
 import DetectionTestModal from '../components/DetectionTestModal';
+import { useNavigationGuard } from '../hooks/useNavigationGuard';
+import NavigationWarningDialog from '../components/NavigationWarningDialog';
 import {
   Visibility,
   VisibilityOff,
@@ -153,6 +155,43 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [processingSpeakerConfig, setProcessingSpeakerConfig] = useState(false);
   const [showDetectionModal, setShowDetectionModal] = useState(false);
   const [validatingCredentials, setValidatingCredentials] = useState(false);
+  
+  // Check if any operation is in progress
+  const isOperationInProgress = scanning || connecting || deploying || analyzing || 
+    testingSpeaker || processingSpeakerConfig || validatingCredentials ||
+    (activeStep > 0 && activeStep < 4);
+  
+  // Setup navigation guard
+  const {
+    showDialog,
+    confirmNavigation,
+    cancelNavigation,
+    guardedNavigate,
+    message,
+    isProcessing
+  } = useNavigationGuard({
+    when: isOperationInProgress,
+    message: activeStep === 2 ? 
+      'ACAP deployment is in progress. Leaving this page will cancel the deployment and you may need to factory reset the camera.' :
+      activeStep === 3 ?
+      'Speaker configuration is in progress. Leaving this page will cancel the setup.' :
+      'Camera setup is in progress. Leaving this page will lose your current progress.',
+    onConfirm: async () => {
+      // Clear any ongoing operations
+      // Note: This is synchronous cleanup, but we make it async for consistency
+      setScanning(false);
+      setConnecting(false);
+      setDeploying(false);
+      setAnalyzing(false);
+      setTestingSpeaker(false);
+      setProcessingSpeakerConfig(false);
+      setValidatingCredentials(false);
+      
+      // If there are any async cleanup operations, add them here
+      // For now, just clear state synchronously
+      return Promise.resolve();
+    }
+  });
   
   // State to track if we need to restore from saved state
   const [hasPreDiscoveredCameras, setHasPreDiscoveredCameras] = useState(false);
@@ -2090,6 +2129,22 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           }
         } : null}
         speakerConfig={configureSpeaker ? speakerConfig : undefined}
+      />
+      
+      <NavigationWarningDialog
+        open={showDialog}
+        title={
+          activeStep === 2 ? "ACAP Deployment in Progress" :
+          activeStep === 3 ? "Speaker Configuration in Progress" :
+          "Camera Setup in Progress"
+        }
+        message={message}
+        severity={activeStep === 2 ? "error" : "warning"}
+        confirmText="Leave Page"
+        cancelText="Stay on Page"
+        isProcessing={isProcessing}
+        onConfirm={confirmNavigation}
+        onCancel={cancelNavigation}
       />
     </Box>
   );

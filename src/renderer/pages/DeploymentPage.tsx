@@ -24,6 +24,8 @@ import {
 } from '@mui/icons-material';
 import { GCPProject, DeploymentConfig, DeploymentState, DeploymentProgress } from '../../types';
 import TopBar from '../components/TopBar';
+import { useNavigationGuard } from '../hooks/useNavigationGuard';
+import NavigationWarningDialog from '../components/NavigationWarningDialog';
 
 const rotate = keyframes`
   from {
@@ -115,6 +117,39 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
   
   // Get deployment steps based on AI mode
   const deploymentSteps = getDeploymentSteps(config);
+  
+  // Check if deployment is in progress
+  const isDeploymentActive = progress && 
+    progress.totalProgress > 0 && 
+    progress.totalProgress < 100 && 
+    !error;
+  
+  // Setup navigation guard
+  const {
+    showDialog,
+    confirmNavigation,
+    cancelNavigation,
+    guardedNavigate,
+    message,
+    isProcessing
+  } = useNavigationGuard({
+    when: isDeploymentActive || false,
+    message: `Cloud deployment is ${progress?.totalProgress || 0}% complete. Leaving this page will cancel the deployment and you'll need to start over.`,
+    onConfirm: async () => {
+      // Cancel the deployment if user confirms navigation
+      try {
+        const result = await window.electronAPI.deployment.cancel();
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to cancel deployment');
+        }
+        console.log(`Deployment ${result.action}: proceeding with navigation`);
+      } catch (error) {
+        console.error('Failed to cancel deployment:', error);
+        // Re-throw to prevent navigation
+        throw new Error('Could not cancel the deployment. Please try again.');
+      }
+    }
+  });
   
   // Track step statuses separately to maintain order
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>(() => {
@@ -615,6 +650,18 @@ const DeploymentPage: React.FC<DeploymentPageProps> = ({
           {isPaused ? 'Resume' : 'Pause'}
         </Button>
       </Stack>
+      
+      <NavigationWarningDialog
+        open={showDialog}
+        title="Deployment in Progress"
+        message={message}
+        severity="warning"
+        confirmText="Cancel Deployment & Leave"
+        cancelText="Continue Deployment"
+        isProcessing={isProcessing}
+        onConfirm={confirmNavigation}
+        onCancel={cancelNavigation}
+      />
       
     </Paper>
   );

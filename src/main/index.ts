@@ -1014,6 +1014,23 @@ ipcMain.handle('deployment:pause', async () => {
   return deploymentEngine.pauseDeployment();
 });
 
+ipcMain.handle('deployment:cancel', async () => {
+  try {
+    if (deploymentEngine?.cancelDeployment) {
+      await deploymentEngine.cancelDeployment();
+      return { success: true, action: 'cancelled' };
+    } else if (deploymentEngine?.pauseDeployment) {
+      await deploymentEngine.pauseDeployment();
+      return { success: true, action: 'paused' };
+    } else {
+      throw new Error('No deployment engine available');
+    }
+  } catch (error: any) {
+    console.error('Failed to cancel/pause deployment:', error);
+    return { success: false, error: error.message || 'Failed to cancel deployment' };
+  }
+});
+
 ipcMain.on('deployment:subscribe', async (event) => {
   // Ensure deployment engine is loaded
   if (!deploymentEngine) {
