@@ -65,8 +65,9 @@ export class UnifiedGCPAuthService {
   
   /**
    * Initiate GCP OAuth flow
+   * @param mainWindow - The main application window to refocus after authentication
    */
-  async authenticate(): Promise<{ success: boolean; code?: string; error?: string }> {
+  async authenticate(mainWindow?: BrowserWindow | null): Promise<{ success: boolean; code?: string; error?: string }> {
     return new Promise((resolve) => {
       // Generate state for CSRF protection
       const state = crypto.randomBytes(32).toString('hex');
@@ -104,11 +105,64 @@ export class UnifiedGCPAuthService {
           
           if (error) {
             res.end(`
+              <!DOCTYPE html>
               <html>
-                <body style="font-family: system-ui; padding: 40px; text-align: center;">
-                  <h2>Authentication Failed</h2>
-                  <p>${error}</p>
-                  <p>You can close this window.</p>
+                <head>
+                  <title>Authentication Failed - Anava Vision</title>
+                  <style>
+                    body {
+                      margin: 0;
+                      padding: 0;
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                      min-height: 100vh;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                    }
+                    .container {
+                      background: white;
+                      border-radius: 16px;
+                      padding: 48px;
+                      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                      text-align: center;
+                      max-width: 420px;
+                    }
+                    h1 {
+                      color: #1a1a1a;
+                      font-size: 28px;
+                      font-weight: 700;
+                      margin: 0 0 16px;
+                    }
+                    p {
+                      color: #666;
+                      font-size: 16px;
+                      line-height: 1.6;
+                      margin: 0 0 24px;
+                    }
+                    .error-icon {
+                      color: #ef4444;
+                      font-size: 64px;
+                      margin-bottom: 24px;
+                    }
+                    .error-details {
+                      background: #fef2f2;
+                      color: #991b1b;
+                      padding: 12px 16px;
+                      border-radius: 8px;
+                      font-size: 14px;
+                      margin-top: 16px;
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="container">
+                    <div class="error-icon">✕</div>
+                    <h1>Authentication Failed</h1>
+                    <p>We couldn't complete the authentication process.</p>
+                    <div class="error-details">${error}</div>
+                    <p style="color: #999; font-size: 14px; margin-top: 24px;">You can close this window and try again.</p>
+                  </div>
                 </body>
               </html>
             `);
@@ -119,14 +173,91 @@ export class UnifiedGCPAuthService {
           
           if (code && returnedState === state) {
             res.end(`
+              <!DOCTYPE html>
               <html>
-                <body style="font-family: system-ui; padding: 40px; text-align: center;">
-                  <h2>✅ Authentication Successful!</h2>
-                  <p>You can close this window and return to Anava Vision.</p>
-                  <script>window.close();</script>
+                <head>
+                  <title>Authentication Successful - Anava Vision</title>
+                  <style>
+                    body {
+                      margin: 0;
+                      padding: 0;
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      min-height: 100vh;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                    }
+                    .container {
+                      background: white;
+                      border-radius: 16px;
+                      padding: 48px;
+                      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                      text-align: center;
+                      max-width: 420px;
+                    }
+                    .logo {
+                      width: 80px;
+                      height: 80px;
+                      margin: 0 auto 24px;
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      border-radius: 20px;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      font-size: 40px;
+                    }
+                    h1 {
+                      color: #1a1a1a;
+                      font-size: 28px;
+                      font-weight: 700;
+                      margin: 0 0 16px;
+                    }
+                    p {
+                      color: #666;
+                      font-size: 16px;
+                      line-height: 1.6;
+                      margin: 0 0 24px;
+                    }
+                    .success-icon {
+                      color: #4ade80;
+                      font-size: 64px;
+                      margin-bottom: 24px;
+                    }
+                    .closing-text {
+                      color: #999;
+                      font-size: 14px;
+                      margin-top: 16px;
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="container">
+                    <div class="success-icon">✓</div>
+                    <h1>Authentication Successful!</h1>
+                    <p>You've been successfully authenticated with Google Cloud Platform.</p>
+                    <p class="closing-text">This window will close automatically...</p>
+                  </div>
+                  <script>
+                    // Try to close the window after a short delay
+                    setTimeout(() => {
+                      window.close();
+                    }, 2000);
+                  </script>
                 </body>
               </html>
             `);
+            
+            // Focus back to the main window
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              setTimeout(() => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.show();
+                  mainWindow.focus();
+                }
+              }, 1500);
+            }
+            
             this.cleanup();
             resolve({ success: true, code });
           } else {

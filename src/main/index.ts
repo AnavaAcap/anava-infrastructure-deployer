@@ -1433,8 +1433,8 @@ ipcMain.handle('auth:unified-gcp', async () => {
     const { getUnifiedGCPAuthService } = await import('./services/unifiedGCPAuthService');
     const authService = getUnifiedGCPAuthService();
     
-    // Initiate OAuth flow
-    const result = await authService.authenticate();
+    // Initiate OAuth flow and pass mainWindow for refocusing
+    const result = await authService.authenticate(mainWindow);
     return result;
   } catch (error: any) {
     logger.error('Unified GCP auth failed:', error);

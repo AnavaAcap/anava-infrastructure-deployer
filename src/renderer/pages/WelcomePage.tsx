@@ -166,7 +166,7 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
       </Stack>
 
       {/* Status Cards */}
-      <Grid container spacing={2} sx={{ mb: 4, maxWidth: 800, mx: 'auto' }}>
+      <Grid container spacing={2} sx={{ mb: 4, maxWidth: 800, mx: 'auto', justifyContent: 'center' }}>
         {/* API Key Status */}
         <Grid item xs={12} md={6}>
           <Card sx={{ 
