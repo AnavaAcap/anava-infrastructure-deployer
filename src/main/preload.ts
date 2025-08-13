@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     start: (config: any) => ipcRenderer.invoke('deployment:start', config),
     resume: (deploymentId: string) => ipcRenderer.invoke('deployment:resume', deploymentId),
     pause: () => ipcRenderer.invoke('deployment:pause'),
+    cancel: () => ipcRenderer.invoke('deployment:cancel'),
     onProgress: (callback: (progress: any) => void) => {
       const handler = (_: any, progress: any) => callback(progress);
       ipcRenderer.on('deployment:progress', handler);

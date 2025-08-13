@@ -174,7 +174,68 @@ tail -f "$LATEST_LOG"  # Follow log in real-time
 ### VAPIX Endpoints
 - Config: `POST http://{ip}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`
 - License: `POST http://{ip}/local/{appName}/license.cgi`
+- AOA Control: `POST http://{ip}/local/objectanalytics/control.cgi`
 - Always use digest authentication
+
+### ✅ Axis Object Analytics (AOA) Integration - NEW (2025-01-16)
+**Feature**: Programmatic control of AOA scenarios via VAPIX APIs
+- **Location**: `src/main/services/aoa/`
+- **Files**: 
+  - `aoaService.ts` - Core VAPIX implementation
+  - `aoaIntegration.ts` - High-level integration for installer
+  - `AOA_API_DOCUMENTATION.md` - Complete API documentation
+
+**CRITICAL: Time in Area Configuration**
+The "Time in Area" toggle in AOA UI requires BOTH:
+1. Filter in scenario (`type: 'timeShort'` with milliseconds)
+2. Condition in trigger (`type: 'individualTimeInArea'` with seconds)
+
+```typescript
+// Example: Create human detection with 3-second Time in Area
+import { AOAService } from './services/aoa/aoaService';
+
+const aoa = new AOAService(cameraIp, username, password);
+await aoa.createHumanDetectionScenario('Entrance', 3);  // 3 seconds
+
+// Advanced configuration with all options
+await aoa.createAdvancedScenario({
+  name: 'Parking',
+  type: 'motion',
+  area: [[-0.9, -0.9], [-0.9, 0.9], [0.9, 0.9], [0.9, -0.9]],
+  objectTypes: {
+    humans: true,
+    vehicles: true,
+    vehicleSubTypes: ['car', 'truck']
+  },
+  filters: {
+    timeInArea: 5,  // seconds
+    minimumSize: { width: 10, height: 10 }  // percentage
+  }
+});
+```
+
+**Supported Features**:
+- Motion detection with area triggers
+- Human and vehicle detection (with subtypes)
+- Time in Area (loitering detection)
+- Object size filtering
+- Crossline counting
+- Virtual fence detection
+- Occupancy monitoring
+
+**Integration during deployment**:
+```typescript
+// In deployment flow
+await AOAIntegration.configureAOA(camera, {
+  enableAOA: true,
+  scenarios: [{
+    name: 'Main Entrance',
+    type: 'motion',
+    humanDetection: true,
+    timeInArea: 3
+  }]
+});
+```
 
 ## Release Process
 
@@ -224,6 +285,8 @@ See `CAMERA_DETECTION_TROUBLESHOOTING.md` for detailed debugging guide.
 - `src/main/services/camera/cameraConfigurationService.ts` - getSceneDescription with customPrompt
 - `src/main/services/camera/fastNetworkScanner.ts` - Device detection (POST with propertyList)
 - `src/main/services/deploymentEngine.ts` - GCP deployment logic
+- `src/main/services/aoa/aoaService.ts` - AOA VAPIX implementation with Time in Area support
+- `src/main/services/aoa/aoaIntegration.ts` - AOA deployment integration
 
 ## Test Commands
 ```bash
