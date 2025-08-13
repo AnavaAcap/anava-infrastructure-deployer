@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
+import { getGoogleAuthClient } from './googleAuthService';
 
 export interface BillingCheckResult {
   enabled: boolean;
@@ -9,14 +10,12 @@ export interface BillingCheckResult {
 
 export class BillingService {
   private async getAuthClient(): Promise<OAuth2Client> {
-    const auth = new google.auth.GoogleAuth({
-      scopes: [
-        'https://www.googleapis.com/auth/cloud-platform',
-        'https://www.googleapis.com/auth/cloud-billing',
-        'https://www.googleapis.com/auth/cloud-billing.readonly'
-      ]
-    });
-    return auth.getClient() as Promise<OAuth2Client>;
+    // Use centralized auth service with proper Windows support
+    return getGoogleAuthClient([
+      'https://www.googleapis.com/auth/cloud-platform',
+      'https://www.googleapis.com/auth/cloud-billing',
+      'https://www.googleapis.com/auth/cloud-billing.readonly'
+    ]);
   }
 
   async checkProjectBilling(projectId: string): Promise<BillingCheckResult> {

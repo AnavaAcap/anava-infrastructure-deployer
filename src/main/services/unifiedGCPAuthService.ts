@@ -78,6 +78,7 @@ export class UnifiedGCPAuthService {
         'email',
         'profile',
         'https://www.googleapis.com/auth/cloud-platform',
+        'https://www.googleapis.com/auth/cloud-billing.readonly',  // CRITICAL: Add billing scope!
         'https://www.googleapis.com/auth/generative-language.retriever'
       ];
       

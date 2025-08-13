@@ -1,23 +1,25 @@
 {
-  "name": "anava-installer",
-  "version": "0.9.202",
-  "description": "Anava Installer - Deploy camera authentication infrastructure to Google Cloud Platform",
+  "name": "anava-vision",
+  "version": "0.9.204",
+  "description": "Anava Vision - Deploy and configure AI-powered camera systems",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "node scripts/dev-concurrent.js",
     "dev:electron": "npm run build:main && NODE_ENV=development electron .",
     "download-terraform": "node scripts/download-terraform.js",
     "download-terraform-win": "node scripts/download-terraform-win.js",
+    "download-terraform-all": "node scripts/download-all-terraform-binaries.js",
     "dev:renderer": "vite --config vite.config.ts",
     "build:main": "tsc -p tsconfig.main.json && node scripts/copy-activator.js",
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
     "start": "electron .",
-    "postinstall": "electron-builder install-app-deps && node scripts/download-terraform.js",
-    "dist": "npm run build && electron-builder",
-    "dist:mac": "npm run build && electron-builder --mac",
+    "postinstall": "electron-builder install-app-deps && node scripts/download-all-terraform-binaries.js",
+    "dist": "npm run build && npm run download-terraform-all && electron-builder",
+    "dist:mac": "npm run build && npm run download-terraform-all && electron-builder --mac",
     "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac",
-    "dist:win": "npm run build && npm run generate:guid && npm run download:vcredist && electron-builder --win",
+    "pre-build:win": "node scripts/pre-build-windows.js",
+    "dist:win": "npm run build && npm run pre-build:win && npm run generate:guid && npm run download:vcredist && electron-builder --win",
     "download:vcredist": "node scripts/download-vcredist.js",
     "generate:guid": "node scripts/generate-guid.js",
     "dist:linux": "npm run build && electron-builder --linux",
@@ -48,7 +50,7 @@
   "license": "MIT",
   "build": {
     "appId": "com.anava.vision",
-    "productName": "Anava Installer",
+    "productName": "Anava Vision",
     "directories": {
       "output": "release"
     },
@@ -120,7 +122,7 @@
       "gatekeeperAssess": false,
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
-      "x64ArchFiles": "**/terraform-bin/terraform",
+      "x64ArchFiles": "**/terraform-bin/terraform*",
       "extendInfo": {
         "NSLocalNetworkUsageDescription": "Anava Installer needs to access cameras on your local network for configuration and deployment.",
         "NSBonjourServices": [
