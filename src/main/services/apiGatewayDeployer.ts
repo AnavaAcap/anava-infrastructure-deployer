@@ -114,29 +114,56 @@ export class ApiGatewayDeployer {
       // 404 means service doesn't exist, which is expected
       // 403 can also mean the service doesn't exist (permission denied on non-existent resource)
       if (error.code !== 404 && error.code !== 403) {
+        log(`ERROR checking managed service: ${JSON.stringify({
+          code: error.code,
+          message: error.message,
+          details: error.response?.data
+        }, null, 2)}`);
         throw error;
       }
       log(`Managed service ${serviceName} does not exist, creating it...`);
     }
 
     // Create the managed service
-    const response = await this.servicemanagement.services.create({
-      auth: this.auth,
-      requestBody: {
+    try {
+      log(`Creating managed service with request: ${JSON.stringify({
         serviceName: serviceName,
         producerProjectId: projectId
+      }, null, 2)}`);
+      
+      const response = await this.servicemanagement.services.create({
+        auth: this.auth,
+        requestBody: {
+          serviceName: serviceName,
+          producerProjectId: projectId
+        }
+      });
+
+      const operation = response.data;
+      if (!operation.name) {
+        throw new Error('Failed to create managed service');
       }
-    });
 
-    const operation = response.data;
-    if (!operation.name) {
-      throw new Error('Failed to create managed service');
+      // Wait for operation to complete
+      await this.waitForServiceManagementOperation(operation.name, progressCallback, log);
+
+      return serviceName;
+    } catch (error: any) {
+      log(`ERROR creating managed service: ${JSON.stringify({
+        code: error.code,
+        message: error.message,
+        details: error.response?.data,
+        errors: error.response?.data?.error?.errors,
+        status: error.response?.status
+      }, null, 2)}`);
+      
+      // Check for specific error cases
+      if (error.response?.data?.error?.message?.includes('invalid_request')) {
+        throw new Error(`Invalid request when creating managed service. This may be due to authentication issues. Please ensure you're properly authenticated.`);
+      }
+      
+      throw error;
     }
-
-    // Wait for operation to complete
-    await this.waitForServiceManagementOperation(operation.name, progressCallback, log);
-
-    return serviceName;
   }
 
   private async createApiConfig(

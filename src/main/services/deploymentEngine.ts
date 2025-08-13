@@ -69,12 +69,29 @@ export class DeploymentEngine extends EventEmitter {
       
       // If we have unified auth tokens, create a new OAuth client
       if (config.gcpAccessToken && config.gcpRefreshToken) {
-        oauth2Client = new google.auth.OAuth2();
+        // Load OAuth config to get client ID and secret
+        const oauthConfigPath = path.join(app.getAppPath(), 'oauth-config.json');
+        let oauthConfig: any;
+        try {
+          const oauthData = await fs.readFile(oauthConfigPath, 'utf8');
+          oauthConfig = JSON.parse(oauthData);
+        } catch (e) {
+          // Try alternative paths
+          const alternativePath = path.join(process.resourcesPath || '', 'oauth-config.json');
+          const oauthData = await fs.readFile(alternativePath, 'utf8');
+          oauthConfig = JSON.parse(oauthData);
+        }
+        
+        oauth2Client = new google.auth.OAuth2(
+          oauthConfig.installed.client_id,
+          oauthConfig.installed.client_secret,
+          'http://localhost:8085'
+        );
         oauth2Client.setCredentials({
           access_token: config.gcpAccessToken,
           refresh_token: config.gcpRefreshToken
         });
-        console.log('Using unified auth tokens for deployers');
+        console.log('Using unified auth tokens for deployers with proper OAuth config');
       }
     } catch (error) {
       // Fall back to old auth
@@ -1737,12 +1754,29 @@ export class DeploymentEngine extends EventEmitter {
       
       // If we have unified auth tokens, create a new OAuth client
       if (config.gcpAccessToken && config.gcpRefreshToken) {
-        const oauth2Client = new google.auth.OAuth2();
+        // Load OAuth config to get client ID and secret
+        const oauthConfigPath = path.join(app.getAppPath(), 'oauth-config.json');
+        let oauthConfig: any;
+        try {
+          const oauthData = await fs.readFile(oauthConfigPath, 'utf8');
+          oauthConfig = JSON.parse(oauthData);
+        } catch (e) {
+          // Try alternative paths
+          const alternativePath = path.join(process.resourcesPath || '', 'oauth-config.json');
+          const oauthData = await fs.readFile(alternativePath, 'utf8');
+          oauthConfig = JSON.parse(oauthData);
+        }
+        
+        const oauth2Client = new google.auth.OAuth2(
+          oauthConfig.installed.client_id,
+          oauthConfig.installed.client_secret,
+          'http://localhost:8085'
+        );
         oauth2Client.setCredentials({
           access_token: config.gcpAccessToken,
           refresh_token: config.gcpRefreshToken
         });
-        console.log('Using unified auth tokens in getAuthClient');
+        console.log('Using unified auth tokens in getAuthClient with proper OAuth config');
         return oauth2Client;
       }
     } catch (error) {
@@ -1776,12 +1810,29 @@ export class DeploymentEngine extends EventEmitter {
       
       // If we have unified auth tokens, create a new OAuth client
       if (config.gcpAccessToken && config.gcpRefreshToken) {
-        authClient = new google.auth.OAuth2();
+        // Load OAuth config to get client ID and secret
+        const oauthConfigPath = path.join(app.getAppPath(), 'oauth-config.json');
+        let oauthConfig: any;
+        try {
+          const oauthData = await fs.readFile(oauthConfigPath, 'utf8');
+          oauthConfig = JSON.parse(oauthData);
+        } catch (e) {
+          // Try alternative paths
+          const alternativePath = path.join(process.resourcesPath || '', 'oauth-config.json');
+          const oauthData = await fs.readFile(alternativePath, 'utf8');
+          oauthConfig = JSON.parse(oauthData);
+        }
+        
+        authClient = new google.auth.OAuth2(
+          oauthConfig.installed.client_id,
+          oauthConfig.installed.client_secret,
+          'http://localhost:8085'
+        );
         authClient.setCredentials({
           access_token: config.gcpAccessToken,
           refresh_token: config.gcpRefreshToken
         });
-        console.log('Using unified auth tokens for getProjectNumber');
+        console.log('Using unified auth tokens for getProjectNumber with proper OAuth config');
       }
     } catch (error) {
       console.log('No unified auth tokens found for getProjectNumber, using old auth');

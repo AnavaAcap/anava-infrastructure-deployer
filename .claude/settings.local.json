@@ -75,6 +75,10 @@
       "Bash(python3:*)",
       "mcp__multi-ai-collab__gemini_think_deep"
     ],
-    "deny": []
+    "deny": [],
+    "additionalDirectories": [
+      "/Users/ryanwager/anava-debug-logs",
+      "/Users/ryanwager/Library/Logs/anava-installer"
+    ]
   }
 }

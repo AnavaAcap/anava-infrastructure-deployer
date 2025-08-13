@@ -33,12 +33,29 @@ export class GCPApiServiceManager {
       
       // If we have unified auth tokens, create a new OAuth client with them
       if (config.gcpAccessToken && config.gcpRefreshToken) {
-        const oauth2Client = new google.auth.OAuth2();
+        // Load OAuth config to get client ID and secret
+        const oauthConfigPath = path.join(app.getAppPath(), 'oauth-config.json');
+        let oauthConfig: any;
+        try {
+          const oauthData = await fs.readFile(oauthConfigPath, 'utf8');
+          oauthConfig = JSON.parse(oauthData);
+        } catch (e) {
+          // Try alternative paths
+          const alternativePath = path.join(process.resourcesPath || '', 'oauth-config.json');
+          const oauthData = await fs.readFile(alternativePath, 'utf8');
+          oauthConfig = JSON.parse(oauthData);
+        }
+        
+        const oauth2Client = new google.auth.OAuth2(
+          oauthConfig.installed.client_id,
+          oauthConfig.installed.client_secret,
+          'http://localhost:8085'
+        );
         oauth2Client.setCredentials({
           access_token: config.gcpAccessToken,
           refresh_token: config.gcpRefreshToken
         });
-        console.log('Using unified auth tokens in GCPApiServiceManager');
+        console.log('Using unified auth tokens in GCPApiServiceManager with proper OAuth config');
         return oauth2Client;
       }
     } catch (error) {

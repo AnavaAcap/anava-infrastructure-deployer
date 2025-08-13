@@ -1552,7 +1552,17 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               control={
                 <Switch
                   checked={configureSpeaker}
-                  onChange={(e) => setConfigureSpeaker(e.target.checked)}
+                  onChange={(e) => {
+                    setConfigureSpeaker(e.target.checked);
+                    // When enabling speaker config, default to camera credentials
+                    if (e.target.checked && credentials.username && credentials.password) {
+                      setSpeakerConfig(prev => ({
+                        ...prev,
+                        username: credentials.username,
+                        password: credentials.password
+                      }));
+                    }
+                  }}
                 />
               }
               label="I have a network speaker to configure"
