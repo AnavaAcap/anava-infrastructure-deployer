@@ -63,4 +63,19 @@ if (fs.existsSync(rulesSourcePath)) {
   console.error('WARNING: firestore.rules not found at:', rulesSourcePath);
 }
 
+// Copy api-gateway-config.yaml
+const apiGatewayConfigSource = path.join(__dirname, '..', 'api-gateway-config.yaml');
+const apiGatewayConfigTarget = path.join(__dirname, '..', 'dist', 'main', 'api-gateway-config.yaml');
+
+console.log('\nCopying api-gateway-config.yaml for production build...');
+console.log('Source:', apiGatewayConfigSource);
+console.log('Target:', apiGatewayConfigTarget);
+
+if (fs.existsSync(apiGatewayConfigSource)) {
+  fs.copyFileSync(apiGatewayConfigSource, apiGatewayConfigTarget);
+  console.log('Copied: api-gateway-config.yaml');
+} else {
+  console.error('WARNING: api-gateway-config.yaml not found at:', apiGatewayConfigSource);
+}
+
 console.log('All build files copied successfully!');

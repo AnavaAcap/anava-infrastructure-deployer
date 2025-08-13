@@ -37,6 +37,7 @@ interface UnifiedLoginPageProps {
 const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [setupProgress, setSetupProgress] = useState<string>('Setting up your account...');
 
   const handleUnifiedLogin = async () => {
     console.log('Starting unified login flow...');
@@ -46,6 +47,7 @@ const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) =
     try {
       // Step 1: Initiate GCP OAuth flow
       console.log('Step 1: Initiating GCP OAuth...');
+      setSetupProgress('Authenticating with Google Cloud...');
       const authResult = await window.electronAPI.auth.unifiedGCPAuth();
       
       if (!authResult.success || !authResult.code) {
@@ -56,6 +58,7 @@ const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) =
       
       // Step 2: Exchange code for all tokens via our Cloud Function
       console.log('Step 2: Exchanging code for tokens...');
+      setSetupProgress('Setting up authentication tokens...');
       const response = await fetch('https://unified-auth-p2kamosfwq-uc.a.run.app', {
         method: 'POST',
         headers: {
@@ -91,6 +94,7 @@ const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) =
       console.log('Step 3: Storing credentials...');
       
       // Store GCP tokens
+      setSetupProgress('Saving Google Cloud credentials...');
       await window.electronAPI.setConfigValue('gcpAccessToken', unifiedAuth.gcp_access_token);
       await window.electronAPI.setConfigValue('gcpRefreshToken', unifiedAuth.gcp_refresh_token);
       
@@ -100,6 +104,7 @@ const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) =
       await window.electronAPI.setConfigValue('userName', unifiedAuth.user.name);
       
       // Store or generate AI Studio API key
+      setSetupProgress('Configuring AI Studio access...');
       if (unifiedAuth.gemini_api_key) {
         await window.electronAPI.setConfigValue('geminiApiKey', unifiedAuth.gemini_api_key);
         console.log('✅ AI Studio API key stored from cloud function');
@@ -130,6 +135,7 @@ const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) =
       }
       
       // Store or fetch license (handle both object and string formats)
+      setSetupProgress('Checking trial license...');
       if (unifiedAuth.license && unifiedAuth.license.key) {
         const licenseKey = typeof unifiedAuth.license === 'object' ? unifiedAuth.license.key : unifiedAuth.license;
         const licenseEmail = typeof unifiedAuth.license === 'object' ? (unifiedAuth.license.email || unifiedAuth.user?.email) : unifiedAuth.user?.email;
@@ -152,6 +158,7 @@ const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) =
         console.warn('No license received from cloud function');
         // Always fetch an Axis trial license for the user
         console.log('Fetching Axis trial license for user...');
+        setSetupProgress('Fetching trial license...');
         try {
           // First, try the assignAxisKey endpoint
           const axisResponse = await fetch('https://us-central1-anava-ai.cloudfunctions.net/assignAxisKey', {
@@ -188,6 +195,7 @@ const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) =
       
       // Step 4: Initialize Firebase with custom token
       console.log('Step 4: Initializing Firebase...');
+      setSetupProgress('Initializing Firebase services...');
       const firebaseConfig = {
         apiKey: "AIzaSyCJbWAa-zQir1v8kmlye8Kv3kmhPb9r18s",
         authDomain: "anava-ai.firebaseapp.com",
@@ -240,6 +248,7 @@ const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) =
       });
       
       // Navigate to main app
+      setSetupProgress('Setup complete!');
       onLoginSuccess();
       
       // Show warning if items are missing
@@ -302,7 +311,7 @@ const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) =
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
               <CircularProgress />
               <Typography variant="body2" color="text.secondary">
-                Setting up your account...
+                {setupProgress}
               </Typography>
             </Box>
           ) : (
