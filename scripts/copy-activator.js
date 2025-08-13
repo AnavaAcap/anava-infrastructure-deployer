@@ -78,4 +78,40 @@ if (fs.existsSync(apiGatewayConfigSource)) {
   console.error('WARNING: api-gateway-config.yaml not found at:', apiGatewayConfigSource);
 }
 
+// Copy function-templates directory
+const functionTemplatesSource = path.join(__dirname, '..', 'function-templates');
+const functionTemplatesTarget = path.join(__dirname, '..', 'dist', 'main', 'function-templates');
+
+console.log('\nCopying function-templates for production build...');
+console.log('Source:', functionTemplatesSource);
+console.log('Target:', functionTemplatesTarget);
+
+// Function to recursively copy directory
+function copyDirectoryRecursively(source, target) {
+  if (!fs.existsSync(target)) {
+    fs.mkdirSync(target, { recursive: true });
+  }
+  
+  const files = fs.readdirSync(source);
+  
+  files.forEach(file => {
+    const sourcePath = path.join(source, file);
+    const targetPath = path.join(target, file);
+    
+    if (fs.lstatSync(sourcePath).isDirectory()) {
+      copyDirectoryRecursively(sourcePath, targetPath);
+    } else {
+      fs.copyFileSync(sourcePath, targetPath);
+      console.log(`  Copied: ${file}`);
+    }
+  });
+}
+
+if (fs.existsSync(functionTemplatesSource)) {
+  copyDirectoryRecursively(functionTemplatesSource, functionTemplatesTarget);
+  console.log('Function templates copied successfully!');
+} else {
+  console.error('WARNING: function-templates directory not found at:', functionTemplatesSource);
+}
+
 console.log('All build files copied successfully!');

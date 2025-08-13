@@ -93,9 +93,10 @@ export class DeploymentEngine extends EventEmitter {
         });
         console.log('Using unified auth tokens for deployers with proper OAuth config');
       }
-    } catch (error) {
+    } catch (error: any) {
       // Fall back to old auth
       console.log('No unified auth tokens found for deployers, using old auth');
+      console.log('Error details:', error.message);
     }
     
     if (oauth2Client) {
