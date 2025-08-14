@@ -38,6 +38,7 @@ import {
 } from '@mui/material';
 import DetectionTestModal from '../components/DetectionTestModal';
 import { AOAScenarioDialog } from '../components/AOAScenarioDialog';
+import { VisionArchitectDialog } from '../components/VisionArchitectDialog';
 import { useNavigationGuard } from '../hooks/useNavigationGuard';
 import NavigationWarningDialog from '../components/NavigationWarningDialog';
 import {
@@ -157,7 +158,9 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [showDetectionModal, setShowDetectionModal] = useState(false);
   const [validatingCredentials, setValidatingCredentials] = useState(false);
   const [showAOADialog, setShowAOADialog] = useState(false);
+  const [showVisionArchitectDialog, setShowVisionArchitectDialog] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+  const [useVisionArchitect, setUseVisionArchitect] = useState(true); // Use Vision Architect by default
   
   // Check if any operation is in progress
   const isOperationInProgress = scanning || connecting || deploying || analyzing || 
@@ -968,16 +971,90 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       // Check if we have a Gemini API key for AOA configuration
       setDeploymentProgress(97);
       
+      // Define completeSetupFlow inline
+      const completeSetupFlow = async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        setDeploymentProgress(100);
+        setDeploymentStatus('Setup complete!');
+        
+        // Camera configuration complete - no longer saving to persistent storage
+        console.log('Camera setup completed successfully');
+        
+        // Update global camera context
+        const globalCameraUpdate = {
+          id: selectedCamera.id,
+          name: selectedCamera.name || `Camera at ${selectedCamera.ip}`,
+          ip: selectedCamera.ip,
+          model: selectedCamera.model,
+          mac: selectedCamera.mac || null,
+          status: {
+            credentials: {
+              completed: true,
+              username: credentials.username,
+              password: credentials.password
+            },
+            discovery: {
+              completed: true,
+              ip: selectedCamera.ip,
+              model: selectedCamera.model,
+              firmwareVersion: selectedCamera.firmwareVersion
+            },
+            deployment: {
+              completed: true,
+              hasACAP: true,
+              isLicensed: true,
+              deployedFile: selectedACAPFile
+            },
+            speaker: {
+              completed: configureSpeaker,
+              configured: configureSpeaker && !!speakerConfig.ip,
+              ip: speakerConfig.ip,
+              username: speakerConfig.username,
+              password: speakerConfig.password
+            },
+            verification: {
+              completed: false
+            }
+          },
+          lastUpdated: new Date()
+        };
+        updateCamera(selectedCamera.id, globalCameraUpdate);
+        
+        // NOTE: Background scene capture already started earlier, right after ACAP deployment
+        // It's running in parallel while user configures speaker
+        
+        // Force step progression - clear deployment state and advance
+        console.log('Deployment complete, advancing to step 3 (speaker config)');
+        setDeploying(false);
+        setDeploymentProgress(0);
+        setDeploymentStatus('');
+        
+        // Mark step 2 as completed
+        setCompleted(prev => ({ ...prev, 2: true }));
+        
+        // Use a callback to ensure state updates properly
+        setActiveStep(prev => {
+          console.log('Previous step was:', prev, 'advancing to 3');
+          return 3;
+        });
+      };
+
+      // Now check for API key and decide whether to show dialogs
       try {
         // First try to get the Gemini API key from config
         const geminiKey = await (window.electronAPI as any).getConfigValue?.('geminiApiKey');
         
         if (geminiKey) {
           setGeminiApiKey(geminiKey);
-          // Show AOA dialog for scenario creation
-          setShowAOADialog(true);
-          setDeploymentStatus('Configure AI detection...');
-          return; // Don't complete yet, wait for AOA dialog
+          // Show Vision Architect or AOA dialog for scenario creation
+          if (useVisionArchitect) {
+            setShowVisionArchitectDialog(true);
+            setDeploymentStatus('Configure AI vision system...');
+          } else {
+            setShowAOADialog(true);
+            setDeploymentStatus('Configure AI detection...');
+          }
+          return; // Don't complete yet, wait for dialog
         }
         
         // Fallback: try to get from deployments
@@ -989,10 +1066,15 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           const apiKey = deployment?.aiStudioApiKey || deployment?.geminiApiKey || '';
           if (apiKey) {
             setGeminiApiKey(apiKey);
-            // Show AOA dialog for scenario creation
-            setShowAOADialog(true);
-            setDeploymentStatus('Configure AI detection...');
-            return; // Don't complete yet, wait for AOA dialog
+            // Show Vision Architect or AOA dialog for scenario creation
+            if (useVisionArchitect) {
+              setShowVisionArchitectDialog(true);
+              setDeploymentStatus('Configure AI vision system...');
+            } else {
+              setShowAOADialog(true);
+              setDeploymentStatus('Configure AI detection...');
+            }
+            return; // Don't complete yet, wait for dialog
           }
         }
       } catch (error) {
@@ -1001,73 +1083,6 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       
       // If no API key or error, complete normally
       await completeSetupFlow();
-    };
-    
-    const completeSetupFlow = async () => {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setDeploymentProgress(100);
-      setDeploymentStatus('Setup complete!');
-      
-      // Camera configuration complete - no longer saving to persistent storage
-      console.log('Camera setup completed successfully');
-      
-      // Update global camera context
-      const globalCameraUpdate = {
-        id: selectedCamera.id,
-        name: selectedCamera.name || `Camera at ${selectedCamera.ip}`,
-        ip: selectedCamera.ip,
-        model: selectedCamera.model,
-        mac: selectedCamera.mac || null,
-        status: {
-          credentials: {
-            completed: true,
-            username: credentials.username,
-            password: credentials.password
-          },
-          discovery: {
-            completed: true,
-            ip: selectedCamera.ip,
-            model: selectedCamera.model,
-            firmwareVersion: selectedCamera.firmwareVersion
-          },
-          deployment: {
-            completed: true,
-            hasACAP: true,
-            isLicensed: true,
-            deployedFile: selectedACAPFile
-          },
-          speaker: {
-            completed: configureSpeaker,
-            configured: configureSpeaker && !!speakerConfig.ip,
-            ip: speakerConfig.ip,
-            username: speakerConfig.username,
-            password: speakerConfig.password
-          },
-          verification: {
-            completed: false
-          }
-        },
-        lastUpdated: new Date()
-      };
-      updateCamera(selectedCamera.id, globalCameraUpdate);
-      
-      // NOTE: Background scene capture already started earlier, right after ACAP deployment
-      // It's running in parallel while user configures speaker
-      
-      // Force step progression - clear deployment state and advance
-      console.log('Deployment complete, advancing to step 3 (speaker config)');
-      setDeploying(false);
-      setDeploymentProgress(0);
-      setDeploymentStatus('');
-      
-      // Mark step 2 as completed
-      setCompleted(prev => ({ ...prev, 2: true }));
-      
-      // Use a callback to ensure state updates properly
-      setActiveStep(prev => {
-        console.log('Previous step was:', prev, 'advancing to 3');
-        return 3;
-      });
 
     } catch (error: any) {
       console.error('Deployment failed:', error);
@@ -2185,6 +2200,25 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           }}
           onSkip={() => {
             setShowAOADialog(false);
+            completeSetupFlow();
+          }}
+        />
+      )}
+      
+      {/* Vision Architect Dialog - Revolutionary AI system */}
+      {selectedCamera && credentials.username && credentials.password && (
+        <VisionArchitectDialog
+          open={showVisionArchitectDialog}
+          cameraIp={selectedCamera.ip}
+          username={credentials.username}
+          password={credentials.password}
+          geminiApiKey={geminiApiKey}
+          onComplete={() => {
+            setShowVisionArchitectDialog(false);
+            completeSetupFlow();
+          }}
+          onSkip={() => {
+            setShowVisionArchitectDialog(false);
             completeSetupFlow();
           }}
         />

@@ -112,24 +112,38 @@ export const VisionArchitectDialog: React.FC<Props> = ({
     setError(null);
 
     try {
-      // Deploy the generated system
+      console.log('Deploying Vision System to camera:', cameraIp);
+      console.log('System contains:', {
+        scenarios: generatedSystem.axisScenarios?.length || 0,
+        skills: generatedSystem.skills?.length || 0,
+        profiles: generatedSystem.securityProfiles?.length || 0
+      });
+      
+      // Deploy the generated system (false = real mode, true = mock mode)
+      const useMockMode = false; // SET TO TRUE FOR TESTING WITHOUT CAMERA
+      
       const result = await (window as any).electronAPI.invokeIPC(
         'vision-architect-deploy',
         cameraIp,
         username,
         password,
-        generatedSystem
+        generatedSystem,
+        useMockMode
       );
 
+      console.log('Deployment result:', result);
       setDeploymentResult(result);
       
       if (result.success) {
+        console.log('✅ Vision System successfully deployed!');
         // Auto-complete after 3 seconds
         setTimeout(() => {
           onComplete();
         }, 3000);
       } else {
-        setError(result.message || 'Deployment failed');
+        console.error('❌ Deployment failed:', result.errors);
+        const errorMessage = result.errors?.join('\n') || result.message || 'Deployment failed';
+        setError(errorMessage);
       }
     } catch (error: any) {
       console.error('Deployment error:', error);
@@ -229,7 +243,16 @@ export const VisionArchitectDialog: React.FC<Props> = ({
 
               {error && (
                 <Alert severity="error" icon={<WarningIcon />}>
-                  {error}
+                  <Typography variant="subtitle2" gutterBottom>
+                    Deployment Error
+                  </Typography>
+                  <Typography variant="body2" component="pre" sx={{ 
+                    whiteSpace: 'pre-wrap',
+                    fontFamily: 'monospace',
+                    fontSize: '0.85rem'
+                  }}>
+                    {error}
+                  </Typography>
                 </Alert>
               )}
             </>

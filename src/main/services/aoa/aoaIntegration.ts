@@ -18,6 +18,14 @@ export interface AOADeploymentConfig {
     vehicleDetection?: boolean;
     timeInArea?: number;
     customArea?: Array<[number, number]>;
+    filters?: any;
+    vehicleSubTypes?: string[];
+    minimumObjectSize?: [number, number];
+    maximumObjectSize?: [number, number];
+    swayingObjectDistance?: number;
+    shortLivedLimit?: number;
+    crosslineDirection?: string;
+    occupancyThreshold?: number;
   }>;
   useDefaultScenarios?: boolean;
 }
@@ -158,12 +166,16 @@ export class AOAIntegration {
               },
               filters: {
                 timeInArea: scenarioConfig.timeInArea,
-                minimumSize: scenarioConfig.minimumObjectSize,
-                maximumSize: scenarioConfig.maximumObjectSize,
+                minimumSize: scenarioConfig.minimumObjectSize ? 
+                  { width: scenarioConfig.minimumObjectSize[0], height: scenarioConfig.minimumObjectSize[1] } : 
+                  undefined,
+                maximumSize: scenarioConfig.maximumObjectSize ?
+                  { width: scenarioConfig.maximumObjectSize[0], height: scenarioConfig.maximumObjectSize[1] } :
+                  undefined,
                 swayingObjectDistance: scenarioConfig.swayingObjectDistance,
                 shortLivedLimit: scenarioConfig.shortLivedLimit
               },
-              crosslineDirection: scenarioConfig.crosslineDirection,
+              crosslineDirection: scenarioConfig.crosslineDirection as any,
               occupancyThreshold: scenarioConfig.occupancyThreshold
             });
           } else if (scenarioConfig.humanDetection && scenarioConfig.timeInArea) {
@@ -174,8 +186,10 @@ export class AOAIntegration {
               scenarioConfig.customArea,
               {
                 enableVehicles: scenarioConfig.vehicleDetection,
-                minimumObjectSize: scenarioConfig.minimumObjectSize
-              }
+                minimumObjectSize: scenarioConfig.minimumObjectSize ?
+                  { width: scenarioConfig.minimumObjectSize[0], height: scenarioConfig.minimumObjectSize[1] } :
+                  undefined
+              } as any
             );
           } else {
             // Create custom scenario

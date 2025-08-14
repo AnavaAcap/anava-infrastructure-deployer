@@ -5,7 +5,7 @@
  */
 
 import AOAService from './aoaService';
-import { logger } from '../../utils/logger';
+// import { logger } from '../../utils/logger';
 
 // Configure your camera details here
 const CAMERA_IP = '192.168.50.156';

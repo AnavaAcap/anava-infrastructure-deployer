@@ -4,7 +4,7 @@
  */
 
 import { AOAService } from './aoaService';
-import { logger } from '../../utils/logger';
+// import { logger } from '../../utils/logger';
 
 export class AOADebugger {
   private aoa: AOAService;
@@ -145,7 +145,7 @@ export class AOADebugger {
       
       console.log('Creating scenario with configuration:', JSON.stringify(scenario, null, 2));
       
-      const result = await this.aoa.createScenario(scenario);
+      const result = await this.aoa.createScenario(scenario as any);
       console.log('Creation result:', result);
       
       // Verify the created scenario
@@ -241,7 +241,7 @@ export class AOADebugger {
         };
         
         try {
-          const result = await this.aoa.createScenario(scenario);
+          const result = await this.aoa.createScenario(scenario as any);
           console.log(`  Result: ${result ? 'SUCCESS' : 'FAILED'}`);
           
           if (result) {
@@ -328,7 +328,7 @@ export class AOADebugger {
         console.log('Update payload:', JSON.stringify(update, null, 2));
         
         try {
-          const result = await this.aoa.updateScenario(scenarioId, update);
+          const result = await this.aoa.updateScenario(scenarioId, update as any);
           console.log('Result:', result ? 'SUCCESS' : 'FAILED');
           
           if (result) {

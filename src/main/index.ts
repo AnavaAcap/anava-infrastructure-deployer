@@ -49,6 +49,9 @@ const initializeCameraServices = async () => {
       const OptimizedCameraDiscoveryService = (await import('./services/camera/optimizedCameraDiscoveryService')).OptimizedCameraDiscoveryService;
       new OptimizedCameraDiscoveryService();
       
+      // Register Vision Architect IPC handlers
+      await import('./services/vision/visionArchitectIPC');
+      
       const ACAPDeploymentService = (await import('./services/camera/acapDeploymentService')).ACAPDeploymentService;
       new ACAPDeploymentService();
       

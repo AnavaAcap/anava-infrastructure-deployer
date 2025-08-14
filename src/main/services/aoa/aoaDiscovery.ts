@@ -15,14 +15,14 @@ export interface AOAEndpoint {
 }
 
 export class AOADiscovery {
-  private cameraIp: string;
+  // private cameraIp: string;
   private username: string;
   private password: string;
   private baseUrl: string;
   private discoveredEndpoints: AOAEndpoint[] = [];
 
   constructor(cameraIp: string, username: string, password: string) {
-    this.cameraIp = cameraIp;
+    // this.cameraIp = cameraIp;
     this.username = username;
     this.password = password;
     this.baseUrl = `http://${cameraIp}`;
@@ -110,7 +110,7 @@ export class AOADiscovery {
       });
 
       // Wait for the interface to load
-      await page.waitForTimeout(5000);
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Try to interact with the interface to trigger API calls
       logger.info('[AOA Discovery] Attempting to create a scenario...');
@@ -121,7 +121,7 @@ export class AOADiscovery {
       if (createScenarioButton.length > 0) {
         logger.info('[AOA Discovery] Found create button, clicking...');
         await createScenarioButton[0].click();
-        await page.waitForTimeout(3000);
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
 
       // Try to find scenario configuration options
@@ -152,7 +152,7 @@ export class AOADiscovery {
       if (humanCheckbox.length > 0) {
         logger.info('[AOA Discovery] Found human checkbox, clicking...');
         await humanCheckbox[0].click();
-        await page.waitForTimeout(2000);
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       // Try to set "Time in Area"
@@ -161,7 +161,7 @@ export class AOADiscovery {
       if (timeInput.length > 0) {
         logger.info('[AOA Discovery] Found time input, setting to 3...');
         await timeInput[0].type('3');
-        await page.waitForTimeout(2000);
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       // Try to save the scenario
@@ -170,7 +170,7 @@ export class AOADiscovery {
       if (saveButton.length > 0) {
         logger.info('[AOA Discovery] Found save button, clicking...');
         await saveButton[0].click();
-        await page.waitForTimeout(3000);
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
 
       // Process captured requests

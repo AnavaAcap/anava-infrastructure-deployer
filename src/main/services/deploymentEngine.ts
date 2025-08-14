@@ -141,6 +141,16 @@ export class DeploymentEngine extends EventEmitter {
     await this.runDeployment();
   }
 
+  cancelDeployment(): void {
+    this.isPaused = true;
+    this.emitProgress({
+      currentStep: 'cancelled',
+      stepProgress: 0,
+      totalProgress: 0,
+      message: 'Deployment cancelled by user'
+    });
+  }
+
   pauseDeployment(): void {
     this.isPaused = true;
     this.emitProgress({

@@ -44,6 +44,7 @@ export interface AOAScenario {
   triggers: AOATrigger[];
   filters?: AOAFilter[];
   objectClassifications: AOAObjectClassification[];
+  perspectives?: AOAPerspective[];
   metadata?: Record<string, any>;
 }
 
@@ -81,9 +82,13 @@ export interface AOAObjectClassification {
 }
 
 export interface AOAPerspective {
-  type: 'corridor' | 'groundPlane';
+  type?: 'corridor' | 'groundPlane';
   corridorMode?: 'shortSide' | 'longSide';
   transform?: number[][];
+  cameraHeight?: number;
+  groundPlane?: {
+    points: Array<{x: number, y: number}>;
+  };
 }
 
 export interface AOACapabilities {
@@ -109,13 +114,11 @@ export class AOAService {
   private cameraIp: string;
   private username: string;
   private password: string;
-  private baseUrl: string;
 
   constructor(cameraIp: string, username: string, password: string) {
     this.cameraIp = cameraIp;
     this.username = username;
     this.password = password;
-    this.baseUrl = `http://${cameraIp}`;
   }
 
   /**
@@ -224,6 +227,13 @@ export class AOAService {
   }
 
   /**
+   * Get AOA capabilities (alias for getConfigurationCapabilities)
+   */
+  async getCapabilities(): Promise<any> {
+    return this.getConfigurationCapabilities();
+  }
+
+  /**
    * Get AOA configuration capabilities (Axis API)
    */
   async getConfigurationCapabilities(): Promise<any> {
@@ -270,6 +280,19 @@ export class AOAService {
     } catch (error: any) {
       logger.error('[AOA] Error getting supported versions:', error.message);
       throw error;
+    }
+  }
+
+  /**
+   * Get a specific scenario by ID
+   */
+  async getScenario(scenarioId: number): Promise<AOAScenario | undefined> {
+    try {
+      const config = await this.getConfiguration();
+      return config.scenarios?.find((s: AOAScenario) => s.id === scenarioId);
+    } catch (error: any) {
+      logger.error(`[AOA] Error getting scenario ${scenarioId}:`, error.message);
+      return undefined;
     }
   }
 
@@ -565,7 +588,7 @@ export class AOAService {
     try {
       logger.info(`[AOA] ${enabled ? 'Enabling' : 'Disabling'} scenario:`, scenarioId);
       
-      return await this.updateScenario(scenarioId, { enabled });
+      return await this.updateScenario(Number(scenarioId), { enabled });
     } catch (error: any) {
       logger.error('[AOA] Error setting scenario enabled state:', error.message);
       throw error;
@@ -584,14 +607,19 @@ export class AOAService {
       logger.info('[AOA] Configuring perspective for scenario:', scenarioId);
       
       const perspective: AOAPerspective = {
-        calibrated: true,
+        type: 'groundPlane',
         cameraHeight: cameraHeight,
         groundPlane: {
           points: groundPlanePoints
         }
       };
       
-      return await this.updateScenario(scenarioId, { perspective });
+      // Add perspective to perspectives array
+      const currentScenario = await this.getScenario(Number(scenarioId));
+      const perspectives = currentScenario?.perspectives || [];
+      perspectives.push(perspective);
+      
+      return await this.updateScenario(Number(scenarioId), { perspectives });
     } catch (error: any) {
       logger.error('[AOA] Error configuring perspective:', error.message);
       throw error;
@@ -843,15 +871,6 @@ export class AOAService {
             name: 'Loitering Detection',
             type: 'motion',
             devices: [{ id: 1 }],
-            triggers: [{
-              type: 'includeArea',
-              vertices: [
-                [-0.9, -0.9],
-                [-0.9, 0.9],
-                [0.9, 0.9],
-                [0.9, -0.9]
-              ]
-            }],
             triggers: [{
               type: 'includeArea',
               vertices: [

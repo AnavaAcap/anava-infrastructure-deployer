@@ -170,4 +170,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Config value storage
   setConfigValue: (key: string, value: any) => ipcRenderer.invoke('config:set-value', key, value),
   getConfigValue: (key: string) => ipcRenderer.invoke('config:get-value', key),
+  
+  // Generic IPC invocation for new handlers
+  invokeIPC: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
 });

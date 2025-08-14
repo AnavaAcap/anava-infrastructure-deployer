@@ -7,6 +7,10 @@ import { VisionArchitect, generateAndDeployVisionSystem } from './visionArchitec
 import { logger } from '../../utils/logger';
 
 export function registerVisionArchitectHandlers() {
+  logger.info('========================================');
+  logger.info('[Vision IPC] REGISTERING VISION ARCHITECT HANDLERS');
+  logger.info('========================================');
+  
   // Generate vision system from user goals
   ipcMain.handle('vision-architect-generate', async (
     _event,
@@ -15,7 +19,11 @@ export function registerVisionArchitectHandlers() {
     imageDescription?: string
   ) => {
     try {
-      logger.info('[Vision IPC] Generating system for goal:', userGoal);
+      logger.info('----------------------------------------');
+      logger.info('[Vision IPC] Received generation request');
+      logger.info('[Vision IPC] User Goal:', userGoal);
+      logger.info('[Vision IPC] Image Description:', imageDescription || 'None');
+      logger.info('[Vision IPC] API Key present:', !!geminiApiKey);
       
       const architect = new VisionArchitect(geminiApiKey);
       const result = await architect.generateVisionSystem({
@@ -39,17 +47,20 @@ export function registerVisionArchitectHandlers() {
     cameraIp: string,
     username: string,
     password: string,
-    systemConfig: any
+    systemConfig: any,
+    mockMode: boolean = false  // Default to REAL deployment
   ) => {
     try {
       logger.info('[Vision IPC] Deploying system to camera:', cameraIp);
+      logger.info('[Vision IPC] Mode:', mockMode ? 'MOCK' : 'LIVE');
       
       const architect = new VisionArchitect(''); // API key not needed for deployment
       const result = await architect.deploySystem(
         cameraIp,
         username,
         password,
-        systemConfig
+        systemConfig,
+        mockMode
       );
       
       return result;
@@ -97,3 +108,6 @@ export function registerVisionArchitectHandlers() {
 
   logger.info('[Vision IPC] Vision Architect handlers registered');
 }
+
+// Auto-register when module is imported
+registerVisionArchitectHandlers();

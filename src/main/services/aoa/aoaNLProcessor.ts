@@ -246,7 +246,7 @@ export class AOANaturalLanguageProcessor {
   /**
    * Validate and enhance the scenario with defaults
    */
-  private validateAndEnhanceScenario(config: any, request: NLScenarioRequest): any {
+  private validateAndEnhanceScenario(config: any, _request: NLScenarioRequest): any {
     // Ensure we have a valid scenario type
     if (!['motion', 'fence', 'crosslinecount', 'occupancy'].includes(config.type)) {
       config.type = 'motion'; // Default to motion detection
@@ -437,7 +437,6 @@ async function sendScenarioToACAP(
   description: string
 ): Promise<void> {
   const axios = require('axios');
-  const crypto = require('crypto');
 
   logger.info(`[AOA NL] Sending scenario '${scenarioName}' to ACAP endpoint`);
 

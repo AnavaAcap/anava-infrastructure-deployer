@@ -7,7 +7,6 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logger } from '../../utils/logger';
-import AOAService from '../aoa/aoaService';
 
 // System prompt for the Vision Architect AI
 export const VISION_ARCHITECT_SYSTEM_PROMPT = `
@@ -134,8 +133,7 @@ export class VisionArchitect {
     this.model = this.gemini.getGenerativeModel({ 
       model: 'gemini-1.5-pro',
       generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: VISION_SYSTEM_SCHEMA
+        responseMimeType: "application/json"
       }
     });
   }
@@ -145,25 +143,84 @@ export class VisionArchitect {
    */
   async generateVisionSystem(request: VisionSystemRequest): Promise<VisionSystemResponse> {
     try {
-      logger.info('[Vision Architect] Processing user goal:', request.userGoal);
+      logger.info('========================================');
+      logger.info('[Vision Architect] STARTING GENERATION');
+      logger.info('========================================');
+      logger.info('[Vision Architect] User Goal:', request.userGoal);
+      logger.info('[Vision Architect] Image Description:', request.imageDescription || 'Not provided');
+      logger.info('[Vision Architect] Domain:', request.domain || 'Auto-detect');
 
       // Build the user prompt
       const userPrompt = this.buildUserPrompt(request);
       
+      logger.info('[Vision Architect] User Prompt Length:', userPrompt.length);
+      logger.info('[Vision Architect] Sending to Gemini AI...');
+      
       // Generate the complete system using structured output
+      const startTime = Date.now();
       const result = await this.model.generateContent([
         { text: VISION_ARCHITECT_SYSTEM_PROMPT },
         { text: userPrompt }
       ]);
 
       const response = await result.response;
+      const generationTime = Date.now() - startTime;
+      logger.info(`[Vision Architect] AI Generation completed in ${generationTime}ms`);
+      
       const systemConfig = JSON.parse(response.text());
 
-      logger.info('[Vision Architect] Generated system:', {
+      logger.info('========================================');
+      logger.info('[Vision Architect] GENERATED SYSTEM OVERVIEW');
+      logger.info('========================================');
+      logger.info('[Vision Architect] System Overview:', systemConfig.systemOverview);
+      logger.info('[Vision Architect] Components Generated:', {
         scenarios: systemConfig.axisScenarios?.length || 0,
         skills: systemConfig.skills?.length || 0,
         profiles: systemConfig.securityProfiles?.length || 0
       });
+      
+      // Log each component in detail
+      if (systemConfig.axisScenarios?.length > 0) {
+        logger.info('[Vision Architect] === AOA SCENARIOS ===');
+        systemConfig.axisScenarios.forEach((scenario: any, idx: number) => {
+          logger.info(`[Vision Architect] Scenario ${idx + 1}: ${scenario.name}`);
+          logger.info(`  Type: ${scenario.type}`);
+          logger.info(`  Objects: ${JSON.stringify(scenario.objectClassifications)}`);
+          if (scenario.filters?.length > 0) {
+            logger.info(`  Filters: ${JSON.stringify(scenario.filters)}`);
+          }
+          if (scenario.metadata) {
+            logger.info(`  Metadata: ${JSON.stringify(scenario.metadata)}`);
+          }
+        });
+      }
+      
+      if (systemConfig.skills?.length > 0) {
+        logger.info('[Vision Architect] === SKILLS ===');
+        systemConfig.skills.forEach((skill: any, idx: number) => {
+          logger.info(`[Vision Architect] Skill ${idx + 1}: ${skill.name}`);
+          logger.info(`  Description: ${skill.description}`);
+          logger.info(`  Category: ${skill.category}`);
+          logger.info(`  Objects: ${skill.analysisConfiguration?.objectDetection?.join(', ')}`);
+          logger.info(`  Questions: ${skill.analysisConfiguration?.questions?.length || 0}`);
+          logger.info(`  Response Criteria: ${skill.analysisConfiguration?.responseCriteria}`);
+        });
+      }
+      
+      if (systemConfig.securityProfiles?.length > 0) {
+        logger.info('[Vision Architect] === SECURITY PROFILES ===');
+        systemConfig.securityProfiles.forEach((profile: any, idx: number) => {
+          logger.info(`[Vision Architect] Profile ${idx + 1}: ${profile.name}`);
+          logger.info(`  Skill: ${profile.skillId}`);
+          logger.info(`  Trigger: ${profile.trigger?.type} - ${profile.trigger?.profile}`);
+          logger.info(`  Schedule: ${profile.analysisSchedule || 'Always'}`);
+          if (profile.activeMonitoring?.enabled) {
+            logger.info(`  Active Monitoring: Every ${profile.activeMonitoring.intervalMs}ms for max ${profile.activeMonitoring.maxDurationSec}s`);
+          }
+        });
+      }
+      
+      logger.info('[Vision Architect] System Justification:', systemConfig.systemJustification);
 
       return {
         success: true,
@@ -211,7 +268,8 @@ export class VisionArchitect {
     cameraIp: string,
     username: string,
     password: string,
-    systemConfig: any
+    systemConfig: any,
+    mockMode: boolean = true
   ): Promise<{
     success: boolean;
     deployed: {
@@ -226,48 +284,184 @@ export class VisionArchitect {
     let deployedSkills = 0;
     let deployedProfiles = 0;
 
+    logger.info('========================================');
+    logger.info('[Vision Architect] STARTING DEPLOYMENT (MOCK)');
+    logger.info('========================================');
+    logger.info('[Vision Architect] Target Camera:', cameraIp);
+    logger.info('[Vision Architect] Username:', username);
+    logger.info('[Vision Architect] Components to Deploy:', {
+      scenarios: systemConfig.axisScenarios?.length || 0,
+      skills: systemConfig.skills?.length || 0,
+      profiles: systemConfig.securityProfiles?.length || 0
+    });
+
     try {
-      // 1. Deploy AOA Scenarios
-      if (systemConfig.axisScenarios?.length > 0) {
-        const aoaService = new AOAService(cameraIp, username, password);
+      // 1. Send complete system to ACAP endpoint
+      if (!mockMode && systemConfig.axisScenarios?.length > 0) {
+        logger.info('[Vision Architect] === SENDING COMPLETE SYSTEM TO ACAP (LIVE) ===');
         
-        for (const scenario of systemConfig.axisScenarios) {
-          try {
-            await aoaService.createScenario(scenario);
-            deployedScenarios++;
-            logger.info(`[Vision Architect] Deployed AOA scenario: ${scenario.name}`);
-          } catch (error: any) {
-            errors.push(`AOA scenario '${scenario.name}': ${error.message}`);
+        try {
+          require('axios');
+          const url = `http://${cameraIp}/local/BatonAnalytic/baton_analytic.cgi?command=deployVisionSystem`;
+          
+          // Send the entire generated system
+          const payload = {
+            systemOverview: systemConfig.systemOverview,
+            axisScenarios: systemConfig.axisScenarios,
+            skills: systemConfig.skills || [],
+            securityProfiles: systemConfig.securityProfiles || [],
+            systemJustification: systemConfig.systemJustification
+          };
+          
+          logger.info('[Vision Architect] 🚀 SENDING TO LIVE ENDPOINT');
+          logger.info('[Vision Architect] Camera IP:', cameraIp);
+          logger.info('[Vision Architect] Endpoint:', url);
+          logger.info('[Vision Architect] Payload size:', JSON.stringify(payload).length, 'bytes');
+          logger.info('[Vision Architect] Components:', {
+            scenarios: systemConfig.axisScenarios.length,
+            skills: systemConfig.skills?.length || 0,
+            profiles: systemConfig.securityProfiles?.length || 0
+          });
+          
+          // Log first scenario for debugging
+          if (systemConfig.axisScenarios.length > 0) {
+            logger.info('[Vision Architect] First scenario preview:', {
+              name: systemConfig.axisScenarios[0].name,
+              type: systemConfig.axisScenarios[0].type,
+              objects: systemConfig.axisScenarios[0].objectClassifications
+            });
+          }
+          
+          // Make request with digest auth
+          const response = await this.makeDigestAuthRequest(
+            url,
+            username,
+            password,
+            payload
+          );
+          
+          logger.info('[Vision Architect] Response status:', response.status);
+          logger.info('[Vision Architect] Response headers:', response.headers);
+          
+          if (response.status === 200 || response.status === 201) {
+            logger.info('[Vision Architect] ✅ SUCCESS! System deployed to camera');
+            
+            // Parse response data if available
+            if (response.data) {
+              logger.info('[Vision Architect] Response data:', 
+                typeof response.data === 'object' ? JSON.stringify(response.data, null, 2) : response.data
+              );
+              
+              // Check for specific success indicators in response
+              if (response.data.success || response.data.status === 'success') {
+                logger.info('[Vision Architect] ACAP confirmed successful deployment');
+              }
+              
+              // Extract deployment details from response if available
+              if (response.data.deployed) {
+                deployedScenarios = response.data.deployed.scenarios || systemConfig.axisScenarios.length;
+                deployedSkills = response.data.deployed.skills || systemConfig.skills?.length || 0;
+                deployedProfiles = response.data.deployed.profiles || systemConfig.securityProfiles?.length || 0;
+              } else {
+                // Assume all were deployed if no specific counts in response
+                deployedScenarios = systemConfig.axisScenarios.length;
+                deployedSkills = systemConfig.skills?.length || 0;
+                deployedProfiles = systemConfig.securityProfiles?.length || 0;
+              }
+            } else {
+              // No response data, assume success based on status code
+              deployedScenarios = systemConfig.axisScenarios.length;
+              deployedSkills = systemConfig.skills?.length || 0;
+              deployedProfiles = systemConfig.securityProfiles?.length || 0;
+            }
+            
+            logger.info('[Vision Architect] Deployment complete:', {
+              scenarios: deployedScenarios,
+              skills: deployedSkills,
+              profiles: deployedProfiles
+            });
+          } else if (response.status === 400) {
+            logger.error('[Vision Architect] ❌ Bad Request (400) - Invalid payload format');
+            logger.error('[Vision Architect] Response:', response.data);
+            errors.push(`Invalid payload format: ${JSON.stringify(response.data)}`);
+          } else if (response.status === 401) {
+            logger.error('[Vision Architect] ❌ Authentication failed (401)');
+            errors.push('Authentication failed - check camera credentials');
+          } else if (response.status === 404) {
+            logger.error('[Vision Architect] ❌ Endpoint not found (404)');
+            errors.push('ACAP endpoint not found - ensure latest ACAP is deployed');
+          } else if (response.status === 500) {
+            logger.error('[Vision Architect] ❌ Internal server error (500)');
+            logger.error('[Vision Architect] Response:', response.data);
+            errors.push(`Camera error: ${response.data?.error || 'Internal server error'}`);
+          } else {
+            logger.error(`[Vision Architect] ❌ Unexpected status: ${response.status}`);
+            logger.error('[Vision Architect] Response:', response.data);
+            errors.push(`Unexpected response: ${response.status} - ${response.data?.message || response.statusText}`);
+          }
+        } catch (err: any) {
+          logger.error('[Vision Architect] ❌ Deployment failed with error:', err);
+          
+          // Handle specific error types
+          if (err.code === 'ECONNREFUSED') {
+            errors.push('Connection refused - camera may be offline or IP incorrect');
+          } else if (err.code === 'ETIMEDOUT') {
+            errors.push('Connection timeout - camera not responding');
+          } else if (err.response) {
+            // Axios error with response
+            logger.error('[Vision Architect] Error response:', {
+              status: err.response.status,
+              data: err.response.data
+            });
+            errors.push(`ACAP error (${err.response.status}): ${err.response.data?.message || err.message}`);
+          } else if (err.request) {
+            // Request made but no response
+            logger.error('[Vision Architect] No response received');
+            errors.push('No response from camera - check network connection');
+          } else {
+            // Other errors
+            errors.push(`Deployment error: ${err.message}`);
           }
         }
+      } else if (mockMode && systemConfig.axisScenarios?.length > 0) {
+        // MOCK deployment - just log
+        logger.info('[Vision Architect] === MOCK DEPLOYMENT ===');
+        
+        const fullPayload = {
+          systemOverview: systemConfig.systemOverview,
+          axisScenarios: systemConfig.axisScenarios,
+          skills: systemConfig.skills,
+          securityProfiles: systemConfig.securityProfiles,
+          systemJustification: systemConfig.systemJustification
+        };
+        
+        logger.info('[Vision Architect] MOCK: Would send to ACAP endpoint:');
+        logger.info('[Vision Architect] MOCK: URL: http://' + cameraIp + '/local/BatonAnalytic/baton_analytic.cgi?command=deployVisionSystem');
+        logger.info('[Vision Architect] MOCK: Complete Payload:');
+        logger.info(JSON.stringify(fullPayload, null, 2));
+        
+        // Simulate deployment counts
+        deployedScenarios = systemConfig.axisScenarios.length;
+        deployedSkills = systemConfig.skills?.length || 0;
+        deployedProfiles = systemConfig.securityProfiles?.length || 0;
+        
+        logger.info(`[Vision Architect] MOCK: "Deployed" ${deployedScenarios} scenarios, ${deployedSkills} skills, ${deployedProfiles} profiles`);
       }
 
-      // 2. Deploy Skills (via ACAP API)
-      if (systemConfig.skills?.length > 0) {
-        for (const skill of systemConfig.skills) {
-          try {
-            await this.deploySkill(cameraIp, username, password, skill);
-            deployedSkills++;
-            logger.info(`[Vision Architect] Deployed skill: ${skill.name}`);
-          } catch (error: any) {
-            errors.push(`Skill '${skill.name}': ${error.message}`);
-          }
-        }
-      }
 
-      // 3. Deploy Security Profiles (via ACAP API)
-      if (systemConfig.securityProfiles?.length > 0) {
-        for (const profile of systemConfig.securityProfiles) {
-          try {
-            await this.deployProfile(cameraIp, username, password, profile);
-            deployedProfiles++;
-            logger.info(`[Vision Architect] Deployed profile: ${profile.name}`);
-          } catch (error: any) {
-            errors.push(`Profile '${profile.name}': ${error.message}`);
-          }
-        }
+      logger.info('========================================');
+      logger.info('[Vision Architect] DEPLOYMENT COMPLETE (MOCK)');
+      logger.info('========================================');
+      logger.info('[Vision Architect] Deployment Summary:');
+      logger.info(`  AOA Scenarios: ${deployedScenarios}/${systemConfig.axisScenarios?.length || 0}`);
+      logger.info(`  Skills: ${deployedSkills}/${systemConfig.skills?.length || 0}`);
+      logger.info(`  Security Profiles: ${deployedProfiles}/${systemConfig.securityProfiles?.length || 0}`);
+      logger.info(`  Errors: ${errors.length}`);
+      
+      if (errors.length > 0) {
+        logger.error('[Vision Architect] Deployment Errors:', errors);
       }
-
+      
       return {
         success: errors.length === 0,
         deployed: {
@@ -293,56 +487,6 @@ export class VisionArchitect {
   }
 
   /**
-   * Deploy a skill to the camera via ACAP API
-   */
-  private async deploySkill(
-    cameraIp: string,
-    username: string,
-    password: string,
-    skill: any
-  ): Promise<void> {
-    const axios = require('axios');
-    const crypto = require('crypto');
-
-    const url = `http://${cameraIp}/local/BatonAnalytic/baton_analytic.cgi?command=createSkill`;
-    
-    // Make the API call with digest auth
-    const response = await this.makeDigestAuthRequest(
-      url,
-      username,
-      password,
-      skill
-    );
-
-    if (response.status !== 200) {
-      throw new Error(`Failed to deploy skill: ${response.status}`);
-    }
-  }
-
-  /**
-   * Deploy a security profile to the camera via ACAP API
-   */
-  private async deployProfile(
-    cameraIp: string,
-    username: string,
-    password: string,
-    profile: any
-  ): Promise<void> {
-    const url = `http://${cameraIp}/local/BatonAnalytic/baton_analytic.cgi?command=createSecurityProfile`;
-    
-    const response = await this.makeDigestAuthRequest(
-      url,
-      username,
-      password,
-      profile
-    );
-
-    if (response.status !== 200) {
-      throw new Error(`Failed to deploy profile: ${response.status}`);
-    }
-  }
-
-  /**
    * Make a request with digest authentication
    */
   private async makeDigestAuthRequest(
@@ -352,16 +496,23 @@ export class VisionArchitect {
     data: any
   ): Promise<any> {
     const axios = require('axios');
-    const crypto = require('crypto');
+    require('crypto');
+
+    logger.info('[Vision Architect] Making digest auth request to:', url);
 
     // First request to get auth challenge
     const response1 = await axios.post(url, JSON.stringify(data), {
       headers: { 'Content-Type': 'application/json' },
-      validateStatus: () => true
+      validateStatus: () => true,
+      timeout: 30000 // 30 second timeout
     });
+
+    logger.info('[Vision Architect] Initial response status:', response1.status);
 
     if (response1.status === 401) {
       const wwwAuth = response1.headers['www-authenticate'];
+      logger.info('[Vision Architect] WWW-Authenticate header:', wwwAuth);
+      
       if (wwwAuth && wwwAuth.includes('Digest')) {
         // Build digest auth header
         const authHeader = this.buildDigestAuth(
@@ -372,13 +523,22 @@ export class VisionArchitect {
           wwwAuth
         );
 
+        logger.info('[Vision Architect] Sending authenticated request...');
+        
         // Second request with auth
-        return await axios.post(url, JSON.stringify(data), {
+        const response2 = await axios.post(url, JSON.stringify(data), {
           headers: {
             'Authorization': authHeader,
             'Content-Type': 'application/json'
-          }
+          },
+          validateStatus: () => true,
+          timeout: 30000
         });
+        
+        logger.info('[Vision Architect] Authenticated response status:', response2.status);
+        return response2;
+      } else {
+        logger.warn('[Vision Architect] Expected Digest auth but got:', wwwAuth);
       }
     }
 
@@ -436,6 +596,7 @@ export class VisionArchitect {
 
     return authHeader;
   }
+
 }
 
 /**
@@ -455,9 +616,18 @@ export async function generateAndDeployVisionSystem(
   deployment?: any;
 }> {
   try {
+    logger.info('\n\n========================================');
+    logger.info('VISION ARCHITECT - FULL PIPELINE START');
+    logger.info('========================================');
+    logger.info('Camera IP:', cameraIp);
+    logger.info('User Goal:', userGoal);
+    logger.info('Image Description:', imageDescription || 'None');
+    logger.info('API Key Length:', geminiApiKey?.length || 0);
+    
     const architect = new VisionArchitect(geminiApiKey);
     
     // Generate the system
+    logger.info('\n>>> PHASE 1: GENERATING SYSTEM...');
     const system = await architect.generateVisionSystem({
       userGoal,
       imageDescription
@@ -467,7 +637,7 @@ export async function generateAndDeployVisionSystem(
       throw new Error(`Failed to generate system: ${system.error}`);
     }
 
-    logger.info('[Vision Architect] Generated system overview:', system.systemOverview);
+    logger.info('\n>>> PHASE 2: DEPLOYING SYSTEM...');
 
     // Deploy to camera
     const deployment = await architect.deploySystem(
