@@ -44,8 +44,12 @@ You MUST respond with a valid JSON object with this exact structure:
       "category": "security",
       "analysisConfiguration": {
         "description": "Analysis guidance",
-        "questions": [],
-        "objectDetection": ["person"],
+        "questions": [
+          {"id": 1, "name": "person_present", "text": "Is there a person in the scene?", "type": "bool", "enabled": true, "stateful": false},
+          {"id": 2, "name": "person_count", "text": "How many people are visible?", "type": "int", "enabled": true, "stateful": false},
+          {"id": 3, "name": "person_activity", "text": "What is the person doing?", "type": "string", "enabled": true, "stateful": false}
+        ],
+        "objectDetection": ["person", "vehicle", "weapon"],
         "responseCriteria": "Detailed instructions like: If you see a person loitering near the ATM for more than 30 seconds, respond by alerting security and describe their clothing, behavior, and exact location",
         "talkdownActivated": false,
         "elevenLabsVoiceId": ""
@@ -99,6 +103,40 @@ Always include proper trigger structure:
 
 ## Critical Field Explanations
 
+### questions Array
+Questions must follow this EXACT format for each question object:
+- **id**: Sequential integer starting from 1
+- **name**: Snake_case identifier (e.g., "person_present", "vehicle_count", "activity_type")
+- **text**: The actual question text to analyze
+- **type**: Must be "bool", "int", or "string"
+- **enabled**: Always true unless specifically disabled
+- **stateful**: Set to true if answer should persist across frames (e.g., "has_weapon_been_seen")
+
+Example questions for different scenarios:
+```
+Security: 
+[
+  {"id": 1, "name": "unauthorized_person", "text": "Is there an unauthorized person in the restricted area?", "type": "bool", "enabled": true, "stateful": false},
+  {"id": 2, "name": "person_count", "text": "How many people are in the scene?", "type": "int", "enabled": true, "stateful": false},
+  {"id": 3, "name": "suspicious_behavior", "text": "Describe any suspicious behavior", "type": "string", "enabled": true, "stateful": false}
+]
+
+Safety:
+[
+  {"id": 1, "name": "ppe_compliance", "text": "Are all workers wearing required PPE?", "type": "bool", "enabled": true, "stateful": false},
+  {"id": 2, "name": "hazard_present", "text": "Is there a safety hazard present?", "type": "bool", "enabled": true, "stateful": true},
+  {"id": 3, "name": "hazard_description", "text": "Describe the safety hazard if present", "type": "string", "enabled": true, "stateful": false}
+]
+```
+
+### objectDetection Array
+List of objects to detect as simple strings. Common values:
+- "person", "vehicle", "car", "truck", "bike"
+- "weapon", "knife", "gun"
+- "package", "bag", "box"
+- "animal", "dog", "cat"
+- "face", "license_plate"
+
 ### responseCriteria
 This is the AI's exact instructions for when and how to respond. Format it as: "If you see [specific condition], respond by [specific action] with the goal of [desired outcome] and include [specific details to report]"
 
@@ -132,6 +170,32 @@ Only set to true if verbal interaction would help achieve the stated goal.
 8. **Include "selected": true** in all objectClassifications entries
 9. **Write detailed responseCriteria** - Be specific about conditions, actions, goals, and what to report
 10. **Use talkdownActivated thoughtfully** - Only when verbal interaction helps achieve the goal
+
+## Complete Skill Example
+
+Here's a properly formatted skill for "Monitor for suspicious activity":
+
+```
+{
+  "name": "SuspiciousActivity",
+  "description": "Detects and analyzes suspicious behavior patterns",
+  "category": "security",
+  "analysisConfiguration": {
+    "description": "Monitor for unauthorized access, loitering, or suspicious behavior",
+    "questions": [
+      {"id": 1, "name": "person_detected", "text": "Is there a person in view?", "type": "bool", "enabled": true, "stateful": false},
+      {"id": 2, "name": "person_count", "text": "How many people are visible?", "type": "int", "enabled": true, "stateful": false},
+      {"id": 3, "name": "loitering_detected", "text": "Is someone loitering in the area?", "type": "bool", "enabled": true, "stateful": true},
+      {"id": 4, "name": "activity_description", "text": "What activity is occurring?", "type": "string", "enabled": true, "stateful": false},
+      {"id": 5, "name": "threat_level", "text": "What is the threat level (0-10)?", "type": "int", "enabled": true, "stateful": false}
+    ],
+    "objectDetection": ["person", "vehicle", "weapon", "bag", "face"],
+    "responseCriteria": "If you detect someone loitering for more than 30 seconds near restricted areas, or see suspicious behavior like attempting to hide, looking around nervously, or carrying suspicious objects, immediately alert security with the person's location, physical description, clothing, behavior details, and threat assessment. Include whether they have any bags or potential weapons.",
+    "talkdownActivated": true,
+    "elevenLabsVoiceId": ""
+  }
+}
+```
 
 ## Example for "Tell me about any suspicious activity"
 
