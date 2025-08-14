@@ -37,6 +37,7 @@ import {
   Select,
 } from '@mui/material';
 import DetectionTestModal from '../components/DetectionTestModal';
+import { AOAScenarioDialog } from '../components/AOAScenarioDialog';
 import { useNavigationGuard } from '../hooks/useNavigationGuard';
 import NavigationWarningDialog from '../components/NavigationWarningDialog';
 import {
@@ -155,6 +156,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [processingSpeakerConfig, setProcessingSpeakerConfig] = useState(false);
   const [showDetectionModal, setShowDetectionModal] = useState(false);
   const [validatingCredentials, setValidatingCredentials] = useState(false);
+  const [showAOADialog, setShowAOADialog] = useState(false);
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
   
   // Check if any operation is in progress
   const isOperationInProgress = scanning || connecting || deploying || analyzing || 
@@ -962,8 +965,45 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       }, 500);
       
 
-      // Smoothly complete to 100%
+      // Check if we have a Gemini API key for AOA configuration
       setDeploymentProgress(97);
+      
+      try {
+        // First try to get the Gemini API key from config
+        const geminiKey = await (window.electronAPI as any).getConfigValue?.('geminiApiKey');
+        
+        if (geminiKey) {
+          setGeminiApiKey(geminiKey);
+          // Show AOA dialog for scenario creation
+          setShowAOADialog(true);
+          setDeploymentStatus('Configure AI detection...');
+          return; // Don't complete yet, wait for AOA dialog
+        }
+        
+        // Fallback: try to get from deployments
+        const savedDeployments = await (window.electronAPI as any).getConfigValue?.('deployments') || {};
+        const projectIds = Object.keys(savedDeployments);
+        if (projectIds.length > 0) {
+          const deployment = savedDeployments[projectIds[0]];
+          // Try to get API key from deployment
+          const apiKey = deployment?.aiStudioApiKey || deployment?.geminiApiKey || '';
+          if (apiKey) {
+            setGeminiApiKey(apiKey);
+            // Show AOA dialog for scenario creation
+            setShowAOADialog(true);
+            setDeploymentStatus('Configure AI detection...');
+            return; // Don't complete yet, wait for AOA dialog
+          }
+        }
+      } catch (error) {
+        console.log('Could not get Gemini API key for AOA:', error);
+      }
+      
+      // If no API key or error, complete normally
+      await completeSetupFlow();
+    };
+    
+    const completeSetupFlow = async () => {
       await new Promise(resolve => setTimeout(resolve, 300));
       setDeploymentProgress(100);
       setDeploymentStatus('Setup complete!');
@@ -2130,6 +2170,25 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         } : null}
         speakerConfig={configureSpeaker ? speakerConfig : undefined}
       />
+      
+      {/* AOA Scenario Dialog */}
+      {selectedCamera && credentials.username && credentials.password && (
+        <AOAScenarioDialog
+          open={showAOADialog}
+          cameraIp={selectedCamera.ip}
+          username={credentials.username}
+          password={credentials.password}
+          geminiApiKey={geminiApiKey}
+          onComplete={() => {
+            setShowAOADialog(false);
+            completeSetupFlow();
+          }}
+          onSkip={() => {
+            setShowAOADialog(false);
+            completeSetupFlow();
+          }}
+        />
+      )}
       
       <NavigationWarningDialog
         open={showDialog}
