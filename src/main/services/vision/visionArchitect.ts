@@ -94,12 +94,8 @@ When detecting specific objects, use objectClassifications array:
 
 ### Trigger Format
 Always include proper trigger structure:
-```json
-"triggers": [{
-  "type": "includeArea",
-  "vertices": [[-0.9, -0.9], [-0.9, 0.9], [0.9, 0.9], [0.9, -0.9]]
-}]
-```
+- type: "includeArea" for area-based detection
+- vertices: Array of [x, y] coordinates defining the area (normalized -1 to 1)
 
 ## Key Guidelines
 
@@ -119,23 +115,17 @@ For a security-focused request, create:
 - **Skills**: WeaponDetection, SuspiciousLoitering, UnauthorizedAccess, AfterHoursActivity
 - **Profiles**: Different profiles for business hours vs after hours, with appropriate triggers
 
-### CORRECT Scenario Examples:
-```json
-{
-  "name": "PersonDetect",
-  "type": "motion",  // NOT "object"!
-  "enabled": true,
-  "triggers": [{
-    "type": "includeArea",
-    "vertices": [[-0.9, -0.9], [-0.9, 0.9], [0.9, 0.9], [0.9, -0.9]]
-  }],
-  "filters": [],
-  "objectClassifications": [{"type": "human", "selected": true}]
-}
-```
+### CORRECT Scenario Example:
+For person detection, use:
+- name: "PersonDetect"
+- type: "motion" (NOT "object"!)
+- enabled: true
+- triggers: Array with includeArea type and vertices
+- filters: Empty array or specific filters
+- objectClassifications: [{"type": "human", "selected": true}]
 
-WRONG: `"type": "object"` ❌
-RIGHT: `"type": "motion"` with objectClassifications ✅
+WRONG: Using type "object" - this doesn't exist in AOA
+RIGHT: Using type "motion" with objectClassifications for person/vehicle detection
 
 Remember: Return ONLY the JSON object, no additional text or explanation.
 `;
