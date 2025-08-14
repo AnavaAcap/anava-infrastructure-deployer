@@ -25,6 +25,7 @@ const ACAPDeploymentPage = lazy(() => import('./pages/camera/ACAPDeploymentPage'
 const ACAPManager = lazy(() => import('./pages/camera/ACAPManager').then(m => ({ default: m.ACAPManager })));
 const CameraSetupPage = lazy(() => import('./pages/CameraSetupPage'));
 const DetectionTestPage = lazy(() => import('./pages/DetectionTestPage'));
+const VisionArchitectPage = lazy(() => import('./pages/VisionArchitectPage'));
 
 function App() {
   const [isAppReady, setIsAppReady] = useState(false);
@@ -311,6 +312,8 @@ function App() {
       case 'camera-setup':
         return <CameraSetupPage onNavigate={(view) => setCurrentView(view as NavigationView)} />;
 
+      case 'vision-architect':
+        return <VisionArchitectPage />;
 
       case 'detection-test':
         return <DetectionTestPage />;

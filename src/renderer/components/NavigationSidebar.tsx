@@ -21,11 +21,13 @@ import {
   Download as DownloadIcon,
   PlayCircleOutline as PlayCircleIcon,
   OpenInNew as OpenInNewIcon,
+  Architecture as ArchitectureIcon,
 } from '@mui/icons-material';
 
 export type NavigationView = 
   | 'welcome' 
   | 'camera-setup'
+  | 'vision-architect'
   | 'detection-test'
   | 'gcp-setup' 
   | 'camera-discovery' 
@@ -127,8 +129,15 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     },
     { type: 'divider' },
     { 
+      id: 'vision-architect' as NavigationView, 
+      label: 'Configure Vision AI', 
+      icon: <ArchitectureIcon />,
+      alwaysEnabled: true,
+      badge: 'NEW!' as const
+    },
+    { 
       id: 'detection-test' as NavigationView, 
-      label: 'Test Detection', 
+      label: 'Test AI Detection', 
       icon: <PlayCircleIcon />,
       alwaysEnabled: true 
     },
