@@ -33,7 +33,7 @@ You MUST respond with a valid JSON object with this exact structure:
       "enabled": true,
       "triggers": [],
       "filters": [],
-      "objectClassifications": [{"type": "human"}],
+      "objectClassifications": [{"type": "human", "selected": true}],
       "metadata": {}
     }
   ],
@@ -75,14 +75,42 @@ You MUST respond with a valid JSON object with this exact structure:
   "systemJustification": "Why this configuration meets the user's goals"
 }
 
+## CRITICAL AOA Scenario Rules
+
+AOA (Axis Object Analytics) ONLY supports these scenario types:
+- **"motion"** - Motion detection with area triggers (USE THIS FOR PERSON/OBJECT DETECTION)
+- **"fence"** - Virtual fence/perimeter protection
+- **"crosslinecount"** - Line crossing counter
+- **"occupancy"** - Area occupancy monitoring
+
+NEVER use type "object" - it doesn't exist! For person or vehicle detection, use type "motion" with objectClassifications.
+
+### Object Classification Format
+When detecting specific objects, use objectClassifications array:
+- For humans: [{"type": "human", "selected": true}]
+- For vehicles: [{"type": "vehicle", "selected": true}]
+- For both: [{"type": "human", "selected": true}, {"type": "vehicle", "selected": true}]
+- For all objects: [] (empty array)
+
+### Trigger Format
+Always include proper trigger structure:
+```json
+"triggers": [{
+  "type": "includeArea",
+  "vertices": [[-0.9, -0.9], [-0.9, 0.9], [0.9, 0.9], [0.9, -0.9]]
+}]
+```
+
 ## Key Guidelines
 
 1. **Always return valid JSON** - No text before or after the JSON object
-2. **Create multiple skills** for comprehensive coverage - don't try to do everything in one skill
-3. **Match trigger profiles** - The profile name in triggers should match the scenario names
-4. **Use continuous monitoring** for scenarios like loitering, queue management, or safety compliance
-5. **Keep scenario names short** - Maximum 15 characters
-6. **Focus on the user's goal** - Every component should serve their stated objective
+2. **ALWAYS use "motion" type for person/vehicle detection** - Never use "object" type
+3. **Create multiple skills** for comprehensive coverage - don't try to do everything in one skill
+4. **Match trigger profiles** - The profile name in triggers should match the scenario names
+5. **Use continuous monitoring** for scenarios like loitering, queue management, or safety compliance
+6. **Keep scenario names short** - Maximum 15 characters
+7. **Focus on the user's goal** - Every component should serve their stated objective
+8. **Include "selected": true** in all objectClassifications entries
 
 ## Example for "Tell me about any suspicious activity"
 
@@ -90,6 +118,24 @@ For a security-focused request, create:
 - **AOA Scenarios**: Motion detection, loitering detection, perimeter monitoring
 - **Skills**: WeaponDetection, SuspiciousLoitering, UnauthorizedAccess, AfterHoursActivity
 - **Profiles**: Different profiles for business hours vs after hours, with appropriate triggers
+
+### CORRECT Scenario Examples:
+```json
+{
+  "name": "PersonDetect",
+  "type": "motion",  // NOT "object"!
+  "enabled": true,
+  "triggers": [{
+    "type": "includeArea",
+    "vertices": [[-0.9, -0.9], [-0.9, 0.9], [0.9, 0.9], [0.9, -0.9]]
+  }],
+  "filters": [],
+  "objectClassifications": [{"type": "human", "selected": true}]
+}
+```
+
+WRONG: `"type": "object"` ❌
+RIGHT: `"type": "motion"` with objectClassifications ✅
 
 Remember: Return ONLY the JSON object, no additional text or explanation.
 `;
@@ -108,11 +154,32 @@ export const VISION_SYSTEM_SCHEMA = {
         type: SchemaType.OBJECT,
         properties: {
           name: { type: SchemaType.STRING },
-          type: { type: SchemaType.STRING },
+          type: { 
+            type: SchemaType.STRING,
+            enum: ["motion", "fence", "crosslinecount", "occupancy"] // Only valid AOA types
+          },
           enabled: { type: SchemaType.BOOLEAN },
-          triggers: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } },
+          triggers: { 
+            type: SchemaType.ARRAY, 
+            items: { 
+              type: SchemaType.OBJECT,
+              properties: {
+                type: { type: SchemaType.STRING },
+                vertices: { type: SchemaType.ARRAY }
+              }
+            }
+          },
           filters: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } },
-          objectClassifications: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } },
+          objectClassifications: { 
+            type: SchemaType.ARRAY, 
+            items: { 
+              type: SchemaType.OBJECT,
+              properties: {
+                type: { type: SchemaType.STRING },
+                selected: { type: SchemaType.BOOLEAN }
+              }
+            }
+          },
           metadata: { type: SchemaType.OBJECT, properties: {} }
         },
         required: ["name", "type", "enabled", "triggers", "objectClassifications"]

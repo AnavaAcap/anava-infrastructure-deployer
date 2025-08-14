@@ -240,8 +240,21 @@ export class VisionArchitectDeployer {
    */
   private async createAOAScenario(scenario: any): Promise<number | null> {
     try {
-      // Convert Vision Architect scenario format to AOA format
+      // Get existing scenarios to find next available ID
+      const existingScenarios = await this.aoaService.getScenarios();
+      const existingIds = existingScenarios.map(s => s.id);
+      
+      // Find next available ID (avoid conflicts)
+      let nextId = 1;
+      while (existingIds.includes(nextId)) {
+        nextId++;
+      }
+      
+      // Convert Vision Architect scenario format to AOA format with proper ID
       const aoaScenario = this.convertToAOAFormat(scenario);
+      aoaScenario.id = nextId;
+      
+      logger.info(`[Vision Deployer] Creating AOA scenario "${scenario.name}" with ID ${nextId}`);
       
       // Create the scenario using AOAService
       const success = await this.aoaService.createScenario(aoaScenario);
@@ -250,7 +263,7 @@ export class VisionArchitectDeployer {
         // Get the created scenario ID
         const scenarios = await this.aoaService.getScenarios();
         const created = scenarios.find(s => s.name === scenario.name);
-        return created?.id || null;
+        return created?.id || nextId;
       }
       
       return null;
@@ -262,16 +275,17 @@ export class VisionArchitectDeployer {
 
   /**
    * Convert Vision Architect scenario format to AOA API format
+   * With hardened prompt, scenarios should already be in correct format
    */
   private convertToAOAFormat(scenario: any): any {
-    // Get next available scenario ID
-    const scenarioId = Date.now() % 1000; // Simple ID generation
+    // Get next available scenario ID (will be overridden in createAOAScenario)
+    const scenarioId = Date.now() % 1000;
     
-    // Build AOA format scenario
+    // Build AOA format scenario - pass through as-is since prompt is hardened
     const aoaScenario: any = {
       id: scenarioId,
       name: scenario.name || 'Scenario',
-      type: scenario.type || 'motion',
+      type: scenario.type || 'motion', // Should always be valid from hardened prompt
       enabled: scenario.enabled !== false,
       devices: [{ id: 1 }],
       triggers: [],
