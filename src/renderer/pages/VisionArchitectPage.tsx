@@ -30,7 +30,6 @@ import {
   SmartToy as AIIcon,
   Videocam as CameraIcon,
   CheckCircle as CheckIcon,
-  Settings as SettingsIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
 import { VisionArchitectDialog } from '../components/VisionArchitectDialog';
@@ -41,6 +40,7 @@ interface Camera {
   password: string;
   name?: string;
   configured?: boolean;
+  isManual?: boolean;
 }
 
 const VisionArchitectPage: React.FC = () => {
@@ -50,6 +50,13 @@ const VisionArchitectPage: React.FC = () => {
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [useManualEntry, setUseManualEntry] = useState(false);
+  const [manualCamera, setManualCamera] = useState<Camera>({
+    ip: '',
+    username: 'anava',
+    password: 'baton',
+    isManual: true
+  });
 
   useEffect(() => {
     loadConfiguration();
@@ -84,14 +91,20 @@ const VisionArchitectPage: React.FC = () => {
   };
 
   const handleOpenDialog = () => {
-    if (!selectedCamera) {
-      setError('Please select a camera first');
+    // Determine which camera to use
+    const cameraToUse = useManualEntry ? manualCamera : selectedCamera;
+    
+    if (!cameraToUse || (useManualEntry && !manualCamera.ip)) {
+      setError('Please provide camera information');
       return;
     }
     if (!geminiApiKey) {
-      setError('Please enter your Gemini API key');
+      setError('Gemini API key not found. Please ensure you are logged in properly.');
       return;
     }
+    
+    // Update selected camera for dialog
+    setSelectedCamera(cameraToUse);
     setDialogOpen(true);
   };
 
@@ -99,20 +112,6 @@ const VisionArchitectPage: React.FC = () => {
     setDialogOpen(false);
     // Refresh cameras to show updated status
     await loadConfiguration();
-  };
-
-  const handleApiKeyChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newKey = event.target.value;
-    setGeminiApiKey(newKey);
-    
-    // Save API key
-    if (newKey) {
-      try {
-        await (window as any).electronAPI.setConfigValue?.('geminiApiKey', newKey);
-      } catch (err) {
-        console.error('Failed to save API key:', err);
-      }
-    }
   };
 
   if (loading) {
@@ -160,71 +159,115 @@ const VisionArchitectPage: React.FC = () => {
 
       {/* Configuration Section */}
       <Stack spacing={3}>
+        {/* API Key Status */}
+        {!geminiApiKey && (
+          <Alert severity="warning">
+            Gemini API key not found. Please ensure you have completed the login process with a valid API key.
+          </Alert>
+        )}
+        
         {/* Camera Selection */}
         <Paper sx={{ p: 3 }}>
           <Typography variant="h6" gutterBottom>
             <CameraIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-            Select Camera
+            Camera Information
           </Typography>
           
-          {cameras.length === 0 ? (
-            <Alert severity="warning">
-              No cameras configured yet. Please configure cameras first using the Camera Setup page.
-            </Alert>
-          ) : (
-            <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel>Camera</InputLabel>
-              <Select
-                value={selectedCamera?.ip || ''}
-                onChange={(e) => {
-                  const camera = cameras.find(c => c.ip === e.target.value);
-                  setSelectedCamera(camera || null);
-                }}
-                label="Camera"
-              >
-                {cameras.map((camera) => (
-                  <MenuItem key={camera.ip} value={camera.ip}>
-                    <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
-                      <Box>
-                        <Typography variant="body2">
-                          {camera.name || camera.ip}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {camera.ip}
-                        </Typography>
+          {/* Selection Mode Toggle */}
+          <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+            <Button
+              variant={!useManualEntry ? "contained" : "outlined"}
+              onClick={() => {
+                setUseManualEntry(false);
+                setError(null);
+              }}
+              disabled={cameras.length === 0}
+            >
+              Select Configured Camera
+            </Button>
+            <Button
+              variant={useManualEntry ? "contained" : "outlined"}
+              onClick={() => {
+                setUseManualEntry(true);
+                setError(null);
+              }}
+            >
+              Enter Camera Manually
+            </Button>
+          </Stack>
+          
+          {!useManualEntry ? (
+            // Configured Camera Selection
+            cameras.length === 0 ? (
+              <Alert severity="info">
+                No configured cameras found. Use manual entry or configure cameras in Camera Setup.
+              </Alert>
+            ) : (
+              <FormControl fullWidth>
+                <InputLabel>Select Camera</InputLabel>
+                <Select
+                  value={selectedCamera?.ip || ''}
+                  onChange={(e) => {
+                    const camera = cameras.find(c => c.ip === e.target.value);
+                    setSelectedCamera(camera || null);
+                  }}
+                  label="Select Camera"
+                >
+                  {cameras.map((camera) => (
+                    <MenuItem key={camera.ip} value={camera.ip}>
+                      <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
+                        <Box>
+                          <Typography variant="body2">
+                            {camera.name || camera.ip}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {camera.ip}
+                          </Typography>
+                        </Box>
+                        {camera.configured && (
+                          <CheckIcon color="success" fontSize="small" />
+                        )}
                       </Box>
-                      {camera.configured && (
-                        <CheckIcon color="success" fontSize="small" />
-                      )}
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-              <FormHelperText>
-                Select the camera you want to configure with Vision AI
-              </FormHelperText>
-            </FormControl>
+                    </MenuItem>
+                  ))}
+                </Select>
+                <FormHelperText>
+                  Select from your previously configured cameras
+                </FormHelperText>
+              </FormControl>
+            )
+          ) : (
+            // Manual Camera Entry
+            <Stack spacing={2}>
+              <TextField
+                fullWidth
+                label="Camera IP Address"
+                value={manualCamera.ip}
+                onChange={(e) => setManualCamera({ ...manualCamera, ip: e.target.value })}
+                placeholder="192.168.1.100"
+                helperText="Enter the IP address of your camera"
+              />
+              <TextField
+                fullWidth
+                label="Username"
+                value={manualCamera.username}
+                onChange={(e) => setManualCamera({ ...manualCamera, username: e.target.value })}
+                placeholder="anava"
+                helperText="Camera login username"
+              />
+              <TextField
+                fullWidth
+                label="Password"
+                type="password"
+                value={manualCamera.password}
+                onChange={(e) => setManualCamera({ ...manualCamera, password: e.target.value })}
+                placeholder="baton"
+                helperText="Camera login password"
+              />
+            </Stack>
           )}
         </Paper>
 
-        {/* API Key Configuration */}
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            <SettingsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-            AI Configuration
-          </Typography>
-          
-          <TextField
-            fullWidth
-            label="Gemini API Key"
-            type="password"
-            value={geminiApiKey}
-            onChange={handleApiKeyChange}
-            placeholder="Enter your Gemini API key"
-            helperText="Get your free API key from makersuite.google.com/app/apikey"
-            sx={{ mt: 2 }}
-          />
-        </Paper>
 
         {/* Features */}
         <Paper sx={{ p: 3 }}>
@@ -287,7 +330,11 @@ const VisionArchitectPage: React.FC = () => {
             size="large"
             startIcon={<ArchitectureIcon />}
             onClick={handleOpenDialog}
-            disabled={!selectedCamera || !geminiApiKey}
+            disabled={
+              (!useManualEntry && !selectedCamera) || 
+              (useManualEntry && !manualCamera.ip) ||
+              !geminiApiKey
+            }
             sx={{ px: 4 }}
           >
             Configure Vision AI
