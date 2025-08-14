@@ -10,7 +10,22 @@
 - **Node.js**: v20.x
 - **Build System**: Vite v7.x
 
-## Latest Features (v0.9.206) - VISION ARCHITECT WITH SCENE CAPTURE ✅
+## Latest Features (v0.9.206) - VISION ARCHITECT ENTERPRISE INTELLIGENCE ✅
+
+### ✅ Advanced Vision Architect System - ENHANCED
+- **Anti-Hallucination Protocol**: Decomposes complex requests into specialized skills
+- **Ecosystem Design**: Creates 3-6 skills minimum, 2-4 profiles for complete coverage
+- **Continuous Monitoring**: Full support with interval and duration guidance
+- **Domain Examples**: Retail, Manufacturing, Healthcare, Security, Transportation
+- **Question Intelligence**: 5-8 hierarchical questions per skill for deep analysis
+- **Model Defaults**: Uses gemini-2.5-flash-lite, empty preFilterModel
+- **Files**: `visionArchitect.ts`, `visionArchitectDeployer.ts`
+
+### ✅ Sidebar Navigation Access - NEW
+- **Feature**: Vision Architect accessible from sidebar as "Configure Vision AI (NEW!)"
+- **Location**: Below divider, above Test AI Detection
+- **Manual Entry**: Support for direct IP/username/password input
+- **Files**: `VisionArchitectPage.tsx`, `NavigationSidebar.tsx`, `App.tsx`
 
 ### ✅ Scene Image Integration - NEW
 - **Feature**: Automatically captures scene image before Vision Architect generation
@@ -18,11 +33,12 @@
 - **UI**: Shows capture progress and image status indicator
 - **Files**: `VisionArchitectDialog.tsx`, `visionArchitect.ts`
 
-### ✅ Comprehensive Logging - NEW
-- **Feature**: Full logging of prompts, responses, and AI interactions
-- **Logs**: System prompt, user prompt, raw response, parsed JSON
-- **Debugging**: First 1000-2000 chars of prompts/responses logged
-- **Files**: `visionArchitect.ts`, `visionArchitectIPC.ts`
+### ✅ Proper ACAP Format Support - FIXED
+- **Questions Format**: Correct schema with id, name, text, type, enabled, stateful
+- **Object Detection**: Simple string array format
+- **Response Criteria**: Detailed conditional instructions
+- **Talkdown**: Strategic voice interaction when it adds value
+- **Files**: `visionArchitect.ts` system prompt
 
 ## Previous Features (v0.9.205) - API KEY MANAGEMENT & MODEL SELECTION ✅
 
@@ -206,6 +222,34 @@ tail -f "$LATEST_LOG"  # Follow log in real-time
 - Scene: `POST http://{ip}/local/BatonAnalytic/baton_analytic.cgi?command=getSceneDescription`
 - AOA Trigger: `POST http://{ip}/local/BatonAnalytic/baton_analytic.cgi?command=generateFromDescription`
 - Always use digest authentication
+
+### Vision Architect System Architecture
+**Revolutionary AI-driven camera analytics configuration system**
+
+**Core Principles**:
+1. **Anti-Hallucination**: Break complex requests into specialized skills (not monolithic)
+2. **Complete Ecosystems**: Generate multiple complementary skills and profiles
+3. **Continuous Monitoring**: Support for ongoing analysis with intervals and durations
+4. **Hierarchical Intelligence**: Objects → Questions → Insights → Actions
+
+**Skill Design**:
+- Each skill focuses on ONE specific aspect
+- 5-8 questions building hierarchical intelligence
+- Detailed responseCriteria with conditions and actions
+- Strategic talkdownActivated for voice interaction
+
+**Profile Strategy**:
+- Different profiles for times of day (BusinessHours, AfterHours)
+- Sensitivity levels (High_Security, Standard, Minimal)
+- activeMonitoring for continuous analysis (loitering, queues, safety)
+- Proper trigger configuration with AOA scenarios
+
+**Domain Coverage**:
+- Security & Loss Prevention
+- Retail Analytics & Customer Insights
+- Manufacturing Safety & Efficiency
+- Healthcare Patient Monitoring
+- Transportation & Logistics
 
 ### AOA Natural Language Processing (NEW)
 **Converts plain English descriptions to AOA scenarios automatically**
