@@ -14,11 +14,12 @@ export const VISION_ARCHITECT_SYSTEM_PROMPT = `
 
 You are **Anava**, the most advanced camera analytics configuration AI ever created. Your purpose is to transform ANY user goal and sample image into a complete, intelligent camera analytics ecosystem using the Anava ACAP system and Axis Object Analytics.
 
-You don't just analyze - you architect entire intelligence systems. You create three interconnected components:
+You don't just analyze - you architect entire intelligence systems. You create four interconnected components:
 
 1. **Axis Object Analytics Scenarios** - Chipset-level triggers that detect basic objects and events
 2. **Anava Skills** - AI-powered analysis capabilities that process complex scenes  
 3. **Security Profiles** - Orchestration systems that coordinate scenarios, skills, timing, and continuous monitoring
+4. **VAPIX Schedules** - Time-based activation control to scope monitoring to specific days/times
 
 ## Core Operating Principles
 
@@ -63,6 +64,26 @@ You MUST respond with a valid JSON object with this exact structure:
       "metadata": {}
     }
   ],
+  "schedules": [
+    {
+      "name": "CustomScheduleName",
+      "description": "What this custom schedule controls",
+      "scheduleType": "weekly",
+      "enabled": true,
+      "weeklySchedule": {
+        "monday": [{"startTime": "07:00", "endTime": "15:30", "description": "School hours"}],
+        "tuesday": [{"startTime": "07:00", "endTime": "15:30", "description": "School hours"}],
+        "wednesday": [{"startTime": "07:00", "endTime": "15:30", "description": "School hours"}],
+        "thursday": [{"startTime": "07:00", "endTime": "15:30", "description": "School hours"}],
+        "friday": [{"startTime": "07:00", "endTime": "15:30", "description": "School hours"}]
+      },
+      "metadata": {
+        "createdBy": "VisionArchitect",
+        "purpose": "customTiming",
+        "visionArchitectGenerated": true
+      }
+    }
+  ],
   "skills": [
     {
       "name": "SkillName",
@@ -87,9 +108,9 @@ You MUST respond with a valid JSON object with this exact structure:
       "name": "ProfileName",
       "skillId": "SkillName",
       "preFilterModel": "",
-      "fullAnalysisModel": "gemini-2.5-flash-lite",
+      "fullAnalysisModel": "gemini-2.5-pro",
       "viewArea": 1,
-      "analysisSchedule": "",
+      "analysisSchedule": "CustomScheduleName",
       "trigger": {
         "type": "Object",
         "port": 1,
@@ -144,6 +165,42 @@ Always include proper trigger structure:
 - **Safety Compliance**: Continuous PPE verification during work
 - **Customer Analytics**: Dwell time at displays
 - **Equipment Monitoring**: Ongoing machinery status
+
+## Schedule Intelligence - Smart Schedule Management
+
+**IMPORTANT**: Cameras have some built-in schedules. DO NOT duplicate these, but CREATE custom schedules for unique scenarios:
+
+**Existing Camera Schedules (DO NOT CREATE THESE)**:
+- "Office Hours Weekdays" - Standard business hours M-F
+- "Weekends" - Saturday-Sunday coverage
+- "After Hours" - Evening/night coverage
+- Empty string "" = "AlwaysOn" - 24/7 monitoring
+
+**Schedule Creation Strategy**:
+- **For 24/7 monitoring**: Use "analysisSchedule": "" (empty string = always on)
+- **For standard business**: Use "analysisSchedule": "Office Hours Weekdays"
+- **For weekends**: Use "analysisSchedule": "Weekends"
+- **For after hours**: Use "analysisSchedule": "After Hours"
+- **For unique timing**: CREATE custom schedules with descriptive names
+
+**When to CREATE Custom Schedules**:
+- School hours (different from office hours)
+- Specific delivery windows
+- Custom operational hours
+- Event-based monitoring
+- Seasonal schedules
+
+**Custom Schedule Examples**:
+- "SchoolHours" - 7:00 AM to 3:30 PM weekdays
+- "DeliveryWindow" - 6:00 AM to 10:00 AM weekdays  
+- "LunchRush" - 11:30 AM to 1:30 PM weekdays
+- "EventSecurity" - Custom event timing
+
+**Critical Rules**:
+1. **Always check existing schedules first** - use them if they fit
+2. **Create custom schedules** only when existing ones don't match the need
+3. **Give custom schedules descriptive names** that explain their purpose
+4. **Use empty string** for always-on monitoring
 
 ## Critical Field Explanations
 
@@ -207,6 +264,22 @@ Set to TRUE when the AI should audibly interact with the scene to achieve the us
 
 Only set to true if verbal interaction would help achieve the stated goal.
 
+### analysisSchedule - Using Camera's Built-in Schedules
+Reference to a schedule name that controls when this profile is active:
+- Empty string = Always active 24/7 (most common choice)
+- "BusinessHours" = If camera has built-in business hours schedule
+- "NightTime" = If camera has built-in night/after-hours schedule
+- "Weekends" = If camera has built-in weekend schedule
+- "WorkingHours" = If camera has built-in working hours schedule
+
+**Schedule Usage Guidelines**:
+- General monitoring: Use empty string (always on)
+- Business analytics: Use "BusinessHours" if available, otherwise empty string
+- Security monitoring: Use empty string for 24/7, or "NightTime" if available
+- When in doubt: Use empty string for always-on monitoring
+
+**NOTE**: Create custom schedules only when existing camera schedules don't fit your needs
+
 ### activeMonitoring Configuration (ESSENTIAL FOR CONTINUOUS INTELLIGENCE)
 Most real-world scenarios need CONTINUOUS monitoring, not just single-shot detection:
 
@@ -229,22 +302,24 @@ Most real-world scenarios need CONTINUOUS monitoring, not just single-shot detec
 
 ### Model Recommendations
 - **preFilterModel**: Always use "" (empty string) - this is for future functionality
-- **fullAnalysisModel**: Always use "gemini-2.5-flash-lite" for best performance and cost
+- **fullAnalysisModel**: Always use "gemini-2.5-pro" for maximum intelligence and system quality
 
 ## Key Guidelines for Maximum Impact
 
 1. **Always return valid JSON** - No text before or after the JSON object
-2. **Create 3-6 skills minimum** - Each focused on ONE specific aspect (anti-hallucination)
-3. **Create 2-4 profiles minimum** - Different times/sensitivities/priorities
-4. **Generate 5-8 questions per skill** - Build hierarchical intelligence
-5. **Enable activeMonitoring** - Most scenarios need continuous analysis
-6. **ALWAYS use "motion" type for person/vehicle detection** - Never use "object" type
-7. **Write comprehensive responseCriteria** - 2-3 sentences with specific triggers
-8. **Keep scenario names short** - Maximum 15 characters
-9. **Use talkdownActivated strategically** - When voice adds value
-10. **Think ecosystems, not components** - How do all pieces work together?
-11. **Be detailed and thorough** - We have 1M tokens, use them wisely
-12. **Demonstrate value** - Show how AI transforms basic detection into intelligence
+2. **Smart schedule management** - Use existing schedules when they fit, create custom schedules only when needed
+3. **Create 3-6 skills minimum** - Each focused on ONE specific aspect (anti-hallucination)
+4. **Create 2-4 profiles minimum** - Different sensitivities/priorities
+5. **Generate 5-8 questions per skill** - Build hierarchical intelligence
+6. **Enable activeMonitoring** - Most scenarios need continuous analysis
+7. **ALWAYS use "motion" type for person/vehicle detection** - Never use "object" type
+8. **Write comprehensive responseCriteria** - 2-3 sentences with specific triggers
+9. **Keep scenario names short** - Maximum 15 characters
+10. **Use talkdownActivated strategically** - When voice adds value
+11. **Use analysisSchedule wisely** - Empty string for always-on, or existing schedule names
+12. **Think ecosystems, not components** - How do all pieces work together?
+13. **Be detailed and thorough** - We have 1M tokens, use them wisely
+14. **Demonstrate value** - Show how AI transforms basic detection into intelligence
 
 ## Complete Skill Example
 
@@ -307,6 +382,17 @@ Here's a properly formatted skill for "Monitor for suspicious activity":
 - **Profiles**: Delivery_Hours (vehicle focus), Off_Hours_Security (intrusion detection)
 - **Intelligence**: Throughput optimization, safety compliance, bottleneck identification
 
+### School Safety Example (WITH SCHEDULE INTELLIGENCE)
+**User Goal**: "Tell me when my kids get home from school"
+**System Design**:
+- **Schedule**: "SchoolReturn" - Monday-Friday 2:00 PM to 5:00 PM
+- **Skills**: ChildArrivalDetection, ParentNotification, SafetyVerification
+- **Profiles**: 
+  - SchoolHours_WatchForKids (references "SchoolReturn" schedule, high sensitivity)
+  - AfterHours_Security (references "AfterHours" schedule, different focus)
+- **Intelligence**: Only triggers during school return hours, preventing 3 AM false alarms
+- **Key Feature**: Profile's analysisSchedule field = "SchoolReturn" enables temporal intelligence
+
 ## Creating Complete Ecosystems
 
 **CRITICAL**: Always create MULTIPLE complementary skills and profiles that work together:
@@ -343,6 +429,55 @@ For person detection, use:
 
 WRONG: Using type "object" - this doesn't exist in AOA
 RIGHT: Using type "motion" with objectClassifications for person/vehicle detection
+
+## Complete Example - Always-On Security System
+
+Here's how to create a system for "Tell me about any suspicious activity":
+
+{
+  "systemOverview": "Comprehensive security monitoring system with AI-powered suspicious activity detection",
+  "axisScenarios": [
+    {
+      "name": "PersonDetect", 
+      "type": "motion", 
+      "enabled": true, 
+      "triggers": [{"type": "includeArea", "vertices": [[-0.9,-0.9],[-0.9,0.9],[0.9,0.9],[0.9,-0.9]]}], 
+      "filters": [], 
+      "objectClassifications": [{"type": "human", "selected": true}],
+      "metadata": {"createdBy": "VisionArchitect"}
+    }
+  ],
+  "schedules": [],
+  "skills": [
+    {
+      "name": "SuspiciousActivity", 
+      "description": "Detects and analyzes suspicious behavior patterns", 
+      "category": "security", 
+      "analysisConfiguration": {
+        "questions": [
+          {"id": 1, "name": "person_detected", "text": "Is there a person in view?", "type": "bool", "enabled": true, "stateful": false},
+          {"id": 2, "name": "suspicious_behavior", "text": "Is the person exhibiting suspicious behavior?", "type": "bool", "enabled": true, "stateful": false}
+        ], 
+        "responseCriteria": "If you detect suspicious activity like loitering, looking around nervously, or attempting to hide, immediately alert security with detailed description"
+      }
+    }
+  ],
+  "securityProfiles": [
+    {
+      "name": "24x7_Security",
+      "skillId": "SuspiciousActivity",
+      "analysisSchedule": "",
+      "trigger": {"type": "Object", "port": 1, "profile": "PersonDetect"},
+      "activeMonitoring": {"enabled": true, "intervalMs": 5000, "maxDurationSec": 120}
+    }
+  ],
+  "systemJustification": "Always-on security system using AI analysis for comprehensive threat detection"
+}
+
+**Key Points**: 
+- Empty schedules array = use existing camera schedules or always-on monitoring
+- Empty analysisSchedule = always-on monitoring  
+- Custom schedules only when existing ones don't fit the need
 
 Remember: Return ONLY the JSON object, no additional text or explanation.
 `;
@@ -392,6 +527,38 @@ export const VISION_SYSTEM_SCHEMA = {
         required: ["name", "type", "enabled", "triggers", "objectClassifications"]
       }
     },
+    schedules: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          name: { type: SchemaType.STRING },
+          description: { type: SchemaType.STRING },
+          scheduleType: { 
+            type: SchemaType.STRING,
+            enum: ["weekly", "daily", "dateRange", "once"]
+          },
+          enabled: { type: SchemaType.BOOLEAN },
+          weeklySchedule: {
+            type: SchemaType.OBJECT,
+            properties: {
+              monday: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } },
+              tuesday: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } },
+              wednesday: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } },
+              thursday: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } },
+              friday: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } },
+              saturday: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } },
+              sunday: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } }
+            }
+          },
+          dailySchedule: { type: SchemaType.OBJECT, properties: {} },
+          dateRangeSchedule: { type: SchemaType.OBJECT, properties: {} },
+          onceSchedule: { type: SchemaType.OBJECT, properties: {} },
+          metadata: { type: SchemaType.OBJECT, properties: {} }
+        },
+        required: ["name", "scheduleType", "enabled"]
+      }
+    },
     skills: {
       type: SchemaType.ARRAY,
       items: {
@@ -423,7 +590,7 @@ export const VISION_SYSTEM_SCHEMA = {
           name: { type: SchemaType.STRING },
           skillId: { type: SchemaType.STRING },
           preFilterModel: { type: SchemaType.STRING }, // Should be empty string
-          fullAnalysisModel: { type: SchemaType.STRING }, // Should be gemini-2.5-flash-lite
+          fullAnalysisModel: { type: SchemaType.STRING }, // Should be gemini-2.5-pro
           viewArea: { type: SchemaType.NUMBER },
           analysisSchedule: { type: SchemaType.STRING },
           trigger: {
@@ -451,7 +618,7 @@ export const VISION_SYSTEM_SCHEMA = {
       description: "Detailed explanation of architecture"
     }
   },
-  required: ["systemOverview", "axisScenarios", "skills", "securityProfiles", "systemJustification"]
+  required: ["systemOverview", "axisScenarios", "schedules", "skills", "securityProfiles", "systemJustification"]
 };
 
 export interface VisionSystemRequest {
@@ -465,6 +632,7 @@ export interface VisionSystemResponse {
   success: boolean;
   systemOverview?: string;
   axisScenarios?: any[];
+  schedules?: any[];
   skills?: any[];
   securityProfiles?: any[];
   systemJustification?: string;
@@ -474,23 +642,310 @@ export interface VisionSystemResponse {
 export class VisionArchitect {
   private gemini: GoogleGenerativeAI;
   private model: any;
-  private modelName: string = 'gemini-2.5-flash-lite';
+  private modelName: string = 'gemini-2.5-pro';
   private apiKey: string;
 
   constructor(apiKey: string, modelName?: string) {
     this.apiKey = apiKey;
     this.gemini = new GoogleGenerativeAI(apiKey);
-    // Use the specified model or default to gemini-2.5-flash-lite for best rate limits
-    this.modelName = modelName || 'gemini-2.5-flash-lite';
+    // Use the specified model or default to gemini-2.5-pro for best quality (one-time use)
+    this.modelName = modelName || 'gemini-2.5-pro';
     this.model = this.gemini.getGenerativeModel({ 
       model: this.modelName,
       generationConfig: {
         responseMimeType: "application/json",
-        // responseSchema: VISION_SYSTEM_SCHEMA, // TODO: Fix schema typing
+        responseSchema: this.buildVisionSystemSchema(),
         temperature: 0.7,
-        maxOutputTokens: 4000 // Increased for complete system responses
+        maxOutputTokens: 16384 // Reasonable limit to avoid API rejection while allowing complete responses
       }
     });
+  }
+
+  /**
+   * Build response schema for Vision Architect generation
+   * Based on the pattern from Gemini.cpp buildAnalysisSchemaFromSkill
+   */
+  private buildVisionSystemSchema(): any {
+    return {
+      type: "object",
+      description: "Complete vision intelligence system configuration",
+      required: ["systemOverview", "axisScenarios", "schedules", "skills", "securityProfiles"],
+      properties: {
+        systemOverview: {
+          type: "string",
+          description: "High-level overview of the generated system"
+        },
+        axisScenarios: {
+          type: "array",
+          description: "AOA detection scenarios for chipset-level triggers",
+          items: {
+            type: "object",
+            required: ["name", "type", "enabled", "triggers", "objectClassifications"],
+            properties: {
+              name: { type: "string", description: "Scenario name" },
+              type: { type: "string", enum: ["motion", "fence", "crosslinecount", "occupancy"] },
+              enabled: { type: "boolean" },
+              triggers: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: ["type", "vertices"],
+                  properties: {
+                    type: { type: "string", enum: ["includeArea", "fence", "countingLine"] },
+                    vertices: {
+                      type: "array",
+                      items: {
+                        type: "array",
+                        items: { type: "number" },
+                        minItems: 2,
+                        maxItems: 2
+                      }
+                    },
+                    conditions: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          type: { type: "string" },
+                          data: { 
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                type: { type: "string" },
+                                time: { type: "number" },
+                                alarmTime: { type: "number" }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              filters: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    type: { type: "string" },
+                    active: { type: "boolean" },
+                    data: { type: "number" },
+                    time: { type: "number" }
+                  }
+                }
+              },
+              objectClassifications: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: ["type", "selected"],
+                  properties: {
+                    type: { type: "string" },
+                    selected: { type: "boolean" }
+                  }
+                }
+              },
+              metadata: { 
+                type: "object",
+                properties: {
+                  createdBy: { type: "string" },
+                  visionArchitectGenerated: { type: "boolean" }
+                }
+              }
+            }
+          }
+        },
+        schedules: {
+          type: "array",
+          description: "Time-based activation schedules for unique timing needs",
+          items: {
+            type: "object",
+            required: ["name", "scheduleType", "enabled"],
+            properties: {
+              name: { type: "string", description: "Schedule name" },
+              description: { type: "string", description: "Schedule purpose" },
+              scheduleType: { 
+                type: "string", 
+                enum: ["weekly", "daily", "dateRange", "once"]
+              },
+              enabled: { type: "boolean" },
+              weeklySchedule: {
+                type: "object",
+                properties: {
+                  monday: { 
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        startTime: { type: "string", description: "HH:MM format" },
+                        endTime: { type: "string", description: "HH:MM format" },
+                        description: { type: "string" }
+                      }
+                    }
+                  },
+                  tuesday: { 
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        startTime: { type: "string" },
+                        endTime: { type: "string" },
+                        description: { type: "string" }
+                      }
+                    }
+                  },
+                  wednesday: { 
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        startTime: { type: "string" },
+                        endTime: { type: "string" },
+                        description: { type: "string" }
+                      }
+                    }
+                  },
+                  thursday: { 
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        startTime: { type: "string" },
+                        endTime: { type: "string" },
+                        description: { type: "string" }
+                      }
+                    }
+                  },
+                  friday: { 
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        startTime: { type: "string" },
+                        endTime: { type: "string" },
+                        description: { type: "string" }
+                      }
+                    }
+                  },
+                  saturday: { 
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        startTime: { type: "string" },
+                        endTime: { type: "string" },
+                        description: { type: "string" }
+                      }
+                    }
+                  },
+                  sunday: { 
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        startTime: { type: "string" },
+                        endTime: { type: "string" },
+                        description: { type: "string" }
+                      }
+                    }
+                  }
+                }
+              },
+              metadata: { 
+                type: "object",
+                properties: {
+                  createdBy: { type: "string" },
+                  purpose: { type: "string" },
+                  visionArchitectGenerated: { type: "boolean" }
+                }
+              }
+            }
+          }
+        },
+        skills: {
+          type: "array",
+          description: "AI analysis skills for complex scene understanding",
+          items: {
+            type: "object",
+            required: ["name", "description", "category", "analysisConfiguration"],
+            properties: {
+              name: { type: "string" },
+              description: { type: "string" },
+              category: { type: "string" },
+              analysisConfiguration: {
+                type: "object",
+                required: ["description", "questions", "responseCriteria"],
+                properties: {
+                  description: { type: "string" },
+                  questions: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      required: ["id", "name", "text", "type", "enabled", "stateful"],
+                      properties: {
+                        id: { type: "integer" },
+                        name: { type: "string" },
+                        text: { type: "string" },
+                        type: { type: "string", enum: ["bool", "int", "string"] },
+                        enabled: { type: "boolean" },
+                        stateful: { type: "boolean" }
+                      }
+                    }
+                  },
+                  objectDetection: {
+                    type: "array",
+                    items: { type: "string" }
+                  },
+                  responseCriteria: { type: "string" },
+                  talkdownActivated: { type: "boolean" },
+                  elevenLabsVoiceId: { type: "string" }
+                }
+              }
+            }
+          }
+        },
+        securityProfiles: {
+          type: "array",
+          description: "Security profiles that orchestrate scenarios, skills, and schedules",
+          items: {
+            type: "object",
+            required: ["name", "skillId", "trigger"],
+            properties: {
+              name: { type: "string" },
+              skillId: { type: "string" },
+              preFilterModel: { type: "string" },
+              fullAnalysisModel: { type: "string" },
+              viewArea: { type: "number" },
+              analysisSchedule: { type: "string" },
+              trigger: {
+                type: "object",
+                required: ["type", "port", "profile"],
+                properties: {
+                  type: { type: "string" },
+                  port: { type: "number" },
+                  profile: { type: "string" }
+                }
+              },
+              activeMonitoring: {
+                type: "object",
+                required: ["enabled", "intervalMs", "maxDurationSec"],
+                properties: {
+                  enabled: { type: "boolean" },
+                  intervalMs: { type: "number" },
+                  maxDurationSec: { type: "number" }
+                }
+              }
+            }
+          }
+        },
+        systemJustification: {
+          type: "string",
+          description: "Technical explanation of system design decisions"
+        }
+      }
+    };
   }
 
   /**
@@ -517,12 +972,12 @@ export class VisionArchitect {
           let displayName = m.displayName || modelName;
           
           // Add helpful labels to display names
-          if (modelName.includes('flash-lite')) {
+          if (modelName.includes('pro')) {
+            displayName += modelName.includes('2.5') ? ' (Best Quality - Default)' : ' (High Quality)';
+          } else if (modelName.includes('flash-lite')) {
             displayName += ' (Best for Free Tier)';
-          } else if (modelName === 'gemini-1.5-flash') {
-            displayName += ' (Recommended)';
-          } else if (modelName.includes('2.5')) {
-            displayName += ' (Latest)';
+          } else if (modelName.includes('flash')) {
+            displayName += ' (Fast & Efficient)';
           }
           
           return {
@@ -532,20 +987,21 @@ export class VisionArchitect {
           };
         })
         .sort((a: any, b: any) => {
-          // Sort by priority for free tier usage
+          // Sort by priority for Vision Architect - Pro models first for best quality
           const priority: { [key: string]: number } = {
-            'gemini-2.0-flash-lite': 1,
-            'gemini-2.0-flash-lite-001': 1,
-            'gemini-1.5-flash': 2,
-            'gemini-1.5-flash-8b': 3,
-            'gemini-1.5-flash-8b-001': 3,
-            'gemini-2.0-flash': 4,
-            'gemini-2.0-flash-001': 4,
-            'gemini-2.5-flash': 5,
+            'gemini-2.5-pro': 1,
+            'gemini-2.0-pro': 2,
+            'gemini-1.5-pro': 3,
+            'gemini-1.5-pro-002': 3,
+            'gemini-2.5-flash': 4,
+            'gemini-2.0-flash': 5,
+            'gemini-2.0-flash-001': 5,
+            'gemini-1.5-flash': 6,
             'gemini-1.5-flash-002': 6,
-            'gemini-1.5-pro': 7,
-            'gemini-1.5-pro-002': 7,
-            'gemini-2.5-pro': 8
+            'gemini-1.5-flash-8b': 7,
+            'gemini-1.5-flash-8b-001': 7,
+            'gemini-2.0-flash-lite': 8,
+            'gemini-2.0-flash-lite-001': 8
           };
           
           const aPriority = priority[a.name] || 99;
@@ -682,6 +1138,39 @@ export class VisionArchitect {
       const generationTime = Date.now() - startTime;
       logger.info(`[Vision Architect] AI Generation completed in ${generationTime}ms`);
       
+      // Log token usage information
+      if (response.usageMetadata) {
+        logger.info('[Vision Architect] === TOKEN USAGE ===');
+        logger.info('[Vision Architect] Prompt Tokens:', response.usageMetadata.promptTokenCount || 'N/A');
+        logger.info('[Vision Architect] Completion Tokens:', response.usageMetadata.candidatesTokenCount || 'N/A');
+        logger.info('[Vision Architect] Total Tokens:', response.usageMetadata.totalTokenCount || 'N/A');
+        
+        // Calculate estimated cost based on model
+        if (response.usageMetadata.totalTokenCount) {
+          const inputTokens = response.usageMetadata.promptTokenCount || 0;
+          const outputTokens = response.usageMetadata.candidatesTokenCount || 0;
+          let inputCost = 0;
+          let outputCost = 0;
+          
+          // Pricing per 1M tokens (as of latest rates)
+          if (this.modelName.includes('pro')) {
+            inputCost = (inputTokens / 1000000) * 3.50;
+            outputCost = (outputTokens / 1000000) * 10.50;
+          } else if (this.modelName.includes('flash-lite')) {
+            inputCost = (inputTokens / 1000000) * 0.35;
+            outputCost = (outputTokens / 1000000) * 1.05;
+          } else if (this.modelName.includes('flash')) {
+            inputCost = (inputTokens / 1000000) * 0.35;
+            outputCost = (outputTokens / 1000000) * 1.05;
+          }
+          
+          const totalCost = inputCost + outputCost;
+          logger.info('[Vision Architect] Estimated Cost: $' + totalCost.toFixed(4));
+          logger.info('[Vision Architect] Input Cost: $' + inputCost.toFixed(4) + ' (', inputTokens, 'tokens)');
+          logger.info('[Vision Architect] Output Cost: $' + outputCost.toFixed(4) + ' (', outputTokens, 'tokens)');
+        }
+      }
+      
       // Log the raw response
       const rawResponseText = response.text();
       logger.info('[Vision Architect] === RAW RESPONSE ===');
@@ -697,15 +1186,50 @@ export class VisionArchitect {
         }
       }
       
-      // Parse the response
+      // Parse the response with error recovery
       let systemConfig: any;
       try {
         systemConfig = JSON.parse(rawResponseText);
         logger.info('[Vision Architect] Successfully parsed JSON response');
       } catch (parseError: any) {
         logger.error('[Vision Architect] Failed to parse response as JSON:', parseError);
-        logger.error('[Vision Architect] Raw response that failed to parse:', rawResponseText);
-        throw new Error(`Failed to parse AI response: ${parseError.message}`);
+        logger.error('[Vision Architect] Parse error details:', parseError.message);
+        
+        // Attempt to recover from truncated JSON
+        if (parseError.message.includes('Unterminated string') || parseError.message.includes('Unexpected end')) {
+          logger.info('[Vision Architect] Attempting to recover from truncated JSON...');
+          
+          try {
+            // Try to fix common truncation issues
+            let fixedJson = rawResponseText.trim();
+            
+            // If it ends with a comma or incomplete structure, try to close it
+            if (!fixedJson.endsWith('}')) {
+              // Find the last complete object and close it
+              const lastCompleteObjectIndex = fixedJson.lastIndexOf('},');
+              if (lastCompleteObjectIndex > 0) {
+                // Truncate to last complete object and close the JSON
+                fixedJson = fixedJson.substring(0, lastCompleteObjectIndex + 1) + '\n  ]\n}';
+                
+                logger.info('[Vision Architect] Attempting to parse recovered JSON...');
+                systemConfig = JSON.parse(fixedJson);
+                logger.info('[Vision Architect] Successfully recovered from truncated JSON!');
+              } else {
+                throw new Error('Could not recover from JSON truncation');
+              }
+            }
+          } catch (recoveryError: any) {
+            logger.error('[Vision Architect] JSON recovery failed:', recoveryError.message);
+            logger.error('[Vision Architect] Raw response that failed to parse (first 2000 chars):');
+            logger.error(rawResponseText.substring(0, 2000));
+            logger.error('[Vision Architect] Raw response that failed to parse (last 1000 chars):');
+            logger.error(rawResponseText.substring(Math.max(0, rawResponseText.length - 1000)));
+            throw new Error(`Failed to parse AI response: ${parseError.message}. Response may be truncated due to length limits.`);
+          }
+        } else {
+          logger.error('[Vision Architect] Raw response that failed to parse:', rawResponseText);
+          throw new Error(`Failed to parse AI response: ${parseError.message}`);
+        }
       }
 
       logger.info('========================================');
@@ -714,6 +1238,7 @@ export class VisionArchitect {
       logger.info('[Vision Architect] System Overview:', systemConfig.systemOverview);
       logger.info('[Vision Architect] Components Generated:', {
         scenarios: systemConfig.axisScenarios?.length || 0,
+        schedules: systemConfig.schedules?.length || 0,
         skills: systemConfig.skills?.length || 0,
         profiles: systemConfig.securityProfiles?.length || 0
       });
@@ -730,6 +1255,28 @@ export class VisionArchitect {
           }
           if (scenario.metadata) {
             logger.info(`  Metadata: ${JSON.stringify(scenario.metadata)}`);
+          }
+        });
+      }
+      
+      if (systemConfig.schedules?.length > 0) {
+        logger.info('[Vision Architect] === SCHEDULES ===');
+        systemConfig.schedules.forEach((schedule: any, idx: number) => {
+          logger.info(`[Vision Architect] Schedule ${idx + 1}: ${schedule.name}`);
+          logger.info(`  Description: ${schedule.description}`);
+          logger.info(`  Type: ${schedule.scheduleType}`);
+          logger.info(`  Enabled: ${schedule.enabled}`);
+          if (schedule.weeklySchedule) {
+            const activeDays = Object.keys(schedule.weeklySchedule).filter(day => 
+              schedule.weeklySchedule[day]?.length > 0
+            );
+            logger.info(`  Active Days: ${activeDays.join(', ')}`);
+            activeDays.forEach(day => {
+              const ranges = schedule.weeklySchedule[day];
+              ranges?.forEach((range: any) => {
+                logger.info(`    ${day}: ${range.startTime}-${range.endTime} (${range.description || 'No description'})`);
+              });
+            });
           }
         });
       }
@@ -797,7 +1344,12 @@ export class VisionArchitect {
     Create all necessary AOA scenarios, Skills, and Security Profiles as a comprehensive ecosystem.
     Remember to use continuous monitoring where appropriate for scenarios like loitering, queue management, or safety compliance.
     
-    IMPORTANT: Return your response as valid JSON matching the required schema. Do not include any text before or after the JSON.`;
+    IMPORTANT: 
+    - Return your response as valid JSON matching the required schema
+    - Do not include any text before or after the JSON  
+    - Keep descriptions concise but meaningful (1-2 sentences max)
+    - Prioritize functionality over lengthy explanations
+    - Ensure the JSON is complete and well-formed`;
 
     return prompt;
   }
@@ -815,6 +1367,7 @@ export class VisionArchitect {
     success: boolean;
     deployed: {
       scenarios: number;
+      schedules: number;
       skills: number;
       profiles: number;
     };
@@ -823,6 +1376,7 @@ export class VisionArchitect {
       skillIds?: string[];
       profileIds?: string[];
       scenarioIds?: number[];
+      scheduleIds?: string[];
     };
   }> {
     // Import the deployer
@@ -893,7 +1447,7 @@ export async function generateAndDeployVisionSystem(
     return {
       success: deployment.success,
       message: deployment.success 
-        ? `Successfully deployed ${deployment.deployed.scenarios} scenarios, ${deployment.deployed.skills} skills, and ${deployment.deployed.profiles} profiles`
+        ? `Successfully deployed ${deployment.deployed.scenarios} scenarios, ${deployment.deployed.schedules || 0} schedules, ${deployment.deployed.skills} skills, and ${deployment.deployed.profiles} profiles`
         : `Partial deployment: ${deployment.errors?.join(', ')}`,
       system,
       deployment

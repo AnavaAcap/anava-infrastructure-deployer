@@ -42,6 +42,12 @@ import {
   Analytics as AnalyticsIcon,
   Architecture as ArchitectureIcon,
   Image as ImageIcon,
+  Psychology as BrainIcon,
+  Visibility as VisionIcon,
+  Build as BuildIcon,
+  CloudUpload as DeployIcon,
+  AutoAwesome as SparkleIcon,
+  Memory as ProcessIcon,
 } from '@mui/icons-material';
 
 interface Props {
@@ -82,7 +88,13 @@ export const VisionArchitectDialog: React.FC<Props> = ({
   const [availableModels, setAvailableModels] = useState<any[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [sceneImage, setSceneImage] = useState<string>('');
-  const [capturingScene, setCapturingScene] = useState(false);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  
+  // Loading states for sophisticated UI
+  const [loadingPhase, setLoadingPhase] = useState<'idle' | 'capturing' | 'analyzing' | 'deploying'>('idle');
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [currentLoadingStep, setCurrentLoadingStep] = useState('');
+  const [loadingStartTime, setLoadingStartTime] = useState<number>(0);
 
   // Load available models when dialog opens
   useEffect(() => {
@@ -120,9 +132,6 @@ export const VisionArchitectDialog: React.FC<Props> = ({
   };
 
   const captureSceneImage = async () => {
-    setCapturingScene(true);
-    setError(null);
-    
     try {
       console.log('Capturing scene image from camera...');
       
@@ -153,15 +162,11 @@ export const VisionArchitectDialog: React.FC<Props> = ({
         return result.imageBase64;
       } else {
         console.error('Failed to capture scene:', result.error);
-        setError('Failed to capture scene from camera: ' + (result.error || 'Unknown error'));
-        return null;
+        throw new Error('Failed to capture scene from camera: ' + (result.error || 'Unknown error'));
       }
     } catch (error: any) {
       console.error('Error capturing scene:', error);
-      setError('Error capturing scene: ' + error.message);
-      return null;
-    } finally {
-      setCapturingScene(false);
+      throw new Error('Error capturing scene: ' + error.message);
     }
   };
 
@@ -174,22 +179,53 @@ export const VisionArchitectDialog: React.FC<Props> = ({
     setProcessing(true);
     setError(null);
     setGeneratedSystem(null);
+    setLoadingPhase('analyzing');
+    setLoadingProgress(0);
+    setLoadingStartTime(Date.now());
+
+    // AI Analysis progress simulation with realistic steps
+    const analysisSteps = [
+      { step: 'Capturing scene image from camera...', progress: 5, duration: 800 },
+      { step: 'Initializing AI Vision Architect...', progress: 10, duration: 500 },
+      { step: 'Processing scene image...', progress: 20, duration: 800 },
+      { step: 'Understanding your requirements...', progress: 30, duration: 1000 },
+      { step: 'Analyzing camera environment...', progress: 45, duration: 1200 },
+      { step: 'Designing detection scenarios...', progress: 60, duration: 1500 },
+      { step: 'Creating AI analysis skills...', progress: 75, duration: 1800 },
+      { step: 'Architecting security profiles...', progress: 85, duration: 1000 },
+      { step: 'Optimizing system configuration...', progress: 95, duration: 800 },
+      { step: 'Finalizing intelligence ecosystem...', progress: 100, duration: 500 },
+    ];
 
     try {
       // First, ensure we have a scene image
       let imageToUse = sceneImage;
       if (!imageToUse) {
+        setCurrentLoadingStep('Capturing scene from camera...');
         console.log('No scene image available, capturing from camera...');
-        imageToUse = await captureSceneImage();
-        if (!imageToUse) {
-          // Error already set by captureSceneImage
+        try {
+          imageToUse = await captureSceneImage();
+        } catch (captureError: any) {
           setProcessing(false);
+          setLoadingPhase('idle');
+          setError(captureError.message || 'Failed to capture scene from camera');
           return;
         }
       }
 
       console.log('Generating vision system with scene image...');
       
+      // Start the progress simulation
+      let stepIndex = 0;
+      const progressInterval = setInterval(() => {
+        if (stepIndex < analysisSteps.length) {
+          const currentStep = analysisSteps[stepIndex];
+          setCurrentLoadingStep(currentStep.step);
+          setLoadingProgress(currentStep.progress);
+          stepIndex++;
+        }
+      }, 1200);
+
       // Generate the vision system with the image
       const result = await (window as any).electronAPI.invokeIPC(
         'vision-architect-generate',
@@ -200,16 +236,29 @@ export const VisionArchitectDialog: React.FC<Props> = ({
         imageToUse // Pass the scene image
       );
 
+      clearInterval(progressInterval);
+      
       if (result.success) {
-        setGeneratedSystem(result);
+        setCurrentLoadingStep('AI system architecture completed!');
+        setLoadingProgress(100);
+        
+        // Brief success display
+        setTimeout(() => {
+          setLoadingPhase('idle');
+          setLoadingProgress(0);
+          setCurrentLoadingStep('');
+          setGeneratedSystem(result);
+        }, 1500);
       } else {
+        setLoadingPhase('idle');
         setError(result.error || 'Failed to generate system');
       }
     } catch (error: any) {
       console.error('Vision generation error:', error);
+      setLoadingPhase('idle');
       setError(error.message || 'Failed to generate vision system');
     } finally {
-      setProcessing(false);
+      setTimeout(() => setProcessing(false), 1500);
     }
   };
 
@@ -218,6 +267,18 @@ export const VisionArchitectDialog: React.FC<Props> = ({
 
     setDeploying(true);
     setError(null);
+    setLoadingPhase('deploying');
+    setLoadingProgress(0);
+    setLoadingStartTime(Date.now());
+
+    const deploymentSteps = [
+      { step: 'Connecting to camera system...', progress: 10, duration: 800 },
+      { step: 'Uploading detection scenarios...', progress: 30, duration: 1500 },
+      { step: 'Installing AI analysis skills...', progress: 55, duration: 2000 },
+      { step: 'Configuring security profiles...', progress: 75, duration: 1200 },
+      { step: 'Activating monitoring system...', progress: 90, duration: 1000 },
+      { step: 'Validating deployment...', progress: 95, duration: 800 },
+    ];
 
     try {
       console.log('Deploying Vision System to camera:', cameraIp);
@@ -226,6 +287,17 @@ export const VisionArchitectDialog: React.FC<Props> = ({
         skills: generatedSystem.skills?.length || 0,
         profiles: generatedSystem.securityProfiles?.length || 0
       });
+      
+      // Start deployment progress simulation
+      let stepIndex = 0;
+      const deployProgressInterval = setInterval(() => {
+        if (stepIndex < deploymentSteps.length) {
+          const currentStep = deploymentSteps[stepIndex];
+          setCurrentLoadingStep(currentStep.step);
+          setLoadingProgress(currentStep.progress);
+          stepIndex++;
+        }
+      }, 1000);
       
       // Deploy the generated system to camera (real deployment only)
       const result = await (window as any).electronAPI.invokeIPC(
@@ -236,22 +308,31 @@ export const VisionArchitectDialog: React.FC<Props> = ({
         generatedSystem
       );
 
+      clearInterval(deployProgressInterval);
       console.log('Deployment result:', result);
       setDeploymentResult(result);
       
       if (result.success) {
         console.log('✅ Vision System successfully deployed!');
-        // Auto-complete after 3 seconds
+        setCurrentLoadingStep('Vision system successfully deployed!');
+        setLoadingProgress(100);
+        
+        // Success display before completion
         setTimeout(() => {
+          setLoadingPhase('idle');
+          setLoadingProgress(0);
+          setCurrentLoadingStep('');
           onComplete();
         }, 3000);
       } else {
         console.error('❌ Deployment failed:', result.errors);
+        setLoadingPhase('idle');
         const errorMessage = result.errors?.join('\n') || result.message || 'Deployment failed';
         setError(errorMessage);
       }
     } catch (error: any) {
       console.error('Deployment error:', error);
+      setLoadingPhase('idle');
       setError(error.message || 'Failed to deploy system');
     } finally {
       setDeploying(false);
@@ -269,6 +350,315 @@ export const VisionArchitectDialog: React.FC<Props> = ({
     "Ensure no unauthorized access after hours"
   ];
 
+  // Get the appropriate icon and color for current loading phase
+  const getPhaseIcon = () => {
+    switch (loadingPhase) {
+      case 'capturing': return <CameraIcon sx={{ fontSize: '3rem' }} />;
+      case 'analyzing': return <BrainIcon sx={{ fontSize: '3rem' }} />;
+      case 'deploying': return <DeployIcon sx={{ fontSize: '3rem' }} />;
+      default: return <AIIcon sx={{ fontSize: '3rem' }} />;
+    }
+  };
+
+  const getPhaseColor = () => {
+    switch (loadingPhase) {
+      case 'capturing': return '#2196f3'; // Blue
+      case 'analyzing': return '#9c27b0'; // Purple
+      case 'deploying': return '#4caf50'; // Green
+      default: return '#ff9800'; // Orange
+    }
+  };
+
+  const getPhaseTitle = () => {
+    switch (loadingPhase) {
+      case 'capturing': return 'Capturing Scene';
+      case 'analyzing': return 'AI Vision Architect Working';
+      case 'deploying': return 'Deploying to Camera';
+      default: return 'Processing';
+    }
+  };
+
+  // Sophisticated Loading Overlay Component
+  const renderLoadingOverlay = () => {
+    if (loadingPhase === 'idle') return null;
+
+    const elapsedTime = loadingStartTime > 0 ? Math.floor((Date.now() - loadingStartTime) / 1000) : 0;
+    const phaseColor = getPhaseColor();
+
+    return (
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.95)',
+          backdropFilter: 'blur(12px)',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          borderRadius: 2,
+        }}
+        data-testid="vision-architect-loading-overlay"
+      >
+        {/* Animated Background Effects */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: `linear-gradient(45deg, ${phaseColor}15, transparent, ${phaseColor}15)`,
+            animation: 'backgroundPulse 3s ease-in-out infinite',
+            borderRadius: 2,
+          }}
+        />
+        
+        {/* Floating Particles Animation */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            overflow: 'hidden',
+            borderRadius: 2,
+          }}
+        >
+          {[...Array(12)].map((_, i) => (
+            <Box
+              key={i}
+              sx={{
+                position: 'absolute',
+                width: '4px',
+                height: '4px',
+                borderRadius: '50%',
+                backgroundColor: phaseColor,
+                opacity: 0.6,
+                left: `${10 + (i * 7)}%`,
+                animation: `floatParticle ${3 + (i % 3)}s ease-in-out infinite`,
+                animationDelay: `${i * 0.2}s`,
+              }}
+            />
+          ))}
+        </Box>
+
+        {/* Main Content */}
+        <Box
+          sx={{
+            textAlign: 'center',
+            zIndex: 2,
+            maxWidth: '80%',
+          }}
+        >
+          {/* Phase Icon with Glow Effect */}
+          <Box
+            sx={{
+              mb: 3,
+              position: 'relative',
+              display: 'inline-block',
+            }}
+          >
+            <Box
+              sx={{
+                color: phaseColor,
+                filter: `drop-shadow(0 0 20px ${phaseColor}80)`,
+                animation: loadingPhase === 'analyzing' ? 'brainPulse 2s ease-in-out infinite' : 
+                          loadingPhase === 'capturing' ? 'cameraSpin 3s linear infinite' :
+                          'deploymentBounce 1.5s ease-in-out infinite',
+              }}
+            >
+              {getPhaseIcon()}
+            </Box>
+            
+            {/* Sparkle effects for AI analysis */}
+            {loadingPhase === 'analyzing' && (
+              <>
+                <SparkleIcon 
+                  sx={{ 
+                    position: 'absolute', 
+                    top: -10, 
+                    right: -5, 
+                    fontSize: '1rem',
+                    color: '#ffd700',
+                    animation: 'sparkle 1.5s ease-in-out infinite',
+                    animationDelay: '0s',
+                  }} 
+                />
+                <SparkleIcon 
+                  sx={{ 
+                    position: 'absolute', 
+                    bottom: -5, 
+                    left: -10, 
+                    fontSize: '0.8rem',
+                    color: '#ffd700',
+                    animation: 'sparkle 1.5s ease-in-out infinite',
+                    animationDelay: '0.7s',
+                  }} 
+                />
+              </>
+            )}
+          </Box>
+
+          {/* Phase Title */}
+          <Typography 
+            variant="h5" 
+            sx={{ 
+              fontWeight: 'bold',
+              mb: 1,
+              color: phaseColor,
+              textShadow: `0 0 10px ${phaseColor}50`,
+            }}
+          >
+            {getPhaseTitle()}
+          </Typography>
+
+          {/* Current Step */}
+          <Typography 
+            variant="h6" 
+            sx={{ 
+              mb: 3,
+              color: 'white',
+              fontWeight: 500,
+              minHeight: '2rem',
+            }}
+          >
+            {currentLoadingStep}
+          </Typography>
+
+          {/* Enhanced Progress Bar */}
+          <Box sx={{ width: '100%', maxWidth: 400, mb: 3 }}>
+            <Box
+              sx={{
+                width: '100%',
+                height: 8,
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: 4,
+                overflow: 'hidden',
+                position: 'relative',
+              }}
+            >
+              <Box
+                sx={{
+                  width: `${loadingProgress}%`,
+                  height: '100%',
+                  background: `linear-gradient(90deg, ${phaseColor}, ${phaseColor}cc, ${phaseColor})`,
+                  borderRadius: 4,
+                  transition: 'width 0.5s ease-in-out',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: `linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)`,
+                    animation: 'shimmer 2s infinite',
+                  }
+                }}
+              />
+            </Box>
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                mt: 1 
+              }}
+            >
+              <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                {Math.round(loadingProgress)}%
+              </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                {elapsedTime}s
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Phase-specific Intelligence Indicators */}
+          {loadingPhase === 'analyzing' && (
+            <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <ProcessIcon sx={{ fontSize: '1.2rem', color: phaseColor }} />
+                <Typography variant="caption">Neural Processing</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <VisionIcon sx={{ fontSize: '1.2rem', color: phaseColor }} />
+                <Typography variant="caption">Computer Vision</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <BuildIcon sx={{ fontSize: '1.2rem', color: phaseColor }} />
+                <Typography variant="caption">System Design</Typography>
+              </Box>
+            </Stack>
+          )}
+
+          {/* Motivational text based on phase */}
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              mt: 3, 
+              opacity: 0.7,
+              fontStyle: 'italic',
+              maxWidth: 350,
+            }}
+          >
+            {loadingPhase === 'capturing' && "Capturing high-resolution scene data from your camera..."}
+            {loadingPhase === 'analyzing' && "AI is analyzing your scene and architecting a complete intelligent surveillance system..."}
+            {loadingPhase === 'deploying' && "Installing your custom AI system directly to the camera hardware..."}
+          </Typography>
+        </Box>
+
+        {/* Global Styles for Animations */}
+        <style>
+          {`
+            @keyframes backgroundPulse {
+              0%, 100% { opacity: 0.3; }
+              50% { opacity: 0.6; }
+            }
+            
+            @keyframes floatParticle {
+              0%, 100% { transform: translateY(0px) scale(1); opacity: 0.6; }
+              50% { transform: translateY(-20px) scale(1.2); opacity: 1; }
+            }
+            
+            @keyframes brainPulse {
+              0%, 100% { transform: scale(1); filter: drop-shadow(0 0 20px #9c27b080); }
+              50% { transform: scale(1.1); filter: drop-shadow(0 0 30px #9c27b0cc); }
+            }
+            
+            @keyframes cameraSpin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+            
+            @keyframes deploymentBounce {
+              0%, 100% { transform: translateY(0px); }
+              50% { transform: translateY(-10px); }
+            }
+            
+            @keyframes sparkle {
+              0%, 100% { opacity: 0; transform: scale(0.8) rotate(0deg); }
+              50% { opacity: 1; transform: scale(1.2) rotate(180deg); }
+            }
+            
+            @keyframes shimmer {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(100%); }
+            }
+          `}
+        </style>
+      </Box>
+    );
+  };
+
   return (
     <Dialog 
       open={open} 
@@ -278,10 +668,13 @@ export const VisionArchitectDialog: React.FC<Props> = ({
         sx: {
           borderRadius: 2,
           boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-          maxHeight: '90vh'
+          maxHeight: '90vh',
+          position: 'relative', // Required for overlay positioning
         }
       }}
     >
+      {/* Sophisticated Loading Overlay */}
+      {renderLoadingOverlay()}
       <DialogTitle>
         <Box display="flex" alignItems="center" gap={2}>
           <ArchitectureIcon color="primary" fontSize="large" />
@@ -300,44 +693,6 @@ export const VisionArchitectDialog: React.FC<Props> = ({
         <Stack spacing={3} sx={{ mt: 2 }}>
           {!generatedSystem ? (
             <>
-              {/* Model Selection */}
-              <FormControl fullWidth>
-                <InputLabel id="model-select-label">AI Model</InputLabel>
-                <Select
-                  labelId="model-select-label"
-                  value={availableModels.length > 0 ? selectedModel : ''}
-                  label="AI Model"
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  disabled={processing || loadingModels || availableModels.length === 0}
-                >
-                  {loadingModels ? (
-                    <MenuItem disabled>
-                      <Typography variant="body2">Loading models...</Typography>
-                    </MenuItem>
-                  ) : availableModels.length === 0 ? (
-                    <MenuItem disabled>
-                      <Typography variant="body2">No models available</Typography>
-                    </MenuItem>
-                  ) : (
-                    availableModels.map((model) => (
-                      <MenuItem key={model.name} value={model.name}>
-                        <Box>
-                          <Typography variant="body2">{model.displayName}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {model.description}
-                          </Typography>
-                        </Box>
-                      </MenuItem>
-                    ))
-                  )}
-                </Select>
-                <FormHelperText>
-                  {loadingModels ? 'Loading available models...' :
-                   availableModels.length === 0 ? 'Unable to load models. Check your API key.' :
-                   'Choose the AI model to use. Flash models have better rate limits.'}
-                </FormHelperText>
-              </FormControl>
-
               {/* User Goal Input */}
               <TextField
                 fullWidth
@@ -352,14 +707,6 @@ export const VisionArchitectDialog: React.FC<Props> = ({
                 helperText="Describe your goal in plain language - be as specific or general as you want"
               />
 
-              {/* Scene Image Status */}
-              {sceneImage && (
-                <Alert severity="success" icon={<ImageIcon />}>
-                  <Typography variant="body2">
-                    Scene image captured from camera - AI will analyze the actual environment
-                  </Typography>
-                </Alert>
-              )}
               
               {/* Optional: Environment Description */}
               <TextField
@@ -392,6 +739,53 @@ export const VisionArchitectDialog: React.FC<Props> = ({
                   ))}
                 </Box>
               </Box>
+
+              {/* Advanced Options (Collapsible Model Selection) */}
+              <Accordion expanded={showAdvancedOptions} onChange={() => setShowAdvancedOptions(!showAdvancedOptions)}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="body2" color="text.secondary">
+                    Advanced Options
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <FormControl fullWidth>
+                    <InputLabel id="model-select-label">AI Model</InputLabel>
+                    <Select
+                      labelId="model-select-label"
+                      value={availableModels.length > 0 ? selectedModel : ''}
+                      label="AI Model"
+                      onChange={(e) => setSelectedModel(e.target.value)}
+                      disabled={processing || loadingModels || availableModels.length === 0}
+                    >
+                      {loadingModels ? (
+                        <MenuItem disabled>
+                          <Typography variant="body2">Loading models...</Typography>
+                        </MenuItem>
+                      ) : availableModels.length === 0 ? (
+                        <MenuItem disabled>
+                          <Typography variant="body2">No models available</Typography>
+                        </MenuItem>
+                      ) : (
+                        availableModels.map((model) => (
+                          <MenuItem key={model.name} value={model.name}>
+                            <Box>
+                              <Typography variant="body2">{model.displayName}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {model.description}
+                              </Typography>
+                            </Box>
+                          </MenuItem>
+                        ))
+                      )}
+                    </Select>
+                    <FormHelperText>
+                      {loadingModels ? 'Loading available models...' :
+                       availableModels.length === 0 ? 'Unable to load models. Check your API key.' :
+                       'Choose the AI model to use. Pro models provide maximum intelligence quality.'}
+                    </FormHelperText>
+                  </FormControl>
+                </AccordionDetails>
+              </Accordion>
 
               {error && (
                 <Alert severity="error" icon={<WarningIcon />}>
@@ -541,10 +935,10 @@ export const VisionArchitectDialog: React.FC<Props> = ({
             <Button
               variant="contained"
               onClick={handleGenerate}
-              disabled={!userGoal.trim() || !selectedModel || processing || capturingScene || availableModels.length === 0}
-              startIcon={(processing || capturingScene) ? <CircularProgress size={20} /> : <AIIcon />}
+              disabled={!userGoal.trim() || !selectedModel || processing || availableModels.length === 0 || loadingPhase !== 'idle'}
+              startIcon={(processing || loadingPhase !== 'idle') ? <CircularProgress size={20} /> : <AIIcon />}
             >
-              {capturingScene ? 'Capturing scene from camera...' :
+              {loadingPhase === 'analyzing' ? 'AI architecting system...' :
                processing ? 'AI is architecting your system...' : 
                'Generate Vision System'}
             </Button>
@@ -558,10 +952,11 @@ export const VisionArchitectDialog: React.FC<Props> = ({
               variant="contained"
               color="success"
               onClick={handleDeploy}
-              disabled={deploying || deploymentResult?.success}
-              startIcon={deploying ? <CircularProgress size={20} /> : <SecurityIcon />}
+              disabled={deploying || deploymentResult?.success || loadingPhase !== 'idle'}
+              startIcon={(deploying || loadingPhase === 'deploying') ? <CircularProgress size={20} /> : <SecurityIcon />}
             >
-              {deploying ? 'Deploying...' : 
+              {loadingPhase === 'deploying' ? 'Deploying system...' :
+               deploying ? 'Deploying...' : 
                deploymentResult?.success ? 'Deployed!' : 'Deploy to Camera'}
             </Button>
           </>

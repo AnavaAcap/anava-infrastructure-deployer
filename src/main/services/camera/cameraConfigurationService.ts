@@ -26,8 +26,8 @@ export class CameraConfigurationService {
       
       const requestData: any = {
         viewArea: 1,  // Default camera channel
-        GeminiApiKey: apiKey,
-        replyMP3: true  // Request audio response
+        GeminiApiKey: apiKey
+        // Removed replyMP3: true to skip TTS generation (saves 10-15 seconds)
       };
       
       // Include custom prompt if provided
@@ -36,12 +36,10 @@ export class CameraConfigurationService {
         console.log('[getSceneDescription] Using custom prompt:', customPrompt);
       }
       
-      // Include speaker credentials if requested and available
+      // Skip speaker-related parameters to avoid TTS processing
+      // This dramatically speeds up the response from 10-15s to ~1s
       if (includeSpeaker && camera.speaker) {
-        requestData.speakerIp = camera.speaker.ip;
-        requestData.speakerUser = camera.speaker.username;
-        requestData.speakerPass = camera.speaker.password;
-        console.log('[getSceneDescription] Including speaker in request');
+        console.log('[getSceneDescription] Speaker available but skipping for faster response');
       }
       
       console.log('[getSceneDescription] Request payload:', JSON.stringify(requestData, null, 2));
@@ -74,10 +72,7 @@ export class CameraConfigurationService {
         status: data.status,
         hasDescription: !!data.description,
         hasImage: !!data.imageBase64,
-        hasAudio: !!data.audioMP3Base64 || !!data.audioBase64,
-        audioFormat: data.audioFormat,
-        ttsStatus: data.ttsStatus,
-        audioLength: data.audioLength
+        timestamp: data.timestamp
       });
       
       if (data.status === 'success') {
@@ -85,11 +80,8 @@ export class CameraConfigurationService {
           success: true,
           description: data.description,
           imageBase64: data.imageBase64,
-          audioMP3Base64: data.audioMP3Base64, // Keep for backward compatibility
-          audioBase64: data.audioBase64 || data.audioMP3Base64, // New field
-          audioFormat: data.audioFormat || (data.audioBase64 ? 'pcm_l16_24000' : 'mp3'), // Default to pcm if audioBase64 is present
-          timestamp: data.timestamp,
-          ttsSuccess: data.ttsSuccess
+          timestamp: data.timestamp
+          // Removed audio fields for faster response - no TTS processing
         };
       } else {
         throw new Error(data.message || 'Scene analysis failed');

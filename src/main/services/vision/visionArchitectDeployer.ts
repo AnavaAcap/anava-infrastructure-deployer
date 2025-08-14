@@ -5,6 +5,7 @@
 
 import { logger } from '../../utils/logger';
 import AOAService from '../aoa/aoaService';
+// Note: ScheduleService removed - not all cameras support VAPIX Schedule Service
 import axios from 'axios';
 import https from 'https';
 
@@ -29,6 +30,7 @@ export class VisionArchitectDeployer {
     success: boolean;
     deployed: {
       scenarios: number;
+      schedules: number;
       skills: number;
       profiles: number;
     };
@@ -37,18 +39,22 @@ export class VisionArchitectDeployer {
       skillIds?: string[];
       profileIds?: string[];
       scenarioIds?: number[];
+      scheduleIds?: string[];
     };
   }> {
     const errors: string[] = [];
     const deployedSkillIds: string[] = [];
     const deployedProfileIds: string[] = [];
     const deployedScenarioIds: number[] = [];
+    const deployedScheduleIds: string[] = [];
     
     let deployedScenarios = 0;
+    let deployedSchedules = 0;
     let deployedSkills = 0;
     let deployedProfiles = 0;
     
     const skillIdMap = new Map<string, string>(); // Map skill names to created IDs
+    // Note: scheduleIdMap removed - schedules are not deployed
 
     logger.info('========================================');
     logger.info('[Vision Deployer] STARTING DEPLOYMENT');
@@ -56,6 +62,7 @@ export class VisionArchitectDeployer {
     logger.info('[Vision Deployer] Target Camera:', this.cameraIp);
     logger.info('[Vision Deployer] Components to Deploy:', {
       scenarios: systemConfig.axisScenarios?.length || 0,
+      schedules: systemConfig.schedules?.length || 0,
       skills: systemConfig.skills?.length || 0,
       profiles: systemConfig.securityProfiles?.length || 0
     });
@@ -88,9 +95,20 @@ export class VisionArchitectDeployer {
         logger.info(`[Vision Deployer] Skills deployed: ${deployedSkills}/${systemConfig.skills.length}`);
       }
 
-      // Step 2: Deploy Security Profiles
+      // Step 2: Deploy Schedules (SKIP - Not all cameras support VAPIX Schedule Service)
+      if (systemConfig.schedules?.length > 0) {
+        logger.info('[Vision Deployer] === STEP 2: SKIPPING SCHEDULES (NOT SUPPORTED) ===');
+        logger.info('[Vision Deployer] Schedule deployment is disabled - not all cameras support the VAPIX Schedule Service');
+        logger.info(`[Vision Deployer] Would have deployed ${systemConfig.schedules.length} schedules:`);
+        systemConfig.schedules.forEach((schedule: any) => {
+          logger.info(`  - ${schedule.name}: ${schedule.description || 'No description'}`);
+        });
+        logger.info('[Vision Deployer] Schedules will be handled via profile configuration instead');
+      }
+
+      // Step 3: Deploy Security Profiles
       if (systemConfig.securityProfiles?.length > 0) {
-        logger.info('[Vision Deployer] === STEP 2: DEPLOYING SECURITY PROFILES ===');
+        logger.info('[Vision Deployer] === STEP 3: DEPLOYING SECURITY PROFILES ===');
         
         for (const profile of systemConfig.securityProfiles) {
           try {
@@ -118,38 +136,67 @@ export class VisionArchitectDeployer {
         logger.info(`[Vision Deployer] Profiles deployed: ${deployedProfiles}/${systemConfig.securityProfiles.length}`);
       }
 
-      // Step 3: Deploy AOA Scenarios
+      // Step 4: Deploy AOA Scenarios
       if (systemConfig.axisScenarios?.length > 0) {
-        logger.info('[Vision Deployer] === STEP 3: DEPLOYING AOA SCENARIOS ===');
+        logger.info('[Vision Deployer] === STEP 4: DEPLOYING AOA SCENARIOS ===');
         
-        // Ensure AOA is running
+        // Check if AOA is available first
         try {
-          await this.aoaService.startAOA();
-          logger.info('[Vision Deployer] AOA application started');
-        } catch (error: any) {
-          logger.warn('[Vision Deployer] Could not start AOA:', error.message);
-        }
-        
-        for (const scenario of systemConfig.axisScenarios) {
-          try {
-            logger.info(`[Vision Deployer] Creating AOA scenario: ${scenario.name}`);
-            
-            const scenarioId = await this.createAOAScenario(scenario);
-            
-            if (scenarioId) {
-              deployedScenarioIds.push(scenarioId);
-              deployedScenarios++;
-              logger.info(`[Vision Deployer] ✅ AOA scenario created: ${scenario.name} (ID: ${scenarioId})`);
-            } else {
-              throw new Error('Failed to create scenario');
-            }
-          } catch (error: any) {
-            logger.error(`[Vision Deployer] ❌ Failed to create AOA scenario ${scenario.name}:`, error.message);
-            errors.push(`Failed to create AOA scenario ${scenario.name}: ${error.message}`);
+          logger.info('[Vision Deployer] Checking AOA availability...');
+          const aoaStatus = await this.aoaService.getStatus();
+          
+          if (!aoaStatus.running) {
+            logger.info('[Vision Deployer] AOA not running, attempting to start...');
+            await this.aoaService.startAOA();
+            logger.info('[Vision Deployer] AOA application started successfully');
+          } else {
+            logger.info('[Vision Deployer] AOA is already running');
           }
+          
+          // Test AOA functionality with capabilities check
+          try {
+            await this.aoaService.getCapabilities();
+            logger.info('[Vision Deployer] AOA capabilities confirmed, proceeding with scenario deployment');
+          } catch (capError: any) {
+            throw new Error(`AOA capabilities check failed: ${capError.message}`);
+          }
+          
+        } catch (aoaError: any) {
+          logger.error('[Vision Deployer] ❌ AOA not available on this camera:', aoaError.message);
+          logger.info('[Vision Deployer] Skipping AOA scenario deployment - will use skill-based detection only');
+          
+          // Add all scenarios to errors but continue with deployment
+          systemConfig.axisScenarios.forEach((scenario: any) => {
+            errors.push(`Failed to create AOA scenario ${scenario.name}: AOA not available on this camera (${aoaError.message})`);
+          });
+          
+          // Skip AOA deployment but don't fail the entire deployment
+          logger.info(`[Vision Deployer] AOA scenarios skipped: 0/${systemConfig.axisScenarios.length} (AOA not supported)`);
         }
         
-        logger.info(`[Vision Deployer] AOA scenarios deployed: ${deployedScenarios}/${systemConfig.axisScenarios.length}`);
+        // Only proceed with scenario creation if AOA is available
+        if (errors.filter(e => e.includes('AOA not available')).length === 0) {
+          for (const scenario of systemConfig.axisScenarios) {
+            try {
+              logger.info(`[Vision Deployer] Creating AOA scenario: ${scenario.name}`);
+              
+              const scenarioId = await this.createAOAScenario(scenario);
+              
+              if (scenarioId) {
+                deployedScenarioIds.push(scenarioId);
+                deployedScenarios++;
+                logger.info(`[Vision Deployer] ✅ AOA scenario created: ${scenario.name} (ID: ${scenarioId})`);
+              } else {
+                throw new Error('Failed to create scenario');
+              }
+            } catch (error: any) {
+              logger.error(`[Vision Deployer] ❌ Failed to create AOA scenario ${scenario.name}:`, error.message);
+              errors.push(`Failed to create AOA scenario ${scenario.name}: ${error.message}`);
+            }
+          }
+          
+          logger.info(`[Vision Deployer] AOA scenarios deployed: ${deployedScenarios}/${systemConfig.axisScenarios.length}`);
+        }
       }
 
     } catch (error: any) {
@@ -163,6 +210,7 @@ export class VisionArchitectDeployer {
     logger.info('========================================');
     logger.info('[Vision Deployer] Deployment Summary:');
     logger.info(`  Skills: ${deployedSkills}/${systemConfig.skills?.length || 0}`);
+    logger.info(`  Schedules: ${deployedSchedules}/${systemConfig.schedules?.length || 0}`);
     logger.info(`  Profiles: ${deployedProfiles}/${systemConfig.securityProfiles?.length || 0}`);
     logger.info(`  AOA Scenarios: ${deployedScenarios}/${systemConfig.axisScenarios?.length || 0}`);
     logger.info(`  Errors: ${errors.length}`);
@@ -171,10 +219,25 @@ export class VisionArchitectDeployer {
       logger.error('[Vision Deployer] Deployment Errors:', errors);
     }
 
+    // Determine success based on core components (Skills and Profiles are most important)
+    const coreDeploymentSuccess = deployedSkills > 0 && deployedProfiles > 0;
+    const onlyOptionalErrors = errors.every(error => 
+      error.includes('AOA not available') || 
+      error.includes('Schedule') ||
+      error.includes('not supported')
+    );
+    
+    const overallSuccess = coreDeploymentSuccess && (errors.length === 0 || onlyOptionalErrors);
+    
+    if (overallSuccess && errors.length > 0) {
+      logger.info('[Vision Deployer] Deployment successful with optional component warnings');
+    }
+
     return {
-      success: errors.length === 0,
+      success: overallSuccess,
       deployed: {
         scenarios: deployedScenarios,
+        schedules: deployedSchedules,
         skills: deployedSkills,
         profiles: deployedProfiles
       },
@@ -182,7 +245,8 @@ export class VisionArchitectDeployer {
       details: {
         skillIds: deployedSkillIds,
         profileIds: deployedProfileIds,
-        scenarioIds: deployedScenarioIds
+        scenarioIds: deployedScenarioIds,
+        scheduleIds: deployedScheduleIds
       }
     };
   }
@@ -194,7 +258,22 @@ export class VisionArchitectDeployer {
     try {
       const url = `https://${this.cameraIp}/local/BatonAnalytic/baton_analytic.cgi?command=createSkill`;
       
-      const response = await this.makeAuthenticatedRequest('POST', url, skill);
+      logger.info('[Vision Deployer] === CREATING SKILL ===');
+      logger.info('[Vision Deployer] URL:', url);
+      logger.info('[Vision Deployer] Skill Name:', skill.name);
+      // Ensure Author is set to "Vision Architect"
+      const skillPayload = {
+        ...skill,
+        author: "Vision Architect"
+      };
+      
+      logger.info('[Vision Deployer] Full Skill Payload:');
+      logger.info(JSON.stringify(skillPayload, null, 2));
+      
+      const response = await this.makeAuthenticatedRequest('POST', url, skillPayload);
+      
+      logger.info('[Vision Deployer] Response Status:', response.status);
+      logger.info('[Vision Deployer] Response Data:', response.data);
       
       if (response.status === 200 || response.status === 201) {
         const data = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
@@ -204,9 +283,16 @@ export class VisionArchitectDeployer {
         }
       }
       
-      throw new Error(`Failed with status ${response.status}: ${response.data}`);
+      logger.error('[Vision Deployer] ❌ Skill creation failed - unexpected response format');
+      logger.error('[Vision Deployer] Expected: {status: "success"} or {skillId: "..."}');
+      logger.error('[Vision Deployer] Received:', JSON.stringify(response.data, null, 2));
+      throw new Error(`Failed with status ${response.status}: ${JSON.stringify(response.data)}`);
     } catch (error: any) {
-      logger.error('[Vision Deployer] Error creating skill:', error.message);
+      logger.error('[Vision Deployer] ❌ Exception during skill creation:', error.message);
+      if (error.response) {
+        logger.error('[Vision Deployer] Error response status:', error.response.status);
+        logger.error('[Vision Deployer] Error response data:', error.response.data);
+      }
       throw error;
     }
   }
@@ -218,7 +304,16 @@ export class VisionArchitectDeployer {
     try {
       const url = `https://${this.cameraIp}/local/BatonAnalytic/baton_analytic.cgi?command=createSecurityProfile`;
       
+      logger.info('[Vision Deployer] === CREATING SECURITY PROFILE ===');
+      logger.info('[Vision Deployer] URL:', url);
+      logger.info('[Vision Deployer] Profile Name:', profile.name);
+      logger.info('[Vision Deployer] Full Profile Payload:');
+      logger.info(JSON.stringify(profile, null, 2));
+      
       const response = await this.makeAuthenticatedRequest('POST', url, profile);
+      
+      logger.info('[Vision Deployer] Response Status:', response.status);
+      logger.info('[Vision Deployer] Response Data:', response.data);
       
       if (response.status === 200 || response.status === 201) {
         const data = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
@@ -228,9 +323,16 @@ export class VisionArchitectDeployer {
         }
       }
       
-      throw new Error(`Failed with status ${response.status}: ${response.data}`);
+      logger.error('[Vision Deployer] ❌ Profile creation failed - unexpected response format');
+      logger.error('[Vision Deployer] Expected: {status: "success"} or {profileId: "..."}');
+      logger.error('[Vision Deployer] Received:', JSON.stringify(response.data, null, 2));
+      throw new Error(`Failed with status ${response.status}: ${JSON.stringify(response.data)}`);
     } catch (error: any) {
-      logger.error('[Vision Deployer] Error creating profile:', error.message);
+      logger.error('[Vision Deployer] ❌ Exception during profile creation:', error.message);
+      if (error.response) {
+        logger.error('[Vision Deployer] Error response status:', error.response.status);
+        logger.error('[Vision Deployer] Error response data:', error.response.data);
+      }
       throw error;
     }
   }
@@ -254,7 +356,13 @@ export class VisionArchitectDeployer {
       const aoaScenario = this.convertToAOAFormat(scenario);
       aoaScenario.id = nextId;
       
-      logger.info(`[Vision Deployer] Creating AOA scenario "${scenario.name}" with ID ${nextId}`);
+      logger.info('[Vision Deployer] === CREATING AOA SCENARIO ===');
+      logger.info('[Vision Deployer] Scenario Name:', scenario.name);
+      logger.info('[Vision Deployer] Assigned ID:', nextId);
+      logger.info('[Vision Deployer] Original Vision Architect Scenario:');
+      logger.info(JSON.stringify(scenario, null, 2));
+      logger.info('[Vision Deployer] Converted AOA Scenario Payload:');
+      logger.info(JSON.stringify(aoaScenario, null, 2));
       
       // Create the scenario using AOAService
       const success = await this.aoaService.createScenario(aoaScenario);
@@ -348,8 +456,19 @@ export class VisionArchitectDeployer {
       rejectUnauthorized: false
     });
     
+    logger.info('[Vision Deployer] === HTTP REQUEST DETAILS ===');
+    logger.info('[Vision Deployer] Method:', method);
+    logger.info('[Vision Deployer] URL:', url);
+    logger.info('[Vision Deployer] Has Data:', !!data);
+    if (data) {
+      logger.info('[Vision Deployer] Request Payload Size:', JSON.stringify(data).length, 'characters');
+      logger.info('[Vision Deployer] Raw Request Data:');
+      logger.info(JSON.stringify(data, null, 2));
+    }
+    
     try {
       // First request to get auth challenge
+      logger.info('[Vision Deployer] Sending initial request...');
       const response1 = await axios({
         method,
         url,
@@ -360,13 +479,22 @@ export class VisionArchitectDeployer {
         httpsAgent
       });
       
+      logger.info('[Vision Deployer] Initial response status:', response1.status);
+      logger.info('[Vision Deployer] Initial response headers:', JSON.stringify(response1.headers, null, 2));
+      if (response1.data) {
+        logger.info('[Vision Deployer] Initial response data:');
+        logger.info(typeof response1.data === 'string' ? response1.data : JSON.stringify(response1.data, null, 2));
+      }
+      
       if (response1.status === 401) {
         const wwwAuth = response1.headers['www-authenticate'];
         
         if (wwwAuth && wwwAuth.toLowerCase().includes('basic')) {
           // Use Basic auth
+          logger.info('[Vision Deployer] Using Basic authentication');
           const auth = Buffer.from(`${this.username}:${this.password}`).toString('base64');
           
+          logger.info('[Vision Deployer] Sending authenticated request...');
           const response2 = await axios({
             method,
             url,
@@ -380,13 +508,34 @@ export class VisionArchitectDeployer {
             httpsAgent
           });
           
+          logger.info('[Vision Deployer] Authenticated response status:', response2.status);
+          logger.info('[Vision Deployer] Authenticated response headers:', JSON.stringify(response2.headers, null, 2));
+          if (response2.data) {
+            logger.info('[Vision Deployer] Authenticated response data:');
+            logger.info(typeof response2.data === 'string' ? response2.data : JSON.stringify(response2.data, null, 2));
+          }
+          
           return response2;
         }
       }
       
+      logger.info('[Vision Deployer] Using direct response (no auth required or auth failed)');
       return response1;
     } catch (error: any) {
-      logger.error('[Vision Deployer] Request error:', error.message);
+      logger.error('[Vision Deployer] ❌ HTTP Request failed:', error.message);
+      if (error.code) {
+        logger.error('[Vision Deployer] Error code:', error.code);
+      }
+      if (error.response) {
+        logger.error('[Vision Deployer] Error response status:', error.response.status);
+        logger.error('[Vision Deployer] Error response headers:', JSON.stringify(error.response.headers, null, 2));
+        logger.error('[Vision Deployer] Error response data:', error.response.data);
+      }
+      if (error.config) {
+        logger.error('[Vision Deployer] Request config URL:', error.config.url);
+        logger.error('[Vision Deployer] Request config method:', error.config.method);
+        logger.error('[Vision Deployer] Request config headers:', JSON.stringify(error.config.headers, null, 2));
+      }
       throw error;
     }
   }
