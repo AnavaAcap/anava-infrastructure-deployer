@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Button, Typography, Paper, Stack, Chip, Alert, Card, CardContent, Grid, Divider, CircularProgress } from '@mui/material';
-import { Add, RestoreOutlined, Security, Cloud, Videocam, Key as KeyIcon, Rocket as RocketIcon, CheckCircle, Warning, Error as ErrorIcon } from '@mui/icons-material';
+import { Box, Button, Typography, Paper, Stack, Chip, Alert, Card, CardContent, Grid, Divider, CircularProgress, TextField, IconButton, InputAdornment, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Add, RestoreOutlined, Security, Cloud, Videocam, Key as KeyIcon, Rocket as RocketIcon, CheckCircle, Warning, Error as ErrorIcon, Visibility, VisibilityOff, Refresh as RefreshIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import anavaLogo from '../assets/anava-logo.png';
 
@@ -35,8 +35,13 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
   const [licenseKey, setLicenseKey] = useState<string | null>(null);
   const [axisLicenseKey, setAxisLicenseKey] = useState<string | null>(null);
   const [licenseEmail, setLicenseEmail] = useState<string | null>(null);
-  const [apiKeyStatus, setApiKeyStatus] = useState<'loading' | 'present' | 'missing'>('loading');
+  const [apiKeyStatus, setApiKeyStatus] = useState<'loading' | 'present' | 'missing' | 'invalid'>('loading');
   const [authStatus, setAuthStatus] = useState<any>(null);
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [validatingKey, setValidatingKey] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
   useEffect(() => {
     // Get app version from main process
@@ -70,15 +75,21 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
       }
       
       // Check API key status
-      const apiKey = await window.electronAPI?.getConfigValue('geminiApiKey');
-      setApiKeyStatus(apiKey ? 'present' : 'missing');
-      
-      // If missing, try to generate
-      if (!apiKey) {
+      const savedApiKey = await window.electronAPI?.getConfigValue('geminiApiKey');
+      if (savedApiKey) {
+        setApiKey(savedApiKey);
+        // Validate the saved key
+        await validateApiKey(savedApiKey);
+      } else {
+        setApiKeyStatus('missing');
+        // Try to generate one
         await checkAuthAndGenerateApiKey();
         // Re-check after generation attempt
         const newApiKey = await window.electronAPI?.getConfigValue('geminiApiKey');
-        setApiKeyStatus(newApiKey ? 'present' : 'missing');
+        if (newApiKey) {
+          setApiKey(newApiKey);
+          await validateApiKey(newApiKey);
+        }
       }
     } catch (error) {
       console.error('Failed to load credentials:', error);
@@ -140,6 +151,79 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
     }
   };
 
+  const validateApiKey = async (key: string) => {
+    if (!key) {
+      setApiKeyStatus('missing');
+      return;
+    }
+    
+    setValidatingKey(true);
+    setApiKeyError(null);
+    
+    try {
+      const result = await window.electronAPI?.invokeIPC('vision-architect-validate-key', key);
+      if (result?.valid) {
+        setApiKeyStatus('present');
+        setApiKeyError(null);
+        // Save the valid key
+        await window.electronAPI?.setConfigValue('geminiApiKey', key);
+      } else {
+        setApiKeyStatus('invalid');
+        setApiKeyError(result?.error || 'Invalid API key');
+      }
+    } catch (error: any) {
+      console.error('Failed to validate API key:', error);
+      setApiKeyStatus('invalid');
+      setApiKeyError(error.message || 'Failed to validate API key');
+    } finally {
+      setValidatingKey(false);
+    }
+  };
+
+  const handleApiKeySubmit = async () => {
+    await validateApiKey(apiKey);
+    if (apiKeyStatus === 'present') {
+      setShowApiKeyDialog(false);
+    }
+  };
+
+  const generateNewApiKey = async () => {
+    // Open AI Studio to generate a new key
+    window.open('https://aistudio.google.com/apikey', '_blank');
+  };
+
+  const getApiKeyStatusColor = () => {
+    switch (apiKeyStatus) {
+      case 'present': return 'success';
+      case 'invalid': return 'error';
+      case 'missing': return 'warning';
+      default: return 'default';
+    }
+  };
+
+  const getApiKeyStatusIcon = () => {
+    if (validatingKey || apiKeyStatus === 'loading') {
+      return <CircularProgress size={24} />;
+    }
+    switch (apiKeyStatus) {
+      case 'present': return <CheckCircle color="success" />;
+      case 'invalid': return <ErrorIcon color="error" />;
+      case 'missing': return <Warning color="warning" />;
+      default: return <CircularProgress size={24} />;
+    }
+  };
+
+  const getApiKeyStatusText = () => {
+    if (validatingKey) return 'Validating...';
+    switch (apiKeyStatus) {
+      case 'loading': return 'Checking...';
+      case 'present': return 'Valid & Configured';
+      case 'invalid': return 'Invalid Key';
+      case 'missing': return 'Not Configured';
+      default: return 'Unknown';
+    }
+  };
+
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
       <GradientPaper elevation={3} sx={{ p: 6, maxWidth: 1200, width: '100%', mx: 'auto' }}>
@@ -170,32 +254,36 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
         {/* API Key Status */}
         <Grid item xs={12} md={6}>
           <Card sx={{ 
-            backgroundColor: apiKeyStatus === 'present' ? 'success.50' : 'warning.50',
-            borderLeft: `4px solid ${apiKeyStatus === 'present' ? '#4caf50' : '#ff9800'}`
-          }}>
+            backgroundColor: apiKeyStatus === 'present' ? 'success.50' : 
+                           apiKeyStatus === 'invalid' ? 'error.50' : 'warning.50',
+            borderLeft: `4px solid ${apiKeyStatus === 'present' ? '#4caf50' : 
+                                    apiKeyStatus === 'invalid' ? '#f44336' : '#ff9800'}`,
+            cursor: 'pointer'
+          }} onClick={() => setShowApiKeyDialog(true)}>
             <CardContent>
               <Stack direction="row" spacing={2} alignItems="center">
-                {apiKeyStatus === 'loading' ? (
-                  <CircularProgress size={24} />
-                ) : apiKeyStatus === 'present' ? (
-                  <CheckCircle color="success" />
-                ) : (
-                  <Warning color="warning" />
-                )}
+                {getApiKeyStatusIcon()}
                 <Box flex={1}>
                   <Typography variant="subtitle2" color="text.secondary">
-                    AI Studio API Key
+                    Gemini API Key
                   </Typography>
                   <Typography variant="body2" fontWeight="bold">
-                    {apiKeyStatus === 'loading' ? 'Checking...' : 
-                     apiKeyStatus === 'present' ? 'Configured' : 'Not Configured'}
+                    {getApiKeyStatusText()}
                   </Typography>
+                  {apiKeyStatus === 'invalid' && apiKeyError && (
+                    <Typography variant="caption" color="error.main">
+                      {apiKeyError}
+                    </Typography>
+                  )}
                   {apiKeyStatus === 'missing' && (
                     <Typography variant="caption" color="warning.main">
-                      Will be configured during deployment
+                      Click to configure
                     </Typography>
                   )}
                 </Box>
+                <IconButton size="small">
+                  <SettingsIcon fontSize="small" />
+                </IconButton>
               </Stack>
             </CardContent>
           </Card>
@@ -325,6 +413,85 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onNewDeployment, onCheckExist
         </Button>
       </Box>
     </GradientPaper>
+    
+    {/* API Key Configuration Dialog */}
+    <Dialog open={showApiKeyDialog} onClose={() => setShowApiKeyDialog(false)} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        <Box display="flex" alignItems="center" gap={1}>
+          <KeyIcon />
+          <Typography variant="h6">Configure Gemini API Key</Typography>
+        </Box>
+      </DialogTitle>
+      <DialogContent>
+        <Stack spacing={3} sx={{ mt: 2 }}>
+          <TextField
+            fullWidth
+            label="Gemini API Key"
+            type={showApiKey ? 'text' : 'password'}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            error={apiKeyStatus === 'invalid'}
+            helperText={apiKeyError || 'Enter your Gemini API key from AI Studio'}
+            disabled={validatingKey}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    edge="end"
+                  >
+                    {showApiKey ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+          
+          {apiKeyStatus === 'invalid' && (
+            <Alert severity="error">
+              <Typography variant="body2">
+                This API key is invalid or has been revoked.
+              </Typography>
+            </Alert>
+          )}
+          
+          {apiKeyStatus === 'present' && (
+            <Alert severity="success">
+              <Typography variant="body2">
+                API key is valid and working!
+              </Typography>
+            </Alert>
+          )}
+          
+          <Box>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Don't have an API key?
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={generateNewApiKey}
+              startIcon={<Add />}
+            >
+              Generate New API Key in AI Studio
+            </Button>
+          </Box>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setShowApiKeyDialog(false)}>
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleApiKeySubmit}
+          disabled={!apiKey || validatingKey}
+          startIcon={validatingKey ? <CircularProgress size={20} /> : <CheckCircle />}
+        >
+          {validatingKey ? 'Validating...' : 'Save & Validate'}
+        </Button>
+      </DialogActions>
+    </Dialog>
     </Box>
   );
 };

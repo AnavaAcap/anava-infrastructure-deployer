@@ -5,12 +5,40 @@
 - **Organization**: AnavaAcap
 - **Product Name**: Anava Installer
 - **Public Releases**: https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
-- **Current Version**: v0.9.188 (2025-01-15)
+- **Current Version**: v0.9.206 (2025-08-14)
 - **Electron**: v37.2.6 (latest)
 - **Node.js**: v20.x
 - **Build System**: Vite v7.x
 
-## Latest Features (v0.9.188) - PRODUCTION VERIFIED ✅
+## Latest Features (v0.9.206) - VISION ARCHITECT WITH SCENE CAPTURE ✅
+
+### ✅ Scene Image Integration - NEW
+- **Feature**: Automatically captures scene image before Vision Architect generation
+- **Implementation**: Calls getSceneDescription if no image available
+- **UI**: Shows capture progress and image status indicator
+- **Files**: `VisionArchitectDialog.tsx`, `visionArchitect.ts`
+
+### ✅ Comprehensive Logging - NEW
+- **Feature**: Full logging of prompts, responses, and AI interactions
+- **Logs**: System prompt, user prompt, raw response, parsed JSON
+- **Debugging**: First 1000-2000 chars of prompts/responses logged
+- **Files**: `visionArchitect.ts`, `visionArchitectIPC.ts`
+
+## Previous Features (v0.9.205) - API KEY MANAGEMENT & MODEL SELECTION ✅
+
+### ✅ Dynamic Model Selection - NEW
+- **Feature**: Dropdown to select which Gemini model to use
+- **Implementation**: Models fetched dynamically from Google API
+- **Default**: gemini-2.0-flash-lite (best for free tier)
+- **Files**: `VisionArchitectDialog.tsx`, `visionArchitect.ts`
+
+### ✅ API Key Validation & Management - NEW  
+- **Feature**: Validate and manage Gemini API keys with visual feedback
+- **Implementation**: Test key by calling models list API
+- **UI**: Show/hide toggle, status indicators, error messages
+- **Files**: `WelcomePage.tsx`, `visionArchitectIPC.ts`
+
+## Previous Features (v0.9.188) - PRODUCTION VERIFIED ✅
 
 ### ✅ CRITICAL FIX: Missing Activator Files in Production - FIXED & VERIFIED
 - **Problem**: License activation failing at 60% for all users except developer

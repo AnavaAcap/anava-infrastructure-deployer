@@ -75,16 +75,16 @@ const UnifiedLoginPage: React.FC<UnifiedLoginPageProps> = ({ onLoginSuccess }) =
       }
       
       const unifiedAuth = await response.json();
-      console.log('Full unified auth response:', unifiedAuth);
-      console.log('Unified auth response summary:', {
-        hasGCPToken: !!unifiedAuth.gcp_access_token,
-        hasFirebaseToken: !!unifiedAuth.firebase_token,
-        hasApiKey: !!unifiedAuth.gemini_api_key,
-        hasLicense: !!unifiedAuth.license,
-        licenseStructure: typeof unifiedAuth.license === 'object' ? 'object' : typeof unifiedAuth.license,
-        user: unifiedAuth.user?.email,
-        allKeys: Object.keys(unifiedAuth)
-      });
+      // console.log('Full unified auth response:', unifiedAuth);
+      // console.log('Unified auth response summary:', {
+      //   hasGCPToken: !!unifiedAuth.gcp_access_token,
+      //   hasFirebaseToken: !!unifiedAuth.firebase_token,
+      //   hasApiKey: !!unifiedAuth.gemini_api_key,
+      //   hasLicense: !!unifiedAuth.license,
+      //   licenseStructure: typeof unifiedAuth.license === 'object' ? 'object' : typeof unifiedAuth.license,
+      //   user: unifiedAuth.user?.email,
+      //   allKeys: Object.keys(unifiedAuth)
+      // });
       
       if (!unifiedAuth.success) {
         throw new Error(unifiedAuth.error || 'Authentication failed');

@@ -39,8 +39,8 @@ import {
 import DetectionTestModal from '../components/DetectionTestModal';
 import { AOAScenarioDialog } from '../components/AOAScenarioDialog';
 import { VisionArchitectDialog } from '../components/VisionArchitectDialog';
-import { useNavigationGuard } from '../hooks/useNavigationGuard';
-import NavigationWarningDialog from '../components/NavigationWarningDialog';
+// import { useNavigationGuard } from '../hooks/useNavigationGuard';
+// import NavigationWarningDialog from '../components/NavigationWarningDialog';
 import {
   Visibility,
   VisibilityOff,
@@ -59,6 +59,8 @@ import {
   SkipNext as SkipNextIcon,
   SmartToy as SmartToyIcon,
   OpenInNew as OpenInNewIcon,
+  AutoFixHigh as AutoFixHighIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { useCameraContext } from '../contexts/CameraContext';
 
@@ -96,7 +98,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       if (savedState) {
         try {
           const state = JSON.parse(savedState);
-          console.log('Restoring camera setup state from localStorage');
+          // console.log('Restoring camera setup state from localStorage');
           return state;
         } catch (error) {
           console.error('Failed to parse saved camera setup state:', error);
@@ -159,7 +161,11 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [validatingCredentials, setValidatingCredentials] = useState(false);
   const [showAOADialog, setShowAOADialog] = useState(false);
   const [showVisionArchitectDialog, setShowVisionArchitectDialog] = useState(false);
-  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(
+    localStorage.getItem('customGeminiApiKey') || ''
+  );
+  const [manualCameraIp, setManualCameraIp] = useState<string>('');
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [useVisionArchitect, setUseVisionArchitect] = useState(true); // Use Vision Architect by default
   
   // Check if any operation is in progress
@@ -167,37 +173,14 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
     testingSpeaker || processingSpeakerConfig || validatingCredentials ||
     (activeStep > 0 && activeStep < 4);
   
-  // Setup navigation guard
-  const {
-    showDialog,
-    confirmNavigation,
-    cancelNavigation,
-    guardedNavigate,
-    message,
-    isProcessing
-  } = useNavigationGuard({
-    when: isOperationInProgress,
-    message: activeStep === 2 ? 
-      'ACAP deployment is in progress. Leaving this page will cancel the deployment and you may need to factory reset the camera.' :
-      activeStep === 3 ?
-      'Speaker configuration is in progress. Leaving this page will cancel the setup.' :
-      'Camera setup is in progress. Leaving this page will lose your current progress.',
-    onConfirm: async () => {
-      // Clear any ongoing operations
-      // Note: This is synchronous cleanup, but we make it async for consistency
-      setScanning(false);
-      setConnecting(false);
-      setDeploying(false);
-      setAnalyzing(false);
-      setTestingSpeaker(false);
-      setProcessingSpeakerConfig(false);
-      setValidatingCredentials(false);
-      
-      // If there are any async cleanup operations, add them here
-      // For now, just clear state synchronously
-      return Promise.resolve();
-    }
-  });
+  // Navigation guard disabled - app doesn't use React Router
+  // Would need to wrap app in Router component to use this
+  const showDialog = false;
+  const confirmNavigation = () => {};
+  const cancelNavigation = () => {};
+  const guardedNavigate = (path: string) => onNavigate?.(path);
+  const message = '';
+  const isProcessing = false;
   
   // State to track if we need to restore from saved state
   const [hasPreDiscoveredCameras, setHasPreDiscoveredCameras] = useState(false);
@@ -255,6 +238,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   useEffect(() => {
     loadLicenseKey();
     checkPreDiscoveredCameras();
+    loadApiKey();
     
     // Load discovered speakers from localStorage when component mounts
     const savedSpeakers = localStorage.getItem('discoveredSpeakers');
@@ -279,6 +263,27 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       }
     }
   }, []);
+
+  const loadApiKey = async () => {
+    try {
+      // Try to load from config
+      const savedApiKey = await window.electronAPI?.getConfigValue('geminiApiKey');
+      if (savedApiKey) {
+        console.log('✅ Loaded Gemini API key from config');
+        setGeminiApiKey(savedApiKey);
+        localStorage.setItem('customGeminiApiKey', savedApiKey);
+      } else {
+        // Try to get from localStorage
+        const localApiKey = localStorage.getItem('customGeminiApiKey');
+        if (localApiKey) {
+          console.log('✅ Loaded Gemini API key from localStorage');
+          setGeminiApiKey(localApiKey);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load API key:', error);
+    }
+  };
 
   const loadLicenseKey = async () => {
     try {
@@ -592,16 +597,19 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       
       // Update status message
       if (formattedCameras.length > 0) {
-        setDeploymentStatus(`Network scan complete. Found ${formattedCameras.length} camera(s).`);
+        const accessibleCount = formattedCameras.filter(cam => cam.accessible).length;
+        const unauthenticatedCount = formattedCameras.filter(cam => cam.authRequired).length;
         
-        // Auto-select first accessible camera but DON'T auto-advance
-        const firstAccessible = formattedCameras.find(cam => cam.accessible);
-        if (firstAccessible) {
-          setSelectedCamera(firstAccessible);
-          // Don't auto-advance - let user review and select cameras
-        }
-        
-        if (!firstAccessible) {
+        if (accessibleCount > 0) {
+          setDeploymentStatus(`Network scan complete. Found ${formattedCameras.length} camera(s), ${accessibleCount} accessible.`);
+          // Auto-select first accessible camera but DON'T auto-advance
+          const firstAccessible = formattedCameras.find(cam => cam.accessible);
+          if (firstAccessible) {
+            setSelectedCamera(firstAccessible);
+          }
+        } else if (unauthenticatedCount > 0) {
+          setDeploymentStatus(`Found ${formattedCameras.length} Axis device(s), but none are accessible with current credentials. Click on a device to update credentials.`);
+        } else {
           setDeploymentStatus(`Found ${formattedCameras.length} camera(s). Please verify credentials.`);
         }
       } else {
@@ -1285,6 +1293,16 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                 <Typography variant="subtitle2" gutterBottom>
                   {mode === 'manual' ? 'Connection Result:' : 'Found Cameras:'}
                 </Typography>
+                
+                {/* Show info message if there are devices needing authentication */}
+                {cameras.some(cam => cam.authRequired) && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      <strong>Tip:</strong> Orange devices require valid credentials. Click on any device with a warning icon to enter the correct username and password.
+                    </Typography>
+                  </Alert>
+                )}
+                
                 <List>
                   {cameras.map((camera) => (
                     <Paper
@@ -1293,19 +1311,31 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                       sx={{
                         p: 2,
                         mb: 1,
-                        cursor: camera.accessible ? 'pointer' : 'default',
-                        '&:hover': camera.accessible ? { bgcolor: 'action.hover' } : {},
+                        cursor: 'pointer',
+                        '&:hover': { bgcolor: 'action.hover' },
                         border: selectedCamera?.id === camera.id ? 2 : 1,
-                        borderColor: selectedCamera?.id === camera.id ? 'primary.main' : 'divider'
+                        borderColor: selectedCamera?.id === camera.id ? 'primary.main' : 
+                                      camera.authRequired ? 'warning.main' : 'divider',
+                        bgcolor: camera.authRequired ? 'warning.light' : 'background.paper',
+                        opacity: camera.authRequired ? 0.95 : 1
                       }}
-                      onClick={() => camera.accessible && !camera.authRequired && setSelectedCamera(camera)}
+                      onClick={() => {
+                        if (camera.accessible && !camera.authRequired) {
+                          setSelectedCamera(camera);
+                        } else if (camera.authRequired) {
+                          // Navigate back to credentials step with this camera's info
+                          setSelectedCamera(camera);
+                          setActiveStep(0);
+                          setDeploymentStatus(`Please enter valid credentials for ${camera.name || camera.ip}`);
+                        }
+                      }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Box>
                           {camera.accessible ? (
                             <CheckCircleIcon color="success" sx={{ fontSize: 40 }} />
                           ) : camera.authRequired ? (
-                            <WarningIcon color="warning" sx={{ fontSize: 40 }} />
+                            <WarningIcon sx={{ color: 'warning.dark', fontSize: 40 }} />
                           ) : connecting ? (
                             <CircularProgress size={40} />
                           ) : (
@@ -1322,7 +1352,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                           {camera.authRequired && (
                             <Alert severity="warning" sx={{ mt: 1, py: 0 }}>
                               <Typography variant="caption">
-                                Incorrect credentials - please update credentials to access this device
+                                Valid credentials required - click to enter credentials
                               </Typography>
                             </Alert>
                           )}
@@ -1339,7 +1369,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   ))}
                 </List>
                 
-                {selectedCamera && (
+                {selectedCamera && selectedCamera.accessible && !selectedCamera.authRequired && (
                   <Button
                     variant="contained"
                     fullWidth
@@ -1351,6 +1381,14 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   >
                     Continue with Selected Camera
                   </Button>
+                )}
+                
+                {cameras.length > 0 && !cameras.some(cam => cam.accessible && !cam.authRequired) && (
+                  <Alert severity="warning" sx={{ mt: 2 }}>
+                    <Typography variant="body2">
+                      No accessible cameras found. Please click on a device above to enter valid credentials.
+                    </Typography>
+                  </Alert>
                 )}
               </Box>
             )}
@@ -1587,6 +1625,199 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         );
 
       case 3:
+        // Vision AI Configuration Step
+        return (
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Configure Vision AI System
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Use natural language to describe what you want your camera to detect and monitor.
+            </Typography>
+            
+            {/* Manual camera entry if no camera selected */}
+            {!selectedCamera && (
+              <Paper variant="outlined" sx={{ p: 2, mb: 3, bgcolor: 'background.default' }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Camera Connection
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      label="Camera IP Address"
+                      value={manualCameraIp}
+                      onChange={(e) => setManualCameraIp(e.target.value)}
+                      placeholder="192.168.1.100"
+                      fullWidth
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      label="Username"
+                      value={credentials.username}
+                      onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
+                      fullWidth
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField
+                      label="Password"
+                      type="password"
+                      value={credentials.password}
+                      onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
+                      fullWidth
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+              </Paper>
+            )}
+            
+            {/* Show selected camera info */}
+            {selectedCamera && (
+              <Alert severity="success" sx={{ mb: 3 }}>
+                <Typography variant="body2">
+                  <strong>Connected Camera:</strong> {selectedCamera.name} ({selectedCamera.ip})
+                </Typography>
+              </Alert>
+            )}
+            
+            {/* Vision Architect Interface */}
+            <Paper variant="outlined" sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <SmartToyIcon sx={{ mr: 1, color: 'primary.main' }} />
+                <Typography variant="h6">
+                  Vision AI Assistant
+                </Typography>
+              </Box>
+              
+              <Typography variant="body2" gutterBottom>
+                Describe what you want to monitor. For example:
+              </Typography>
+              
+              <Box sx={{ ml: 2, mb: 3 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  • "Detect people entering the building"<br/>
+                  • "Monitor delivery trucks at the loading dock"<br/>
+                  • "Alert when someone loiters for more than 30 seconds"<br/>
+                  • "Count customers entering and track busy times"
+                </Typography>
+              </Box>
+              
+              <Button
+                variant="contained"
+                fullWidth
+                size="large"
+                startIcon={<AutoFixHighIcon />}
+                onClick={() => {
+                  // Set camera info for Vision Architect
+                  if (!selectedCamera && manualCameraIp) {
+                    // Create temporary camera object for manual entry
+                    setSelectedCamera({
+                      id: 'manual-camera',
+                      ip: manualCameraIp,
+                      name: `Camera at ${manualCameraIp}`,
+                      model: 'Unknown',
+                      accessible: true,
+                      authRequired: false,
+                      status: 'idle'
+                    } as any);
+                  }
+                  setShowVisionArchitectDialog(true);
+                }}
+                disabled={!selectedCamera && (!manualCameraIp || !credentials.username || !credentials.password)}
+              >
+                Open Vision AI Configuration
+              </Button>
+              
+              {(!selectedCamera && (!manualCameraIp || !credentials.username || !credentials.password)) && (
+                <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                  Please enter camera details above or select a camera from previous steps
+                </Typography>
+              )}
+              
+              {/* API Key Configuration */}
+              <Box sx={{ mt: 2 }}>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {showApiKeyInput ? 'Hide' : 'Use Custom'} API Key
+                </Button>
+                
+                {showApiKeyInput && (
+                  <Box sx={{ mt: 1 }}>
+                    <TextField
+                      label="Gemini API Key (Optional)"
+                      value={geminiApiKey}
+                      onChange={(e) => {
+                        setGeminiApiKey(e.target.value);
+                        localStorage.setItem('customGeminiApiKey', e.target.value);
+                      }}
+                      placeholder="Enter your Gemini API key for better rate limits"
+                      fullWidth
+                      size="small"
+                      helperText="Get a free API key at ai.google.dev"
+                      type="password"
+                      InputProps={{
+                        endAdornment: geminiApiKey !== 'AIzaSyD4TlgvKlDUZRn5nIuS6O-uMKKHEqu8qCQ' && (
+                          <Typography variant="caption" color="success.main">
+                            Custom Key Active
+                          </Typography>
+                        )
+                      }}
+                    />
+                  </Box>
+                )}
+                
+                {error && error.includes('quota') && (
+                  <Alert severity="warning" sx={{ mt: 1 }}>
+                    <Typography variant="caption">
+                      The default API key has hit its rate limit. Please wait a few minutes or 
+                      <Button 
+                        size="small" 
+                        onClick={() => setShowApiKeyInput(true)}
+                        sx={{ ml: 1 }}
+                      >
+                        use your own API key
+                      </Button>
+                    </Typography>
+                  </Alert>
+                )}
+              </Box>
+            </Paper>
+            
+            <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
+              <Button
+                variant="outlined"
+                onClick={() => setActiveStep(1)}
+                startIcon={<SearchIcon />}
+              >
+                Find Camera
+              </Button>
+              
+              <Box sx={{ flex: 1 }} />
+              
+              <Button
+                variant="contained"
+                onClick={() => {
+                  setActiveStep(5);
+                  setCompleted(prev => ({ ...prev, 3: true }));
+                }}
+                disabled={!selectedCamera && !manualCameraIp}
+              >
+                Continue
+              </Button>
+            </Box>
+          </Box>
+        );
+        
+      case 4:
+        // Speaker Configuration (was case 3)
         return (
           <Box sx={{ position: 'relative' }}>
             {/* Loading overlay */}
@@ -1907,7 +2138,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
           </Box>
         );
 
-      case 4:
+      case 5:
+        // Complete step (was case 4)
         return (
           <Box textAlign="center" sx={{ py: 4 }}>
             <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
@@ -2139,6 +2371,25 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         
         <Step completed={completed[3]}>
           <StepLabel 
+            onClick={() => {
+              // Allow jumping to Vision Architect if camera is selected
+              // Can access this even without ACAP deployment
+              if (selectedCamera || (credentials.username && credentials.password)) {
+                setActiveStep(3);
+              }
+            }}
+            sx={{ cursor: (selectedCamera || (credentials.username && credentials.password)) ? 'pointer' : 'default' }}
+          >
+            Configure Vision AI
+            <Typography variant="caption" sx={{ ml: 1, color: 'primary.main' }}>
+              (New!)
+            </Typography>
+          </StepLabel>
+          <StepContent>{getStepContent(3)}</StepContent>
+        </Step>
+        
+        <Step completed={completed[4]}>
+          <StepLabel 
             optional={<Typography variant="caption">Optional</Typography>}
             onClick={() => {
               // Allow jumping to speaker config if camera is selected and either:
@@ -2146,29 +2397,29 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
               // - Camera has ACAP installed, or  
               // - Camera was loaded from previously configured (has credentials)
               if (selectedCamera && (completed[2] || selectedCamera?.hasACAP || selectedCamera?.isLicensed || completed[1])) {
-                setActiveStep(3);
+                setActiveStep(4);
               }
             }}
             sx={{ cursor: (selectedCamera && (completed[2] || selectedCamera?.hasACAP || selectedCamera?.isLicensed || completed[1])) ? 'pointer' : 'default' }}
           >
             Configure Audio Speaker
           </StepLabel>
-          <StepContent>{getStepContent(3)}</StepContent>
+          <StepContent>{getStepContent(4)}</StepContent>
         </Step>
         
-        <Step completed={completed[4]}>
+        <Step completed={completed[5]}>
           <StepLabel 
             onClick={() => {
               // Allow jumping to complete if deployment is done or speaker is configured
-              if (selectedCamera && (completed[2] || completed[3] || selectedCamera?.hasACAP)) {
-                setActiveStep(4);
+              if (selectedCamera && (completed[2] || completed[3] || completed[4] || selectedCamera?.hasACAP)) {
+                setActiveStep(5);
               }
             }}
-            sx={{ cursor: (selectedCamera && (completed[2] || completed[3] || selectedCamera?.hasACAP)) ? 'pointer' : 'default' }}
+            sx={{ cursor: (selectedCamera && (completed[2] || completed[3] || completed[4] || selectedCamera?.hasACAP)) ? 'pointer' : 'default' }}
           >
             Complete
           </StepLabel>
-          <StepContent>{getStepContent(4)}</StepContent>
+          <StepContent>{getStepContent(5)}</StepContent>
         </Step>
       </Stepper>
       
@@ -2224,21 +2475,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         />
       )}
       
-      <NavigationWarningDialog
-        open={showDialog}
-        title={
-          activeStep === 2 ? "ACAP Deployment in Progress" :
-          activeStep === 3 ? "Speaker Configuration in Progress" :
-          "Camera Setup in Progress"
-        }
-        message={message}
-        severity={activeStep === 2 ? "error" : "warning"}
-        confirmText="Leave Page"
-        cancelText="Stay on Page"
-        isProcessing={isProcessing}
-        onConfirm={confirmNavigation}
-        onCancel={cancelNavigation}
-      />
+      {/* Navigation warning disabled - app doesn't use React Router */}
     </Box>
   );
 };

@@ -49,8 +49,7 @@ const initializeCameraServices = async () => {
       const OptimizedCameraDiscoveryService = (await import('./services/camera/optimizedCameraDiscoveryService')).OptimizedCameraDiscoveryService;
       new OptimizedCameraDiscoveryService();
       
-      // Register Vision Architect IPC handlers
-      await import('./services/vision/visionArchitectIPC');
+      // Vision Architect handlers are now registered in app.whenReady()
       
       const ACAPDeploymentService = (await import('./services/camera/acapDeploymentService')).ACAPDeploymentService;
       new ACAPDeploymentService();
@@ -113,10 +112,10 @@ function createWindow() {
     // This ensures users always start fresh when reopening the app
     mainWindow?.webContents.executeJavaScript(`
       try {
-        console.log('[Main] Clearing camera setup state from localStorage');
+        // console.log('[Main] Clearing camera setup state from localStorage');
         localStorage.removeItem('cameraSetupState');
         localStorage.removeItem('discoveredSpeakers');
-        console.log('[Main] Camera setup state cleared successfully');
+        // console.log('[Main] Camera setup state cleared successfully');
       } catch (error) {
         console.error('[Main] Failed to clear localStorage:', error);
       }
@@ -150,10 +149,10 @@ function createWindow() {
     // Clear camera setup state when DOM is ready
     mainWindow?.webContents.executeJavaScript(`
       try {
-        console.log('[Main] DOM Ready - Clearing camera setup state from localStorage');
+        // console.log('[Main] DOM Ready - Clearing camera setup state from localStorage');
         localStorage.removeItem('cameraSetupState');
         localStorage.removeItem('discoveredSpeakers');
-        console.log('[Main] Camera setup state cleared on DOM ready');
+        // console.log('[Main] Camera setup state cleared on DOM ready');
       } catch (error) {
         console.error('[Main] Failed to clear localStorage on DOM ready:', error);
       }
@@ -247,6 +246,15 @@ function checkWindowsDefender() {
 
 app.whenReady().then(async () => {
   logger.info('App ready, starting fast initialization...');
+  
+  // Register Vision Architect IPC handlers IMMEDIATELY
+  try {
+    const { registerVisionArchitectHandlers } = await import('./services/vision/visionArchitectIPC');
+    registerVisionArchitectHandlers();
+    logger.info('Vision Architect handlers registered successfully');
+  } catch (error) {
+    logger.error('Failed to register Vision Architect handlers:', error);
+  }
   
   // CRITICAL: Clear GCP OAuth tokens on startup to force fresh login
   // This ensures users always have the latest scopes and permissions

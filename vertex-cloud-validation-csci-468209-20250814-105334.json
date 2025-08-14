@@ -1,0 +1,56 @@
+{
+  "timestamp": "2025-08-14T15:53:34.578470Z",
+  "project_id": "csci-468209",
+  "success_rate": 100.0,
+  "tests_passed": 8,
+  "tests_failed": 0,
+  "total_tests": 8,
+  "details": [
+    {
+      "step": "API Gateway Health",
+      "status": "PASS"
+    },
+    {
+      "step": "Custom Token Generation",
+      "status": "PASS"
+    },
+    {
+      "step": "ID Token Exchange",
+      "status": "PASS"
+    },
+    {
+      "step": "GCP Token Vending",
+      "status": "PASS"
+    },
+    {
+      "step": "Firestore Access",
+      "status": "PASS"
+    },
+    {
+      "step": "Cloud Storage",
+      "status": "PASS"
+    },
+    {
+      "step": "Vertex AI/Gemini",
+      "status": "PASS"
+    },
+    {
+      "step": "Firebase Config",
+      "status": "PASS"
+    }
+  ],
+  "configuration": {
+    "api_gateway_url": "https://csci-gw-5ks9avkc.ue.gateway.dev",
+    "firebase_config": {
+      "apiKey": "AIzaSyD7e1z9dtohYdGhkO6io61i_wjtOqDyyV4",
+      "authDomain": "csci-468209.firebaseapp.com",
+      "projectId": "csci-468209",
+      "storageBucket": "csci-468209.firebasestorage.app",
+      "messagingSenderId": "437065144140",
+      "appId": "1:437065144140:web:4db9c43cefe96f3770a1e9",
+      "databaseId": "(default)"
+    },
+    "region": "asia-northeast1",
+    "storage_bucket": "csci-468209.firebasestorage.app"
+  }
+}
