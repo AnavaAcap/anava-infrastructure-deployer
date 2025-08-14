@@ -1,0 +1,253 @@
+{
+  "simple_human_detection": {
+    "description": "Basic human detection in full camera view",
+    "payload": {
+      "id": 1,
+      "name": "Human Detection",
+      "type": "motion",
+      "enabled": true,
+      "triggers": [
+        {
+          "type": "includeArea",
+          "vertices": [
+            [-0.9, -0.9],
+            [-0.9, 0.9],
+            [0.9, 0.9],
+            [0.9, -0.9]
+          ]
+        }
+      ],
+      "objectClassifications": [
+        {
+          "type": "human"
+        }
+      ]
+    }
+  },
+  
+  "loitering_detection": {
+    "description": "Detect someone standing for more than 10 seconds",
+    "payload": {
+      "id": 2,
+      "name": "Loiter Detection",
+      "type": "motion",
+      "enabled": true,
+      "triggers": [
+        {
+          "type": "includeArea",
+          "vertices": [
+            [-0.5, -0.5],
+            [-0.5, 0.5],
+            [0.5, 0.5],
+            [0.5, -0.5]
+          ],
+          "conditions": [
+            {
+              "type": "individualTimeInArea",
+              "data": [
+                {
+                  "type": "human",
+                  "time": 10,
+                  "alarmTime": 1
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "filters": [
+        {
+          "type": "timeShort",
+          "data": 10000
+        }
+      ],
+      "objectClassifications": [
+        {
+          "type": "human"
+        }
+      ]
+    }
+  },
+  
+  "crowd_detection": {
+    "description": "Alert when 3+ people gather for 5+ seconds",
+    "user_input": "3 or more people standing in front of my door for more than 5 seconds",
+    "ai_interpretation": {
+      "detected_count": "3 or more",
+      "detected_object": "people",
+      "detected_behavior": "standing/stationary",
+      "detected_duration": "5 seconds",
+      "detected_location": "door area"
+    },
+    "payload": {
+      "id": 3,
+      "name": "Crowd at Door",
+      "type": "occupancy",
+      "enabled": true,
+      "triggers": [
+        {
+          "type": "includeArea",
+          "vertices": [
+            [-0.5, 0.3],
+            [-0.5, 0.9],
+            [0.5, 0.9],
+            [0.5, 0.3]
+          ],
+          "conditions": [
+            {
+              "type": "individualTimeInArea",
+              "data": [
+                {
+                  "type": "human",
+                  "time": 5,
+                  "alarmTime": 1
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "filters": [
+        {
+          "type": "timeShort",
+          "data": 5000
+        }
+      ],
+      "objectClassifications": [
+        {
+          "type": "human"
+        }
+      ],
+      "metadata": {
+        "occupancyThreshold": 3
+      }
+    }
+  },
+  
+  "vehicle_parking": {
+    "description": "Detect vehicles parking in restricted area",
+    "payload": {
+      "id": 4,
+      "name": "No Parking",
+      "type": "motion",
+      "enabled": true,
+      "triggers": [
+        {
+          "type": "includeArea",
+          "vertices": [
+            [-0.8, 0.2],
+            [-0.8, 0.8],
+            [-0.2, 0.8],
+            [-0.2, 0.2]
+          ]
+        }
+      ],
+      "filters": [
+        {
+          "type": "timeShort",
+          "data": 15000
+        },
+        {
+          "type": "sizePercentage",
+          "data": {
+            "min": [20, 20],
+            "max": [100, 100]
+          }
+        }
+      ],
+      "objectClassifications": [
+        {
+          "type": "vehicle",
+          "subTypes": ["car", "truck"]
+        }
+      ]
+    }
+  },
+  
+  "entrance_counter": {
+    "description": "Count people entering through a doorway",
+    "payload": {
+      "id": 5,
+      "name": "Entry Counter",
+      "type": "crosslinecount",
+      "enabled": true,
+      "triggers": [
+        {
+          "type": "crossline",
+          "vertices": [
+            [-0.9, 0],
+            [0.9, 0]
+          ]
+        }
+      ],
+      "objectClassifications": [
+        {
+          "type": "human"
+        }
+      ],
+      "metadata": {
+        "crosslineDirection": "left-right"
+      }
+    }
+  },
+  
+  "actual_api_call": {
+    "description": "This is what actually gets sent to the camera API",
+    "endpoint": "POST http://192.168.1.100/local/objectanalytics/control.cgi",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Digest username=\"root\", realm=\"AXIS_ACCC8EF5A384\", ..."
+    },
+    "body": {
+      "apiVersion": "1.0",
+      "method": "addConfiguration",
+      "params": {
+        "scenarios": [
+          {
+            "id": 1,
+            "name": "Crowd at Door",
+            "type": "occupancy",
+            "enabled": true,
+            "triggers": [
+              {
+                "type": "includeArea",
+                "vertices": [
+                  [-0.5, 0.3],
+                  [-0.5, 0.9],
+                  [0.5, 0.9],
+                  [0.5, 0.3]
+                ],
+                "conditions": [
+                  {
+                    "type": "individualTimeInArea",
+                    "data": [
+                      {
+                        "type": "human",
+                        "time": 5,
+                        "alarmTime": 1
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "filters": [
+              {
+                "type": "timeShort",
+                "data": 5000
+              }
+            ],
+            "objectClassifications": [
+              {
+                "type": "human"
+              }
+            ],
+            "metadata": {
+              "occupancyThreshold": 3
+            }
+          }
+        ]
+      }
+    }
+  }
+}
