@@ -113,7 +113,7 @@ Questions must follow this EXACT format for each question object:
 - **stateful**: Set to true if answer should persist across frames (e.g., "has_weapon_been_seen")
 
 Example questions for different scenarios:
-```
+
 Security: 
 [
   {"id": 1, "name": "unauthorized_person", "text": "Is there an unauthorized person in the restricted area?", "type": "bool", "enabled": true, "stateful": false},
@@ -127,7 +127,6 @@ Safety:
   {"id": 2, "name": "hazard_present", "text": "Is there a safety hazard present?", "type": "bool", "enabled": true, "stateful": true},
   {"id": 3, "name": "hazard_description", "text": "Describe the safety hazard if present", "type": "string", "enabled": true, "stateful": false}
 ]
-```
 
 ### objectDetection Array
 List of objects to detect as simple strings. Common values:
@@ -175,7 +174,6 @@ Only set to true if verbal interaction would help achieve the stated goal.
 
 Here's a properly formatted skill for "Monitor for suspicious activity":
 
-```
 {
   "name": "SuspiciousActivity",
   "description": "Detects and analyzes suspicious behavior patterns",
@@ -195,7 +193,6 @@ Here's a properly formatted skill for "Monitor for suspicious activity":
     "elevenLabsVoiceId": ""
   }
 }
-```
 
 ## Example for "Tell me about any suspicious activity"
 
