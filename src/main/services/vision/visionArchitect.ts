@@ -46,7 +46,7 @@ You MUST respond with a valid JSON object with this exact structure:
         "description": "Analysis guidance",
         "questions": [],
         "objectDetection": ["person"],
-        "responseCriteria": "When to alert",
+        "responseCriteria": "Detailed instructions like: If you see a person loitering near the ATM for more than 30 seconds, respond by alerting security and describe their clothing, behavior, and exact location",
         "talkdownActivated": false,
         "elevenLabsVoiceId": ""
       }
@@ -56,8 +56,8 @@ You MUST respond with a valid JSON object with this exact structure:
     {
       "name": "ProfileName",
       "skillId": "SkillName",
-      "preFilterModel": "gemini-1.5-flash",
-      "fullAnalysisModel": "gemini-1.5-pro",
+      "preFilterModel": "",
+      "fullAnalysisModel": "gemini-2.5-flash-lite",
       "viewArea": 1,
       "analysisSchedule": "",
       "trigger": {
@@ -97,6 +97,29 @@ Always include proper trigger structure:
 - type: "includeArea" for area-based detection
 - vertices: Array of [x, y] coordinates defining the area (normalized -1 to 1)
 
+## Critical Field Explanations
+
+### responseCriteria
+This is the AI's exact instructions for when and how to respond. Format it as: "If you see [specific condition], respond by [specific action] with the goal of [desired outcome] and include [specific details to report]"
+
+Examples:
+- "If you see someone attempting to climb the fence, immediately alert security with their exact location, clothing description, and direction of movement"
+- "If a vehicle parks in the loading zone for more than 5 minutes, notify operations team with license plate, vehicle type, and duration"
+- "If you detect weapons or suspicious objects, trigger emergency alert and describe the threat type, person's appearance, and their current actions"
+
+### talkdownActivated
+Set to TRUE when the AI should audibly interact with the scene to achieve the user's goals. Use this for:
+- Deterrence: "Please step back from the restricted area"
+- Customer service: "Welcome! A staff member will assist you shortly"
+- Safety warnings: "Hard hat required in this area"
+- Queue management: "Please proceed to counter 3"
+
+Only set to true if verbal interaction would help achieve the stated goal.
+
+### Model Recommendations
+- **preFilterModel**: Always use "" (empty string) - this is for future functionality
+- **fullAnalysisModel**: Always use "gemini-2.5-flash-lite" for best performance and cost
+
 ## Key Guidelines
 
 1. **Always return valid JSON** - No text before or after the JSON object
@@ -107,6 +130,8 @@ Always include proper trigger structure:
 6. **Keep scenario names short** - Maximum 15 characters
 7. **Focus on the user's goal** - Every component should serve their stated objective
 8. **Include "selected": true** in all objectClassifications entries
+9. **Write detailed responseCriteria** - Be specific about conditions, actions, goals, and what to report
+10. **Use talkdownActivated thoughtfully** - Only when verbal interaction helps achieve the goal
 
 ## Example for "Tell me about any suspicious activity"
 
@@ -205,8 +230,8 @@ export const VISION_SYSTEM_SCHEMA = {
         properties: {
           name: { type: SchemaType.STRING },
           skillId: { type: SchemaType.STRING },
-          preFilterModel: { type: SchemaType.STRING },
-          fullAnalysisModel: { type: SchemaType.STRING },
+          preFilterModel: { type: SchemaType.STRING }, // Should be empty string
+          fullAnalysisModel: { type: SchemaType.STRING }, // Should be gemini-2.5-flash-lite
           viewArea: { type: SchemaType.NUMBER },
           analysisSchedule: { type: SchemaType.STRING },
           trigger: {
@@ -257,14 +282,14 @@ export interface VisionSystemResponse {
 export class VisionArchitect {
   private gemini: GoogleGenerativeAI;
   private model: any;
-  private modelName: string = 'gemini-2.0-flash-lite';
+  private modelName: string = 'gemini-2.5-flash-lite';
   private apiKey: string;
 
   constructor(apiKey: string, modelName?: string) {
     this.apiKey = apiKey;
     this.gemini = new GoogleGenerativeAI(apiKey);
-    // Use the specified model or default to gemini-2.0-flash-lite for best rate limits
-    this.modelName = modelName || 'gemini-2.0-flash-lite';
+    // Use the specified model or default to gemini-2.5-flash-lite for best rate limits
+    this.modelName = modelName || 'gemini-2.5-flash-lite';
     this.model = this.gemini.getGenerativeModel({ 
       model: this.modelName,
       generationConfig: {
