@@ -408,7 +408,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       const result = await (window.electronAPI as any).quickScanCamera?.(
         manualIP,
         credentials.username,
-        credentials.password
+        credentials.password,
+        credentials.port || 443
       );
 
       if (result && result.length > 0) {
@@ -1747,6 +1748,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                     setSelectedCamera({
                       id: 'manual-camera',
                       ip: manualCameraIp,
+                      port: credentials.port || 443,
                       name: `Camera at ${manualCameraIp}`,
                       model: 'Unknown',
                       accessible: true,
