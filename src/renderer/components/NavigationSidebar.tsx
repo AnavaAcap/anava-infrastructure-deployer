@@ -130,7 +130,7 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     { type: 'divider' },
     { 
       id: 'vision-architect' as NavigationView, 
-      label: 'Configure Vision AI', 
+      label: 'Vision Architect', 
       icon: <ArchitectureIcon />,
       alwaysEnabled: true,
       badge: 'NEW!' as const
@@ -166,10 +166,10 @@ const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     >
       <Box sx={{ p: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-          Anava Installer
+          Anava Vision
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          Unified Deployment Tool
+          AI Vision System
         </Typography>
       </Box>
       

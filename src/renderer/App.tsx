@@ -342,7 +342,7 @@ function App() {
     return (
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <AppLoader message="Starting Anava Installer..." />
+        <AppLoader message="Starting Anava Vision..." />
       </ThemeProvider>
     );
   }
@@ -379,7 +379,7 @@ function App() {
             onAccept={() => setEulaAccepted(true)} 
           />
           <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
-            <TopBar title="Anava Vision Installer" onLogout={handleLogout} />
+            <TopBar title="Anava Vision" onLogout={handleLogout} />
           
             <Box sx={{ display: 'flex', flex: 1 }}>
               <NavigationSidebar

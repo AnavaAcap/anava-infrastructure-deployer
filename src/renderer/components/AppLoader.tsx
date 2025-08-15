@@ -5,7 +5,7 @@ interface AppLoaderProps {
   message?: string;
 }
 
-export const AppLoader: React.FC<AppLoaderProps> = ({ message = 'Loading Anava Installer...' }) => {
+export const AppLoader: React.FC<AppLoaderProps> = ({ message = 'Loading Anava Vision...' }) => {
   return (
     <Box
       sx={{
