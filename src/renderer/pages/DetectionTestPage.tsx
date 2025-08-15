@@ -385,7 +385,10 @@ const DetectionTestPage: React.FC = () => {
 
   const openAnavaInterface = () => {
     if (selectedCamera) {
-      window.electronAPI?.openExternal(`https://${selectedCamera.ip}/local/BatonAnalytic/local-events.html`);
+      const port = selectedCamera.port || 443;
+      const protocol = port === 80 ? 'http' : 'https';
+      const url = `${protocol}://${selectedCamera.ip}:${port}/local/BatonAnalytic/local-events.html`;
+      window.electronAPI?.openExternal(url);
     }
   };
 

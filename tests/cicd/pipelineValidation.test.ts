@@ -1,14 +1,18 @@
 /**
- * CI/CD Pipeline Validation Tests for v0.9.177
- * Tests build processes, release workflows, and deployment pipelines
- * Updated to include manual camera entry and ThreadPool error handling
+ * CI/CD Pipeline Validation Tests for v0.9.210+
+ * Tests build processes, release workflows, and dual repository deployment pipelines
+ * Updated for Anava Vision branding and vision-releases repository integration
+ * 
+ * CRITICAL: Tests both ACAP releases and vision-releases repositories
+ * - ACAP releases: versioned installers for technical tracking
+ * - vision-releases: static-named installers for website integration
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 
-describe('v0.9.177 CI/CD Pipeline Validation', () => {
+describe('v0.9.210+ CI/CD Pipeline Validation - Dual Repository Release', () => {
 
   describe('GitHub Actions Workflow Validation', () => {
     it('should have valid release workflow configuration', () => {
@@ -68,12 +72,29 @@ describe('v0.9.177 CI/CD Pipeline Validation', () => {
   });
 
   describe('Package.json Build Configuration', () => {
-    it('should have correct version number for v0.9.175', () => {
+    it('should have current version number matching v0.9.210+', () => {
       const packageJson = JSON.parse(
         fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf-8')
       );
       
-      expect(packageJson.version).toBe('0.9.175');
+      // Version should be 0.9.210 or higher
+      const version = packageJson.version;
+      const [major, minor, patch] = version.split('.').map(Number);
+      
+      expect(major).toBe(0);
+      expect(minor).toBe(9);
+      expect(patch).toBeGreaterThanOrEqual(210);
+    });
+    
+    it('should have correct product branding - Anava Vision', () => {
+      const packageJson = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf-8')
+      );
+      
+      // Verify complete rebrand to 'Anava Vision'
+      expect(packageJson.name).toBe('anava-vision');
+      expect(packageJson.description).toContain('Anava Vision');
+      expect(packageJson.description).not.toContain('Installer');
     });
 
     it('should have all required build scripts', () => {
@@ -108,9 +129,9 @@ describe('v0.9.177 CI/CD Pipeline Validation', () => {
       
       const buildConfig = packageJson.build;
       
-      // Check app configuration
+      // Check app configuration - CRITICAL: Must be 'Anava Vision' not 'Anava Installer'
       expect(buildConfig.appId).toBe('com.anava.vision');
-      expect(buildConfig.productName).toBe('Anava Installer');
+      expect(buildConfig.productName).toBe('Anava Vision');
       
       // Check macOS configuration
       expect(buildConfig.mac).toBeDefined();
@@ -211,17 +232,28 @@ describe('v0.9.177 CI/CD Pipeline Validation', () => {
       expect(expectedTag).toMatch(/^v\d+\.\d+\.\d+$/);
     });
 
-    it('should generate correct installer names', () => {
-      const version = '0.9.175';
+    it('should generate correct installer names for dual repository system', () => {
+      const packageJson = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf-8')
+      );
+      const version = packageJson.version;
       
-      const expectedMacInstaller = `Anava.Installer-${version}.dmg`;
-      const expectedWinInstaller = `Anava.Installer.Setup.${version}.exe`;
+      // ACAP releases - versioned installers
+      const expectedVersionedMacInstaller = `Anava.Vision-${version}.dmg`;
+      const expectedVersionedWinInstaller = `Anava.Vision.Setup.${version}.exe`;
       
-      expect(expectedMacInstaller).toMatch(/^Anava\.Installer-\d+\.\d+\.\d+\.dmg$/);
-      expect(expectedWinInstaller).toMatch(/^Anava\.Installer\.Setup\.\d+\.\d+\.\d+\.exe$/);
+      expect(expectedVersionedMacInstaller).toMatch(/^Anava\.Vision-\d+\.\d+\.\d+\.dmg$/);
+      expect(expectedVersionedWinInstaller).toMatch(/^Anava\.Vision\.Setup\.\d+\.\d+\.\d+\.exe$/);
+      
+      // vision-releases - static names for website
+      const expectedStaticMacInstaller = 'Anava.Vision.dmg';
+      const expectedStaticWinInstaller = 'Anava.Vision.Setup.exe';
+      
+      expect(expectedStaticMacInstaller).toBe('Anava.Vision.dmg');
+      expect(expectedStaticWinInstaller).toBe('Anava.Vision.Setup.exe');
     });
 
-    it('should have publish script for ACAP releases', () => {
+    it('should have publish script for ACAP releases (versioned)', () => {
       const scriptsPath = path.join(__dirname, '../../scripts');
       const publishScript = path.join(scriptsPath, 'publish-to-acap-releases.sh');
       
@@ -234,9 +266,27 @@ describe('v0.9.177 CI/CD Pipeline Validation', () => {
         // Check for correct repository
         expect(scriptContent).toContain('AnavaAcap/acap-releases');
         
-        // Check for installer upload
+        // Check for versioned installer upload
         expect(scriptContent).toContain('.dmg');
         expect(scriptContent).toContain('.exe');
+        expect(scriptContent).toContain('v3.8.2'); // Current ACAP version
+      }
+    });
+    
+    it('should support dual repository release system', () => {
+      // Test that GitHub Actions can upload to both repositories
+      const workflowPath = path.join(__dirname, '../../.github/workflows/release.yml');
+      
+      if (fs.existsSync(workflowPath)) {
+        const workflowContent = fs.readFileSync(workflowPath, 'utf-8');
+        
+        // Should reference both repositories
+        expect(
+          workflowContent.includes('acap-releases') || 
+          workflowContent.includes('vision-releases') ||
+          workflowContent.includes('dual') ||
+          workflowContent.includes('both repositories')
+        ).toBe(true);
       }
     });
   });

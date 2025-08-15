@@ -2232,8 +2232,12 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                     variant="outlined"
                     fullWidth
                     onClick={() => {
-                      const url = `https://${selectedCamera?.ip}/local/BatonAnalytic/local-events.html`;
-                      window.open(url, '_blank');
+                      if (selectedCamera) {
+                        const port = selectedCamera.port || 443;
+                        const protocol = port === 80 ? 'http' : 'https';
+                        const url = `${protocol}://${selectedCamera.ip}:${port}/local/BatonAnalytic/local-events.html`;
+                        window.open(url, '_blank');
+                      }
                     }}
                     startIcon={<OpenInNewIcon />}
                   >

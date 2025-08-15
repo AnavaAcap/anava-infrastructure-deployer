@@ -912,7 +912,8 @@ export class CameraConfigurationService {
           username,
           password,
           applicationName,
-          licenseXML
+          licenseXML,
+          port
         );
         console.log('[CameraConfig] License response status:', licenseResponse?.status);
         console.log('[CameraConfig] License response data:', licenseResponse?.data);
@@ -1015,10 +1016,11 @@ export class CameraConfigurationService {
   }
 
   // @ts-ignore - Method preserved for future use
-  private async _startApplication(ip: string, username: string, password: string, applicationName: string): Promise<void> {
+  private async _startApplication(ip: string, username: string, password: string, applicationName: string, port?: number): Promise<void> {
     try {
       console.log('[CameraConfig] Starting application:', applicationName);
-      const startUrl = `https://${ip}/axis-cgi/applications/control.cgi`;
+      const baseUrl = await getCameraBaseUrl(ip, username, password, undefined, port);
+      const startUrl = `${baseUrl}/axis-cgi/applications/control.cgi`;
       const startParams = new URLSearchParams();
       startParams.append('action', 'start');
       startParams.append('package', applicationName);
@@ -1609,7 +1611,8 @@ export class CameraConfigurationService {
     username: string,
     password: string,
     applicationName: string,
-    xmlContent: string
+    xmlContent: string,
+    port?: number
   ): Promise<any> {
     const startTime = Date.now();
     console.log('[CameraConfig] ========== LICENSE UPLOAD START ==========');
@@ -1632,8 +1635,9 @@ export class CameraConfigurationService {
         ''
       ].join('\r\n');
       
-      // Use HTTPS with Basic auth for compatibility
-      const fullUrl = `https://${ip}${url}`;
+      // Use protocol detection for proper URL construction
+      const baseUrl = await getCameraBaseUrl(ip, username, password, undefined, port);
+      const fullUrl = `${baseUrl}${url}`;
       const auth = Buffer.from(`${username}:${password}`).toString('base64');
       
       console.log('[CameraConfig] Request URL:', fullUrl);

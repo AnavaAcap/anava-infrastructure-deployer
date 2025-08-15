@@ -3,14 +3,37 @@
 ## Repository Information
 - **GitHub**: https://github.com/AnavaAcap/anava-infrastructure-deployer
 - **Organization**: AnavaAcap
-- **Product Name**: Anava Installer
-- **Public Releases**: https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
-- **Current Version**: v0.9.207 (2025-08-14)
+- **Product Name**: Anava Vision
+- **Public Installer Downloads**: https://github.com/AnavaAcap/vision-releases
+- **ACAP Releases**: https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.2
+- **Current Version**: v0.9.210 (2025-08-15)
 - **Electron**: v37.2.6 (latest)
 - **Node.js**: v20.x
 - **Build System**: Vite v7.x
 
-## Latest Features (v0.9.207) - VISION ARCHITECT INTELLIGENT SCHEDULE MANAGEMENT ✅
+## Latest Features (v0.9.210) - ENHANCED PORT SUPPORT & BRANDING UPDATE ✅
+
+### ✅ Comprehensive Custom Port Support - NEW (v0.9.209)
+- **Universal Port Configuration**: All camera connections now support custom ports (default 443)
+- **Vision Architect Integration**: Full port support for AI-driven analytics configuration
+- **Protocol Auto-Detection**: Intelligent HTTPS/HTTP fallback for optimal connectivity
+- **Manual Discovery Fix**: Custom ports now properly used in manual camera discovery
+- **Files**: `fastNetworkScanner.ts`, `cameraConfigurationService.ts`, `cameraProtocolUtils.ts`, `visionArchitectDeployer.ts`
+
+### ✅ Enhanced Branding & User Experience - NEW (v0.9.210)  
+- **Updated Product Name**: Changed from "Anava Installer" to "Anava Vision" throughout
+- **Sidebar Navigation**: "Configure Vision AI" renamed to "Vision Architect"
+- **Consistent Branding**: Removed all "Installer" references for cleaner UX
+- **Files**: `NavigationSidebar.tsx`, `App.tsx`, `AppLoader.tsx`
+
+### ✅ Static Download Links - NEW (v0.9.210)
+- **Public Repository**: https://github.com/AnavaAcap/vision-releases
+- **Static URLs**: Permanent download links for website integration
+  - Windows: `https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.Setup.exe`
+  - macOS: `https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.dmg`
+- **Always Latest**: `/latest/download/` ensures users get newest version automatically
+
+## Previous Features (v0.9.207) - VISION ARCHITECT INTELLIGENT SCHEDULE MANAGEMENT ✅
 
 ### ✅ Smart Schedule Intelligence - NEW
 - **Critical Feature**: Vision Architect now creates custom schedules intelligently
@@ -186,11 +209,15 @@ git push origin main --tags
 #    - Builds macOS Universal binary (Intel + Apple Silicon)  
 #    - Builds Windows installer with code signing
 #    - Creates GitHub release with assets
-#    - Copies installers to AnavaAcap/acap-releases
 
 # 3. Monitor progress:
 gh run list --workflow=release.yml --limit=3
 gh run view <run-id>
+
+# 4. Update Public Downloads (CRITICAL):
+#    - Upload to vision-releases with static names
+#    - Update README.md with version info
+#    - Ensure /latest/download/ links work
 ```
 
 ### Monitor Build Status
@@ -399,8 +426,17 @@ await AOAIntegration.configureAOA(camera, {
 2. **Commit**: `git commit -m "chore: bump version" --no-verify`
 3. **Tag**: `git tag v0.9.XXX`
 4. **Push**: `git push origin main --tags`
-5. **Build**: Run production build commands above
-6. **Upload**: Add to https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
+5. **Monitor GitHub Actions**: Check build progress for Windows and macOS
+6. **Update Public Downloads**: 
+   - Upload to https://github.com/AnavaAcap/vision-releases with static names:
+     - `Anava.Vision.Setup.exe` (Windows)
+     - `Anava.Vision.dmg` (macOS)
+   - Update README.md with new version details
+   - Verify static download links work
+
+### Static Download URLs (For Website Integration)
+- **Windows**: `https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.Setup.exe`
+- **macOS**: `https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.dmg`
 
 ## Common Issues & Solutions
 

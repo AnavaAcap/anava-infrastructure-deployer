@@ -84,7 +84,8 @@ module.exports = {
       testMatch: [
         '<rootDir>/src/__tests__/regression-tests.spec.ts',
         '<rootDir>/src/__tests__/regression-tests-fixed.spec.ts',
-        '<rootDir>/src/__tests__/windows-installer-regression.spec.ts'
+        '<rootDir>/src/__tests__/windows-installer-regression.spec.ts',
+        '<rootDir>/tests/regression/**/*.test.ts'
       ],
       preset: 'ts-jest',
       testEnvironment: 'node',
@@ -126,6 +127,23 @@ module.exports = {
       },
       setupFilesAfterEnv: ['<rootDir>/tests/setup/electron-v37.setup.ts'],
       testTimeout: 30000
+    },
+    {
+      displayName: 'dual-repository-release',
+      testMatch: [
+        '<rootDir>/tests/cicd/dualRepositoryRelease.test.ts',
+        '<rootDir>/tests/security/dualReleaseSecurityValidation.test.ts'
+      ],
+      preset: 'ts-jest',
+      testEnvironment: 'node',
+      moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/src/$1',
+        '^@main/(.*)$': '<rootDir>/src/main/$1',
+        '^@renderer/(.*)$': '<rootDir>/src/renderer/$1',
+        '^@types/(.*)$': '<rootDir>/src/types/$1'
+      },
+      setupFilesAfterEnv: ['<rootDir>/tests/setup/dual-repository.setup.ts'],
+      testTimeout: 60000 // Longer timeout for release validation
     }
   ],
   

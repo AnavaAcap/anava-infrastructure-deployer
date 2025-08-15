@@ -1,6 +1,6 @@
 {
   "name": "anava-vision",
-  "version": "0.9.209",
+  "version": "0.9.210",
   "description": "Anava Vision - Deploy and configure AI-powered camera systems",
   "main": "dist/main/index.js",
   "scripts": {
@@ -30,6 +30,9 @@
     "test:security": "jest --selectProjects=security",
     "test:regression": "jest --selectProjects=regression",
     "test:performance": "jest tests/performance --runInBand",
+    "test:dual-repo": "jest --selectProjects=dual-repository-release",
+    "test:port-support": "jest tests/regression/portSupportRegression.test.ts",
+    "test:release-validation": "jest --selectProjects=dual-repository-release,security,regression",
     "test:coverage": "jest --coverage --selectProjects=unit,integration",
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage --maxWorkers=2",

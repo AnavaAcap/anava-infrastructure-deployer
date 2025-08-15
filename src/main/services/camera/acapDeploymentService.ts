@@ -5,6 +5,7 @@ import path from 'path';
 import os from 'os';
 import https from 'https';
 import { Camera } from './cameraDiscoveryService';
+import { getCameraBaseUrl } from './cameraProtocolUtils';
 import { registerIPCHandler } from '../../utils/ipcErrorBoundary';
 import { logger } from '../../utils/logger';
 
@@ -81,7 +82,7 @@ export class ACAPDeploymentService {
         throw new Error('Camera credentials are required');
       }
       
-      const firmwareVersion = await this.getFirmwareVersion(camera.ip, credentials.username, credentials.password);
+      const firmwareVersion = await this.getFirmwareVersion(camera.ip, credentials.username, credentials.password, camera.port);
       const isOS12 = this.isOS12Firmware(firmwareVersion);
       
       // Try multiple methods to detect architecture
@@ -96,7 +97,10 @@ export class ACAPDeploymentService {
           credentials.username,
           credentials.password,
           'GET',
-          '/axis-cgi/param.cgi?action=list&group=Properties.System.Architecture'
+          '/axis-cgi/param.cgi?action=list&group=Properties.System.Architecture',
+          undefined,
+          {},
+          camera.port
         );
         
         if (archResponse && archResponse.data) {
@@ -122,7 +126,10 @@ export class ACAPDeploymentService {
             credentials.username,
             credentials.password,
             'GET',
-            '/axis-cgi/param.cgi?action=list&group=Properties.System'
+            '/axis-cgi/param.cgi?action=list&group=Properties.System',
+            undefined,
+            {},
+            camera.port
           );
           
           if (response && response.data) {
@@ -181,7 +188,10 @@ export class ACAPDeploymentService {
             credentials.username,
             credentials.password,
             'GET',
-            '/axis-cgi/param.cgi?action=list&group=Brand'
+            '/axis-cgi/param.cgi?action=list&group=Brand',
+            undefined,
+            {},
+            camera.port
           );
           
           if (brandResponse && brandResponse.data) {
@@ -489,7 +499,7 @@ export class ACAPDeploymentService {
         throw new Error('Camera credentials are required for deployment');
       }
       console.log(`[ACAPDeployment] Testing connection with user: ${credentials.username}`);
-      const testResult = await this.testConnection(camera.ip, credentials.username, credentials.password);
+      const testResult = await this.testConnection(camera.ip, credentials.username, credentials.password, camera.port);
       
       if (!testResult) {
         throw new Error('Cannot connect to camera - check credentials');
@@ -497,7 +507,7 @@ export class ACAPDeploymentService {
       console.log(`[ACAPDeployment] Connection test successful`);
 
       // Detect firmware version to determine OS11 vs OS12
-      const firmwareVersion = await this.getFirmwareVersion(camera.ip, credentials.username, credentials.password);
+      const firmwareVersion = await this.getFirmwareVersion(camera.ip, credentials.username, credentials.password, camera.port);
       console.log(`[ACAPDeployment] Camera firmware version: ${firmwareVersion}`);
       
       // Determine if this is OS12 (firmware 11.x or higher) or OS11 (firmware 10.x or lower)
@@ -553,7 +563,9 @@ export class ACAPDeploymentService {
         credentials.password,
         'POST',
         '/axis-cgi/applications/control.cgi',
-        `action=remove&package=${appName}`
+        `action=remove&package=${appName}`,
+        {},
+        camera.port
       );
 
       if (response && response.status === 200) {
@@ -585,13 +597,16 @@ export class ACAPDeploymentService {
         throw new Error('Camera credentials are required for deployment');
       }
       
-      console.log(`[listInstalledACAPs] Querying installed ACAPs on ${camera.ip}`);
+      console.log(`[listInstalledACAPs] Querying installed ACAPs on ${camera.ip}:${camera.port || 443}`);
       const response = await this.digestAuth(
         camera.ip,
         credentials.username,
         credentials.password,
         'GET',
-        '/axis-cgi/applications/list.cgi'
+        '/axis-cgi/applications/list.cgi',
+        undefined,
+        {},
+        camera.port
       );
 
       if (response && response.data) {
@@ -674,14 +689,17 @@ export class ACAPDeploymentService {
     }
   }
 
-  private async testConnection(ip: string, username: string, password: string): Promise<boolean> {
+  private async testConnection(ip: string, username: string, password: string, port?: number): Promise<boolean> {
     try {
       const response = await this.digestAuth(
         ip,
         username,
         password,
         'GET',
-        '/axis-cgi/param.cgi?action=list&group=Brand'
+        '/axis-cgi/param.cgi?action=list&group=Brand',
+        undefined,
+        {},
+        port
       );
 
       return response && response.status === 200;
@@ -690,7 +708,7 @@ export class ACAPDeploymentService {
     }
   }
 
-  private async getFirmwareVersion(ip: string, username: string, password: string): Promise<string> {
+  private async getFirmwareVersion(ip: string, username: string, password: string, port?: number): Promise<string> {
     try {
       console.log('[getFirmwareVersion] Fetching firmware version from camera...');
       const response = await this.digestAuth(
@@ -698,7 +716,10 @@ export class ACAPDeploymentService {
         username,
         password,
         'GET',
-        '/axis-cgi/param.cgi?action=list&group=Properties.Firmware.Version'
+        '/axis-cgi/param.cgi?action=list&group=Properties.Firmware.Version',
+        undefined,
+        {},
+        port
       );
 
       if (response && response.data) {
@@ -827,12 +848,15 @@ export class ACAPDeploymentService {
     method: string,
     uri: string,
     formFactory: () => FormData,
-    options: any = {}
+    options: any = {},
+    port?: number
   ): Promise<any> {
     try {
-      // Always use HTTPS with Basic auth for security
-      const url = `https://${ip}${uri}`;
-      const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+      // Use protocol detection for proper URL construction
+      const baseUrl = await getCameraBaseUrl(ip, username, password, undefined, port);
+      const url = `${baseUrl}${uri}`;
+      const isHttps = url.startsWith('https');
+      const httpsAgent = isHttps ? new https.Agent({ rejectUnauthorized: false }) : undefined;
       
       // Use Basic auth directly
       const auth = Buffer.from(`${username}:${password}`).toString('base64');
@@ -877,19 +901,22 @@ export class ACAPDeploymentService {
     method: string,
     uri: string,
     data?: any,
-    options: any = {}
+    options: any = {},
+    port?: number
   ): Promise<any> {
     try {
-      // Use HTTPS with Basic auth for Axis cameras
-      const url = `https://${ip}${uri}`;
+      // Use protocol detection for proper URL construction
+      const baseUrl = await getCameraBaseUrl(ip, username, password, undefined, port);
+      const url = `${baseUrl}${uri}`;
       
       // Basic auth header
       const auth = Buffer.from(`${username}:${password}`).toString('base64');
       
       // Create HTTPS agent that allows self-signed certificates
-      const httpsAgent = new https.Agent({
+      const isHttps = url.startsWith('https');
+      const httpsAgent = isHttps ? new https.Agent({
         rejectUnauthorized: false
-      });
+      }) : undefined;
       
       const config: any = {
         method,

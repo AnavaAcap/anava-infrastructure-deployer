@@ -1,165 +1,971 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="78" failures="0" errors="0" time="0.645">
-  <testsuite name="Critical Regression Tests v0.9.178" errors="0" failures="0" skipped="0" timestamp="2025-08-12T01:54:30" time="0.321" tests="28">
-    <testcase classname="Critical Regression Tests v0.9.178 › 1. Camera Setup State Persistence" name="should save state to localStorage on changes" time="0.001">
+<testsuites name="jest tests" tests="33" failures="14" errors="0" time="16.584">
+  <testsuite name="Dual Repository Release System" errors="0" failures="7" skipped="0" timestamp="2025-08-15T22:13:12" time="15.905" tests="16">
+    <testcase classname="Dual Repository Release System › Static Download URL Validation" name="should test static download URLs for vision-releases repository" time="0.003">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 1. Camera Setup State Persistence" name="should restore state from localStorage on component mount" time="0.001">
+    <testcase classname="Dual Repository Release System › Static Download URL Validation" name="should validate ACAP releases use versioned naming" time="0">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 1. Camera Setup State Persistence" name="should clear state when &quot;Start Fresh Setup&quot; is clicked" time="0">
+    <testcase classname="Dual Repository Release System › Release Workflow Validation" name="should have GitHub Actions workflow for automated dual releases" time="0.002">
+      <failure>Error: expect(received).toContain(expected) // indexOf
+
+Expected substring: &quot;build-windows&quot;
+Received string:    &quot;name: Build and Release·
+on:
+  push:
+    tags:
+      - &apos;v*&apos;
+  workflow_dispatch:·
+permissions:
+  contents: write·
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            platform: mac
+            artifact-name: Anava-Installer-Mac
+            build-output: release/*.dmg
+          - os: windows-latest
+            platform: win
+            artifact-name: Anava-Installer-Windows
+            build-output: release/*.exe·
+    runs-on: ${{ matrix.os }}·
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4·
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: &apos;20&apos;·
+    - name: Install dependencies (Windows)
+      if: matrix.os == &apos;windows-latest&apos;
+      run: |
+        # Update npm to latest version first
+        npm install -g npm@latest·········
+        # Clear npm cache to avoid stale issues
+        npm cache clean --force·········
+        # Run the clean install first
+        npm ci·········
+        # NOW patch the installation by adding the missing native module
+        # This happens AFTER npm ci, so it won&apos;t be deleted
+        # Force the installation even if it&apos;s an optional dependency
+        npm install @rollup/rollup-win32-x64-msvc --force --no-save·········
+        # Verify the module was installed
+        if (!(Test-Path \&quot;node_modules/@rollup/rollup-win32-x64-msvc\&quot;)) {
+          Write-Error \&quot;Failed to install @rollup/rollup-win32-x64-msvc\&quot;
+          exit 1
+        }
+      shell: pwsh·······
+    - name: Install dependencies (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: npm ci·
+    - name: Import Code Signing Certificate (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      env:
+        CSC_LINK: ${{ secrets.CSC_LINK }}
+        CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      run: |
+        # Create a temporary keychain
+        KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+        KEYCHAIN_PASSWORD=$(openssl rand -base64 32)·········
+        # Create the keychain
+        security create-keychain -p \&quot;$KEYCHAIN_PASSWORD\&quot; \&quot;$KEYCHAIN_PATH\&quot;
+        security set-keychain-settings -lut 21600 \&quot;$KEYCHAIN_PATH\&quot;
+        security unlock-keychain -p \&quot;$KEYCHAIN_PASSWORD\&quot; \&quot;$KEYCHAIN_PATH\&quot;·········
+        # Import certificate
+        echo \&quot;$CSC_LINK\&quot; | base64 --decode &gt; certificate.p12
+        security import certificate.p12 -k \&quot;$KEYCHAIN_PATH\&quot; -P \&quot;$CSC_KEY_PASSWORD\&quot; -T /usr/bin/codesign -T /usr/bin/security
+        rm certificate.p12·········
+        # Set the keychain as default
+        security list-keychains -d user -s \&quot;$KEYCHAIN_PATH\&quot; login.keychain
+        security default-keychain -s \&quot;$KEYCHAIN_PATH\&quot;·········
+        # Allow codesign to access the certificate without password prompt
+        security set-key-partition-list -S apple-tool:,apple: -k \&quot;$KEYCHAIN_PASSWORD\&quot; \&quot;$KEYCHAIN_PATH\&quot;·
+    - name: Validate signing configuration (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: |
+        echo \&quot;Validating macOS signing configuration...\&quot;
+        node scripts/validate-signing-config.js·········
+        # Check that secrets are available
+        if [ -z \&quot;${{ secrets.APPLE_ID }}\&quot; ]; then
+          echo \&quot;::error::APPLE_ID secret is not set\&quot;
+          exit 1
+        fi
+        if [ -z \&quot;${{ secrets.APPLE_ID_PASSWORD }}\&quot; ]; then
+          echo \&quot;::error::APPLE_ID_PASSWORD secret is not set\&quot;
+          exit 1
+        fi
+        if [ -z \&quot;${{ secrets.APPLE_TEAM_ID }}\&quot; ]; then
+          echo \&quot;::error::APPLE_TEAM_ID secret is not set\&quot;
+          exit 1
+        fi
+        echo \&quot;✅ All required secrets are configured\&quot;·
+    - name: Clean build directories (Windows)
+      if: matrix.os == &apos;windows-latest&apos;
+      shell: pwsh
+      run: |
+        Write-Host \&quot;=== CLEANING BUILD DIRECTORIES ===\&quot;
+        if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+        if (Test-Path release) { Remove-Item -Recurse -Force release }
+        if (Test-Path \&quot;node_modules/.cache\&quot;) { Remove-Item -Recurse -Force \&quot;node_modules/.cache\&quot; }
+        Write-Host \&quot;Cleaned dist, release, and cache directories\&quot;·········
+    - name: Clean build directories (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: |
+        echo \&quot;=== CLEANING BUILD DIRECTORIES ===\&quot;
+        rm -rf dist/
+        rm -rf release/
+        rm -rf node_modules/.cache/
+        echo \&quot;Cleaned dist, release, and cache directories\&quot;·········
+    - name: Check versions before build (Windows)
+      if: matrix.os == &apos;windows-latest&apos;
+      shell: pwsh
+      run: |
+        Write-Host \&quot;=== CHECKING VERSIONS ===\&quot;
+        Write-Host \&quot;package.json version:\&quot;
+        Get-Content package.json | Select-String &apos;\&quot;version\&quot;&apos; | Select-Object -First 1
+        Write-Host \&quot;package-lock.json version:\&quot;
+        Get-Content package-lock.json | Select-String &apos;\&quot;version\&quot;&apos; | Select-Object -First 2
+        Write-Host \&quot;Git HEAD:\&quot;
+        git rev-parse HEAD
+        Write-Host \&quot;Git status:\&quot;
+        git status
+        Write-Host \&quot;=========================\&quot;·········
+    - name: Check versions before build (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: |
+        echo \&quot;=== CHECKING VERSIONS ===\&quot;
+        echo \&quot;package.json version:\&quot;
+        grep &apos;\&quot;version\&quot;&apos; package.json | head -1
+        echo \&quot;package-lock.json version:\&quot;
+        grep &apos;\&quot;version\&quot;&apos; package-lock.json | head -2
+        echo \&quot;Git HEAD:\&quot;
+        git rev-parse HEAD
+        echo \&quot;Git status:\&quot;
+        git status
+        echo \&quot;=========================\&quot;·····
+    - name: Build Electron app
+      run: npm run dist:${{ matrix.platform }}
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}·
+    - name: List build outputs
+      run: ls -la release/
+      shell: bash·
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact-name }}
+        path: ${{ matrix.build-output }}
+        if-no-files-found: error·
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, &apos;refs/tags/&apos;)·
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4·
+    - name: Download Mac artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Anava-Installer-Mac
+        path: release-mac·
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Anava-Installer-Windows
+        path: release-win·
+    - name: List downloaded artifacts
+      run: |
+        echo \&quot;Mac artifacts:\&quot;
+        ls -la release-mac/
+        echo \&quot;Windows artifacts:\&quot;
+        ls -la release-win/·
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        draft: false
+        prerelease: false
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## Anava Installer ${{ github.ref_name }}···········
+          ### Installation···········
+          **macOS**: Download the .dmg file and double-click to install
+          **Windows**: Download the .exe installer and run it···········
+          ### Changes
+          Please see the commit history for changes in this release.
+        files: |
+          release-mac/*.dmg
+          release-win/*.exe&quot;
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/cicd/dualRepositoryRelease.test.ts:64:33)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 1. Camera Setup State Persistence" name="should preserve state when AI Vision test modal opens/closes" time="0">
+    <testcase classname="Dual Repository Release System › Release Workflow Validation" name="should validate electron-builder configuration for dual output" time="0.001">
+      <failure>Error: expect(received).not.toContain(expected) // indexOf
+
+Expected substring: not &quot;Installer&quot;
+Received string:        &quot;Anava.Installer.Setup.${version}.exe&quot;
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/cicd/dualRepositoryRelease.test.ts:102:51)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 1. Camera Setup State Persistence" name="should handle corrupted localStorage data gracefully" time="0.002">
+    <testcase classname="Dual Repository Release System › Branding Consistency Validation" name="should have no references to old &quot;Anava Installer&quot; branding" time="0.001">
+      <failure>Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 0
+Received: 1
+    at /Users/ryanwager/anava-infrastructure-deployer/tests/cicd/dualRepositoryRelease.test.ts:129:47
+    at Array.forEach (&lt;anonymous&gt;)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/cicd/dualRepositoryRelease.test.ts:116:20)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 2. Speaker Configuration Completion" name="should mark Step 4 as completed when speaker is configured" time="0">
+    <testcase classname="Dual Repository Release System › Branding Consistency Validation" name="should have correct Vision Architect sidebar reference" time="0.001">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 2. Speaker Configuration Completion" name="should show green checkmark when Step 4 is completed" time="0">
+    <testcase classname="Dual Repository Release System › Port Support Regression Tests" name="should have tests for custom port functionality" time="0.001">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 2. Speaker Configuration Completion" name="should save speaker configuration to localStorage" time="0.001">
+    <testcase classname="Dual Repository Release System › Port Support Regression Tests" name="should validate Vision Architect works with custom ports" time="0">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 3. AI Vision Audio Playback" name="should handle pre-fetched audio data with audioBase64 field" time="0">
+    <testcase classname="Dual Repository Release System › Security and Code Signing Validation" name="should validate code signing configuration for both platforms" time="0">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 3. AI Vision Audio Playback" name="should support legacy MP3 format" time="0">
+    <testcase classname="Dual Repository Release System › Security and Code Signing Validation" name="should validate GitHub Actions secrets for code signing" time="0">
+      <failure>Error: expect(received).toContain(expected) // indexOf
+
+Expected substring: &quot;APPLE_DEVELOPER_CERTIFICATE&quot;
+Received string:    &quot;name: Build and Release·
+on:
+  push:
+    tags:
+      - &apos;v*&apos;
+  workflow_dispatch:·
+permissions:
+  contents: write·
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            platform: mac
+            artifact-name: Anava-Installer-Mac
+            build-output: release/*.dmg
+          - os: windows-latest
+            platform: win
+            artifact-name: Anava-Installer-Windows
+            build-output: release/*.exe·
+    runs-on: ${{ matrix.os }}·
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4·
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: &apos;20&apos;·
+    - name: Install dependencies (Windows)
+      if: matrix.os == &apos;windows-latest&apos;
+      run: |
+        # Update npm to latest version first
+        npm install -g npm@latest·········
+        # Clear npm cache to avoid stale issues
+        npm cache clean --force·········
+        # Run the clean install first
+        npm ci·········
+        # NOW patch the installation by adding the missing native module
+        # This happens AFTER npm ci, so it won&apos;t be deleted
+        # Force the installation even if it&apos;s an optional dependency
+        npm install @rollup/rollup-win32-x64-msvc --force --no-save·········
+        # Verify the module was installed
+        if (!(Test-Path \&quot;node_modules/@rollup/rollup-win32-x64-msvc\&quot;)) {
+          Write-Error \&quot;Failed to install @rollup/rollup-win32-x64-msvc\&quot;
+          exit 1
+        }
+      shell: pwsh·······
+    - name: Install dependencies (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: npm ci·
+    - name: Import Code Signing Certificate (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      env:
+        CSC_LINK: ${{ secrets.CSC_LINK }}
+        CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      run: |
+        # Create a temporary keychain
+        KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+        KEYCHAIN_PASSWORD=$(openssl rand -base64 32)·········
+        # Create the keychain
+        security create-keychain -p \&quot;$KEYCHAIN_PASSWORD\&quot; \&quot;$KEYCHAIN_PATH\&quot;
+        security set-keychain-settings -lut 21600 \&quot;$KEYCHAIN_PATH\&quot;
+        security unlock-keychain -p \&quot;$KEYCHAIN_PASSWORD\&quot; \&quot;$KEYCHAIN_PATH\&quot;·········
+        # Import certificate
+        echo \&quot;$CSC_LINK\&quot; | base64 --decode &gt; certificate.p12
+        security import certificate.p12 -k \&quot;$KEYCHAIN_PATH\&quot; -P \&quot;$CSC_KEY_PASSWORD\&quot; -T /usr/bin/codesign -T /usr/bin/security
+        rm certificate.p12·········
+        # Set the keychain as default
+        security list-keychains -d user -s \&quot;$KEYCHAIN_PATH\&quot; login.keychain
+        security default-keychain -s \&quot;$KEYCHAIN_PATH\&quot;·········
+        # Allow codesign to access the certificate without password prompt
+        security set-key-partition-list -S apple-tool:,apple: -k \&quot;$KEYCHAIN_PASSWORD\&quot; \&quot;$KEYCHAIN_PATH\&quot;·
+    - name: Validate signing configuration (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: |
+        echo \&quot;Validating macOS signing configuration...\&quot;
+        node scripts/validate-signing-config.js·········
+        # Check that secrets are available
+        if [ -z \&quot;${{ secrets.APPLE_ID }}\&quot; ]; then
+          echo \&quot;::error::APPLE_ID secret is not set\&quot;
+          exit 1
+        fi
+        if [ -z \&quot;${{ secrets.APPLE_ID_PASSWORD }}\&quot; ]; then
+          echo \&quot;::error::APPLE_ID_PASSWORD secret is not set\&quot;
+          exit 1
+        fi
+        if [ -z \&quot;${{ secrets.APPLE_TEAM_ID }}\&quot; ]; then
+          echo \&quot;::error::APPLE_TEAM_ID secret is not set\&quot;
+          exit 1
+        fi
+        echo \&quot;✅ All required secrets are configured\&quot;·
+    - name: Clean build directories (Windows)
+      if: matrix.os == &apos;windows-latest&apos;
+      shell: pwsh
+      run: |
+        Write-Host \&quot;=== CLEANING BUILD DIRECTORIES ===\&quot;
+        if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+        if (Test-Path release) { Remove-Item -Recurse -Force release }
+        if (Test-Path \&quot;node_modules/.cache\&quot;) { Remove-Item -Recurse -Force \&quot;node_modules/.cache\&quot; }
+        Write-Host \&quot;Cleaned dist, release, and cache directories\&quot;·········
+    - name: Clean build directories (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: |
+        echo \&quot;=== CLEANING BUILD DIRECTORIES ===\&quot;
+        rm -rf dist/
+        rm -rf release/
+        rm -rf node_modules/.cache/
+        echo \&quot;Cleaned dist, release, and cache directories\&quot;·········
+    - name: Check versions before build (Windows)
+      if: matrix.os == &apos;windows-latest&apos;
+      shell: pwsh
+      run: |
+        Write-Host \&quot;=== CHECKING VERSIONS ===\&quot;
+        Write-Host \&quot;package.json version:\&quot;
+        Get-Content package.json | Select-String &apos;\&quot;version\&quot;&apos; | Select-Object -First 1
+        Write-Host \&quot;package-lock.json version:\&quot;
+        Get-Content package-lock.json | Select-String &apos;\&quot;version\&quot;&apos; | Select-Object -First 2
+        Write-Host \&quot;Git HEAD:\&quot;
+        git rev-parse HEAD
+        Write-Host \&quot;Git status:\&quot;
+        git status
+        Write-Host \&quot;=========================\&quot;·········
+    - name: Check versions before build (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: |
+        echo \&quot;=== CHECKING VERSIONS ===\&quot;
+        echo \&quot;package.json version:\&quot;
+        grep &apos;\&quot;version\&quot;&apos; package.json | head -1
+        echo \&quot;package-lock.json version:\&quot;
+        grep &apos;\&quot;version\&quot;&apos; package-lock.json | head -2
+        echo \&quot;Git HEAD:\&quot;
+        git rev-parse HEAD
+        echo \&quot;Git status:\&quot;
+        git status
+        echo \&quot;=========================\&quot;·····
+    - name: Build Electron app
+      run: npm run dist:${{ matrix.platform }}
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}·
+    - name: List build outputs
+      run: ls -la release/
+      shell: bash·
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact-name }}
+        path: ${{ matrix.build-output }}
+        if-no-files-found: error·
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, &apos;refs/tags/&apos;)·
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4·
+    - name: Download Mac artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Anava-Installer-Mac
+        path: release-mac·
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Anava-Installer-Windows
+        path: release-win·
+    - name: List downloaded artifacts
+      run: |
+        echo \&quot;Mac artifacts:\&quot;
+        ls -la release-mac/
+        echo \&quot;Windows artifacts:\&quot;
+        ls -la release-win/·
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        draft: false
+        prerelease: false
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## Anava Installer ${{ github.ref_name }}···········
+          ### Installation···········
+          **macOS**: Download the .dmg file and double-click to install
+          **Windows**: Download the .exe installer and run it···········
+          ### Changes
+          Please see the commit history for changes in this release.
+        files: |
+          release-mac/*.dmg
+          release-win/*.exe&quot;
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/cicd/dualRepositoryRelease.test.ts:219:33)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 3. AI Vision Audio Playback" name="should support new PCM format (pcm_l16_24000)" time="0">
+    <testcase classname="Dual Repository Release System › Version Synchronization Tests" name="should ensure version consistency across all files" time="0.001">
+      <failure>Error: expect(received).toMatch(expected)
+
+Expected pattern: /^\\d+\\.\\d+\\.\\d+$/
+Received string:  &quot;0.9.210&quot;
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/cicd/dualRepositoryRelease.test.ts:238:23)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 3. AI Vision Audio Playback" name="should construct valid WAV header for PCM data" time="0.001">
+    <testcase classname="Dual Repository Release System › Version Synchronization Tests" name="should validate release tag format for dual repositories" time="0">
+      <failure>Error: expect(received).toMatch(expected)
+
+Expected pattern: /^v\\d+\\.\\d+\\.\\d+$/
+Received string:  &quot;v0.9.210&quot;
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/cicd/dualRepositoryRelease.test.ts:262:27)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 3. AI Vision Audio Playback" name="should play audio on first load of pre-fetched data" time="0">
+    <testcase classname="Dual Repository Release System › Integration Testing for Dual Repositories" name="should validate that both repositories can be updated simultaneously" time="0">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 4. Camera Detection with POST Requests" name="should use proper POST request format with propertyList" time="0">
+    <testcase classname="Dual Repository Release System › Integration Testing for Dual Repositories" name="should validate README.md updates for vision-releases repository" time="0.001">
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 4. Camera Detection with POST Requests" name="should correctly identify .156 as a CAMERA with POST method" time="0">
+    <testcase classname="Dual Repository Release System › Performance and Monitoring" name="should validate that release artifacts meet size requirements" time="0">
+      <failure>Error: expect(received).toContain(expected) // indexOf
+
+Expected value: &quot;!node_modules/**/*.test.*&quot;
+Received array: [&quot;dist/**/*&quot;, &quot;node_modules/**/*&quot;, &quot;assets/**/*&quot;, &quot;!node_modules/**/test/**&quot;, &quot;!node_modules/**/*.map&quot;, &quot;!node_modules/**/*.ts&quot;, &quot;!node_modules/**/*.tsx&quot;, &quot;!test-*.js&quot;, &quot;!test-*.ts&quot;, &quot;!scripts/prepare-windows-build.js&quot;]
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/cicd/dualRepositoryRelease.test.ts:327:26)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 4. Camera Detection with POST Requests" name="should correctly identify .121 as a SPEAKER when auth fails" time="0.001">
-    </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › 4. Camera Detection with POST Requests" name="should reject non-Axis devices like NAS at .125" time="0">
-    </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › MAC Address Flow" name="should extract MAC from SerialNumber in JSON response" time="0">
-    </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › MAC Address Flow" name="should pass MAC through scanner results" time="0.002">
-    </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › UI Component Integration" name="should filter speakers from camera list" time="0">
-    </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › UI Component Integration" name="should include MAC in formatted cameras" time="0">
-    </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › UI Component Integration" name="should mark auth-failed devices as not accessible" time="0">
-    </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › License Activation" name="should pass MAC address to activateLicenseKey" time="0.001">
-    </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › License Activation" name="should handle missing MAC gracefully" time="0">
-    </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › Network Scanning Progress" name="should report actual total IPs to scan" time="0">
-    </testcase>
-    <testcase classname="Critical Regression Tests v0.9.178 › POST Request Format" name="should include propertyList in params for newer devices" time="0">
-    </testcase>
-    <testcase classname="Edge Cases and Error Handling" name="should handle devices that require POST but fail to provide data" time="0">
-    </testcase>
-    <testcase classname="Edge Cases and Error Handling" name="should handle network timeouts gracefully" time="0.001">
+    <testcase classname="Dual Repository Release System › Performance and Monitoring" name="should validate build performance requirements" time="0.001">
     </testcase>
   </testsuite>
-  <testsuite name="1. Camera Setup State Persistence" errors="0" failures="0" skipped="0" timestamp="2025-08-12T01:54:31" time="0.157" tests="18">
-    <testcase classname="1. Camera Setup State Persistence" name="should persist camera setup state to localStorage" time="0.001">
+  <testsuite name="Dual Repository Release Security Validation" errors="0" failures="7" skipped="0" timestamp="2025-08-15T22:13:12" time="16.003" tests="17">
+    <testcase classname="Dual Repository Release Security Validation › Code Signing Security" name="should validate macOS code signing configuration" time="0.002">
     </testcase>
-    <testcase classname="1. Camera Setup State Persistence" name="should restore camera setup state when component remounts" time="0">
+    <testcase classname="Dual Repository Release Security Validation › Code Signing Security" name="should validate Windows code signing preparation" time="0.001">
     </testcase>
-    <testcase classname="1. Camera Setup State Persistence" name="should clear state when &quot;Start Fresh Setup&quot; is clicked" time="0.001">
+    <testcase classname="Dual Repository Release Security Validation › Code Signing Security" name="should validate notarization script security" time="0.003">
+      <failure>Error: expect(received).not.toContain(expected) // indexOf
+
+Expected substring: not &quot;APPLE_ID&quot;
+Received string:        &quot;const { notarize } = require(&apos;@electron/notarize&apos;);
+
+exports.default = async function notarizing(context) {
+  const { electronPlatformName, appOutDir } = context;
+  
+  if (electronPlatformName !== &apos;darwin&apos;) {
+    return;
+  }
+
+  if (!process.env.APPLE_ID || !process.env.APPLE_ID_PASSWORD) {
+    console.warn(&apos;Skipping notarization: APPLE_ID or APPLE_ID_PASSWORD not set&apos;);
+    return;
+  }
+
+  const appName = context.packager.appInfo.productFilename;
+
+  console.log(`Notarizing ${appName}...`);
+
+  try {
+    await notarize({
+      appBundleId: &apos;com.anava.vision&apos;,
+      appPath: `${appOutDir}/${appName}.app`,
+      appleId: process.env.APPLE_ID,
+      appleIdPassword: process.env.APPLE_ID_PASSWORD,
+      teamId: process.env.APPLE_TEAM_ID,
+    });
+    console.log(`${appName} notarized successfully`);
+  } catch (error) {
+    console.error(&apos;Notarization failed:&apos;, error);
+    throw error;
+  }
+};&quot;
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/security/dualReleaseSecurityValidation.test.ts:76:35)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="2. Speaker Configuration Completion" name="should mark Step 4 as completed when speaker config finishes" time="0">
+    <testcase classname="Dual Repository Release Security Validation › GitHub Actions Security" name="should validate secure secret handling in workflows" time="0">
+      <failure>Error: expect(received).toContain(expected) // indexOf
+
+Expected substring: &quot;APPLE_DEVELOPER_CERTIFICATE&quot;
+Received string:    &quot;name: Build and Release·
+on:
+  push:
+    tags:
+      - &apos;v*&apos;
+  workflow_dispatch:·
+permissions:
+  contents: write·
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            platform: mac
+            artifact-name: Anava-Installer-Mac
+            build-output: release/*.dmg
+          - os: windows-latest
+            platform: win
+            artifact-name: Anava-Installer-Windows
+            build-output: release/*.exe·
+    runs-on: ${{ matrix.os }}·
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4·
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: &apos;20&apos;·
+    - name: Install dependencies (Windows)
+      if: matrix.os == &apos;windows-latest&apos;
+      run: |
+        # Update npm to latest version first
+        npm install -g npm@latest·········
+        # Clear npm cache to avoid stale issues
+        npm cache clean --force·········
+        # Run the clean install first
+        npm ci·········
+        # NOW patch the installation by adding the missing native module
+        # This happens AFTER npm ci, so it won&apos;t be deleted
+        # Force the installation even if it&apos;s an optional dependency
+        npm install @rollup/rollup-win32-x64-msvc --force --no-save·········
+        # Verify the module was installed
+        if (!(Test-Path \&quot;node_modules/@rollup/rollup-win32-x64-msvc\&quot;)) {
+          Write-Error \&quot;Failed to install @rollup/rollup-win32-x64-msvc\&quot;
+          exit 1
+        }
+      shell: pwsh·······
+    - name: Install dependencies (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: npm ci·
+    - name: Import Code Signing Certificate (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      env:
+        CSC_LINK: ${{ secrets.CSC_LINK }}
+        CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      run: |
+        # Create a temporary keychain
+        KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+        KEYCHAIN_PASSWORD=$(openssl rand -base64 32)·········
+        # Create the keychain
+        security create-keychain -p \&quot;$KEYCHAIN_PASSWORD\&quot; \&quot;$KEYCHAIN_PATH\&quot;
+        security set-keychain-settings -lut 21600 \&quot;$KEYCHAIN_PATH\&quot;
+        security unlock-keychain -p \&quot;$KEYCHAIN_PASSWORD\&quot; \&quot;$KEYCHAIN_PATH\&quot;·········
+        # Import certificate
+        echo \&quot;$CSC_LINK\&quot; | base64 --decode &gt; certificate.p12
+        security import certificate.p12 -k \&quot;$KEYCHAIN_PATH\&quot; -P \&quot;$CSC_KEY_PASSWORD\&quot; -T /usr/bin/codesign -T /usr/bin/security
+        rm certificate.p12·········
+        # Set the keychain as default
+        security list-keychains -d user -s \&quot;$KEYCHAIN_PATH\&quot; login.keychain
+        security default-keychain -s \&quot;$KEYCHAIN_PATH\&quot;·········
+        # Allow codesign to access the certificate without password prompt
+        security set-key-partition-list -S apple-tool:,apple: -k \&quot;$KEYCHAIN_PASSWORD\&quot; \&quot;$KEYCHAIN_PATH\&quot;·
+    - name: Validate signing configuration (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: |
+        echo \&quot;Validating macOS signing configuration...\&quot;
+        node scripts/validate-signing-config.js·········
+        # Check that secrets are available
+        if [ -z \&quot;${{ secrets.APPLE_ID }}\&quot; ]; then
+          echo \&quot;::error::APPLE_ID secret is not set\&quot;
+          exit 1
+        fi
+        if [ -z \&quot;${{ secrets.APPLE_ID_PASSWORD }}\&quot; ]; then
+          echo \&quot;::error::APPLE_ID_PASSWORD secret is not set\&quot;
+          exit 1
+        fi
+        if [ -z \&quot;${{ secrets.APPLE_TEAM_ID }}\&quot; ]; then
+          echo \&quot;::error::APPLE_TEAM_ID secret is not set\&quot;
+          exit 1
+        fi
+        echo \&quot;✅ All required secrets are configured\&quot;·
+    - name: Clean build directories (Windows)
+      if: matrix.os == &apos;windows-latest&apos;
+      shell: pwsh
+      run: |
+        Write-Host \&quot;=== CLEANING BUILD DIRECTORIES ===\&quot;
+        if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+        if (Test-Path release) { Remove-Item -Recurse -Force release }
+        if (Test-Path \&quot;node_modules/.cache\&quot;) { Remove-Item -Recurse -Force \&quot;node_modules/.cache\&quot; }
+        Write-Host \&quot;Cleaned dist, release, and cache directories\&quot;·········
+    - name: Clean build directories (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: |
+        echo \&quot;=== CLEANING BUILD DIRECTORIES ===\&quot;
+        rm -rf dist/
+        rm -rf release/
+        rm -rf node_modules/.cache/
+        echo \&quot;Cleaned dist, release, and cache directories\&quot;·········
+    - name: Check versions before build (Windows)
+      if: matrix.os == &apos;windows-latest&apos;
+      shell: pwsh
+      run: |
+        Write-Host \&quot;=== CHECKING VERSIONS ===\&quot;
+        Write-Host \&quot;package.json version:\&quot;
+        Get-Content package.json | Select-String &apos;\&quot;version\&quot;&apos; | Select-Object -First 1
+        Write-Host \&quot;package-lock.json version:\&quot;
+        Get-Content package-lock.json | Select-String &apos;\&quot;version\&quot;&apos; | Select-Object -First 2
+        Write-Host \&quot;Git HEAD:\&quot;
+        git rev-parse HEAD
+        Write-Host \&quot;Git status:\&quot;
+        git status
+        Write-Host \&quot;=========================\&quot;·········
+    - name: Check versions before build (macOS)
+      if: matrix.os == &apos;macos-latest&apos;
+      run: |
+        echo \&quot;=== CHECKING VERSIONS ===\&quot;
+        echo \&quot;package.json version:\&quot;
+        grep &apos;\&quot;version\&quot;&apos; package.json | head -1
+        echo \&quot;package-lock.json version:\&quot;
+        grep &apos;\&quot;version\&quot;&apos; package-lock.json | head -2
+        echo \&quot;Git HEAD:\&quot;
+        git rev-parse HEAD
+        echo \&quot;Git status:\&quot;
+        git status
+        echo \&quot;=========================\&quot;·····
+    - name: Build Electron app
+      run: npm run dist:${{ matrix.platform }}
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}·
+    - name: List build outputs
+      run: ls -la release/
+      shell: bash·
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact-name }}
+        path: ${{ matrix.build-output }}
+        if-no-files-found: error·
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, &apos;refs/tags/&apos;)·
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4·
+    - name: Download Mac artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Anava-Installer-Mac
+        path: release-mac·
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Anava-Installer-Windows
+        path: release-win·
+    - name: List downloaded artifacts
+      run: |
+        echo \&quot;Mac artifacts:\&quot;
+        ls -la release-mac/
+        echo \&quot;Windows artifacts:\&quot;
+        ls -la release-win/·
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        draft: false
+        prerelease: false
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## Anava Installer ${{ github.ref_name }}···········
+          ### Installation···········
+          **macOS**: Download the .dmg file and double-click to install
+          **Windows**: Download the .exe installer and run it···········
+          ### Changes
+          Please see the commit history for changes in this release.
+        files: |
+          release-mac/*.dmg
+          release-win/*.exe&quot;
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/security/dualReleaseSecurityValidation.test.ts:95:33)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="2. Speaker Configuration Completion" name="should persist speaker config completion state" time="0">
+    <testcase classname="Dual Repository Release Security Validation › GitHub Actions Security" name="should validate workflow permissions are minimal" time="0.001">
     </testcase>
-    <testcase classname="3. AI Vision Audio Playback Support" name="should support legacy MP3 format audio" time="0">
+    <testcase classname="Dual Repository Release Security Validation › GitHub Actions Security" name="should validate secure artifact handling" time="0">
     </testcase>
-    <testcase classname="3. AI Vision Audio Playback Support" name="should support new PCM format audio" time="0.001">
+    <testcase classname="Dual Repository Release Security Validation › Static Download URL Security" name="should validate static URLs prevent dependency confusion attacks" time="0.001">
     </testcase>
-    <testcase classname="3. AI Vision Audio Playback Support" name="should handle pre-fetched audio data correctly" time="0">
+    <testcase classname="Dual Repository Release Security Validation › Static Download URL Security" name="should validate repository ownership and access controls" time="0">
+      <failure>Error: expect(received).not.toContain(expected) // indexOf
+
+Expected substring: not &quot;//&quot;
+Received string:        &quot;https://github.com/AnavaAcap/acap-releases&quot;
+    at /Users/ryanwager/anava-infrastructure-deployer/tests/security/dualReleaseSecurityValidation.test.ts:187:26
+    at Array.forEach (&lt;anonymous&gt;)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/security/dualReleaseSecurityValidation.test.ts:178:21)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="4. Camera Detection - POST Request Format" name="should use proper POST request format with propertyList" time="0">
+    <testcase classname="Dual Repository Release Security Validation › Release Artifact Integrity" name="should validate build configuration excludes sensitive files" time="0.001">
     </testcase>
-    <testcase classname="4. Camera Detection - POST Request Format" name="should extract MAC from SerialNumber field" time="0">
+    <testcase classname="Dual Repository Release Security Validation › Release Artifact Integrity" name="should validate ASAR security configuration" time="0">
     </testcase>
-    <testcase classname="4. Camera Detection - POST Request Format" name="should properly identify speakers vs cameras" time="0.001">
+    <testcase classname="Dual Repository Release Security Validation › Release Artifact Integrity" name="should validate extra resources are secure" time="0.001">
+      <failure>Error: expect(received).not.toContain(expected) // indexOf
+
+Expected substring: not &quot;client_secret&quot;
+Received string:        &quot;{\&quot;installed\&quot;:{\&quot;client_id\&quot;:\&quot;392865621461-3332mfpeb245vp56raok2mmp4aqssv15.apps.googleusercontent.com\&quot;,\&quot;project_id\&quot;:\&quot;anava-ai\&quot;,\&quot;auth_uri\&quot;:\&quot;https://accounts.google.com/o/oauth2/auth\&quot;,\&quot;token_uri\&quot;:\&quot;https://oauth2.googleapis.com/token\&quot;,\&quot;auth_provider_x509_cert_url\&quot;:\&quot;https://www.googleapis.com/oauth2/v1/certs\&quot;,\&quot;client_secret\&quot;:\&quot;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\&quot;,\&quot;redirect_uris\&quot;:[\&quot;http://localhost:8085\&quot;]}}&quot;
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/security/dualReleaseSecurityValidation.test.ts:266:29)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="4. Camera Detection - POST Request Format" name="should handle non-Axis devices gracefully" time="0">
+    <testcase classname="Dual Repository Release Security Validation › Environment Security" name="should validate no hardcoded credentials in source" time="0.003">
+      <failure>Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: true
+Received: false
+    at /Users/ryanwager/anava-infrastructure-deployer/tests/security/dualReleaseSecurityValidation.test.ts:297:38
+    at Array.forEach (&lt;anonymous&gt;)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/security/dualReleaseSecurityValidation.test.ts:280:20)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="5. MAC Address Flow Through System" name="should pass actual MAC from scanner to license activation" time="0">
+    <testcase classname="Dual Repository Release Security Validation › Environment Security" name="should validate secure configuration management" time="0">
+      <failure>Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: true
+Received: false
+    at /Users/ryanwager/anava-infrastructure-deployer/tests/security/dualReleaseSecurityValidation.test.ts:318:35
+    at Array.forEach (&lt;anonymous&gt;)
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/security/dualReleaseSecurityValidation.test.ts:310:19)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="5. MAC Address Flow Through System" name="should never use hardcoded MAC address" time="0">
+    <testcase classname="Dual Repository Release Security Validation › Dependency Security" name="should validate no known vulnerable dependencies" time="0.001">
+      <failure>Error: expect(received).toBeGreaterThanOrEqual(expected)
+
+Expected: &gt;= 22
+Received:    0
+    at Object.&lt;anonymous&gt; (/Users/ryanwager/anava-infrastructure-deployer/tests/security/dualReleaseSecurityValidation.test.ts:357:30)
+    at Promise.finally.completed (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1559:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1499:10)
+    at _callCircusTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1009:40)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:949:3)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:839:13)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at _runTestsForDescribeBlock (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:829:11)
+    at run (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:757:3)
+    at runAndTransformResultsToJestFormat (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/jestAdapterInit.js:1920:21)
+    at jestAdapter (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-circus/build/runner.js:101:19)
+    at runTestInternal (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:275:16)
+    at runTest (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:343:7)
+    at Object.worker (/Users/ryanwager/anava-infrastructure-deployer/node_modules/jest-runner/build/testWorker.js:497:12)</failure>
     </testcase>
-    <testcase classname="6. Network Scanning IP Count" name="should calculate correct total IPs for progress display" time="0">
+    <testcase classname="Dual Repository Release Security Validation › Dependency Security" name="should validate dependency overrides for security" time="0">
     </testcase>
-    <testcase classname="6. Network Scanning IP Count" name="should update progress correctly during scan" time="0.001">
+    <testcase classname="Dual Repository Release Security Validation › Release Process Security" name="should validate git tag signing (if configured)" time="0.001">
     </testcase>
-    <testcase classname="7. Error Recovery and Timeouts" name="should handle network timeouts gracefully" time="0">
-    </testcase>
-    <testcase classname="7. Error Recovery and Timeouts" name="should handle ETIMEDOUT errors" time="0.007">
-    </testcase>
-  </testsuite>
-  <testsuite name="Windows Installer Configuration" errors="0" failures="0" skipped="0" timestamp="2025-08-12T01:54:31" time="0.038" tests="32">
-    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have only one electron-builder configuration file" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have consistent perMachine setting" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should use dynamic GUID generation" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have installer-fixed.nsh as include script" time="0.001">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Configuration Consistency" name="should have proper Windows configuration" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have installer-fixed.nsh file" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should include Windows process cleanup functions" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have filesystem tunneling mitigation" time="0.001">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have Windows Defender handling" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have MOTW handling" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have Visual C++ Redistributable checks" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should have comprehensive registry cleanup" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should use dynamic GUID variable" time="0.003">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › NSIS Script Validation" name="should disable auto-run after installation" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Scripts" name="should have GUID generation script" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Scripts" name="should have VC++ Redistributable download script" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Scripts" name="should have installer assets creation script" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Build Scripts" name="should include scripts in Windows build command" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should have Windows-specific cleanup functions" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should track spawned child processes" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should use WMI for process cleanup on Windows" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should handle uncaught exceptions on Windows" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Main Process Cleanup" name="should prevent default close for cleanup on Windows" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Asset Files" name="should have required BMP files for installer" time="0">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › Asset Files" name="should have non-empty BMP files" time="0.001">
-    </testcase>
-    <testcase classname="Windows Installer Configuration › ASAR Configuration" name="should unpack required modules" time="0">
-    </testcase>
-    <testcase classname="Windows Process Management › Child Process Tracking" name="should track all spawned processes" time="0">
-    </testcase>
-    <testcase classname="Windows Process Management › Child Process Tracking" name="should kill all tracked processes on cleanup" time="0.001">
-    </testcase>
-    <testcase classname="Registry Management › GUID Generation" name="should generate unique GUIDs" time="0">
-    </testcase>
-    <testcase classname="File System Tunneling Mitigation" name="should have proper delays in cleanup" time="0">
-    </testcase>
-    <testcase classname="Integration Prevention Tests" name="should prevent old installer.nsh from being used" time="0">
-    </testcase>
-    <testcase classname="Integration Prevention Tests" name="should not have conflicting compression settings" time="0.001">
+    <testcase classname="Dual Repository Release Security Validation › Release Process Security" name="should validate release checklist completeness" time="0">
     </testcase>
   </testsuite>
 </testsuites>
