@@ -12,6 +12,7 @@ const axiosInstance = axios.create({
 
 interface ScanResult {
   ip: string;
+  port?: number;
   accessible: boolean;
   authRequired?: boolean;
   model?: string;
@@ -21,11 +22,12 @@ interface ScanResult {
 }
 
 /**
- * FAST parallel network scanner - scans port 443 on all local IPs in parallel
+ * FAST parallel network scanner - scans specified port on all local IPs in parallel
  */
 export async function fastNetworkScan(
   credentials: { username: string; password: string },
-  onProgress?: (ip: string, status: 'scanning' | 'found' | 'not_found' | 'total', total?: number) => void
+  onProgress?: (ip: string, status: 'scanning' | 'found' | 'not_found' | 'total', total?: number) => void,
+  port: number = 443
 ): Promise<ScanResult[]> {
   console.log('🚀 Starting FAST parallel network scan...');
   
@@ -63,7 +65,7 @@ export async function fastNetworkScan(
     }
   }
   
-  console.log(`Scanning ${ipsToScan.length} IPs on port 443...`);
+  console.log(`Scanning ${ipsToScan.length} IPs on port ${port}...`);
   
   // Report the total number of IPs to scan
   if (onProgress) {
@@ -81,19 +83,20 @@ export async function fastNetworkScan(
     const batchPromises = batch.map(async (ip) => {
       if (onProgress) onProgress(ip, 'scanning');
       
-      // Quick port check on 443
-      const isOpen = await checkPort(ip, 443, 500);
+      // Quick port check on specified port
+      const isOpen = await checkPort(ip, port, 500);
       
       if (isOpen) {
         // Port is open, but need to verify it's actually an Axis device
-        const cameraInfo = await identifyCamera(ip, credentials);
+        const cameraInfo = await identifyCamera(ip, credentials, port);
         
         if ((cameraInfo.accessible || cameraInfo.authRequired) && cameraInfo.manufacturer === 'Axis') {
-          console.log(`✓ Found Axis device at ${ip}`);
+          console.log(`✓ Found Axis device at ${ip}:${port}`);
           if (onProgress) onProgress(ip, 'found');
           
           return {
             ip,
+            port,
             accessible: cameraInfo.accessible || false,
             authRequired: cameraInfo.authRequired,
             model: cameraInfo.model,
@@ -102,7 +105,7 @@ export async function fastNetworkScan(
             mac: cameraInfo.mac
           };
         } else {
-          // Port 443 is open but it's not an Axis device
+          // Port is open but it's not an Axis device
           if (onProgress) onProgress(ip, 'not_found');
           return null;
         }
@@ -166,11 +169,16 @@ function checkPort(ip: string, port: number, timeout: number): Promise<boolean> 
  */
 export async function identifyCamera(
   ip: string, 
-  credentials: { username: string; password: string }
+  credentials: { username: string; password: string },
+  port: number = 443
 ): Promise<{ accessible: boolean; authRequired?: boolean; model?: string; manufacturer?: string; deviceType?: 'camera' | 'speaker'; mac?: string }> {
   try {
+    // Determine protocol based on port
+    const protocol = port === 80 ? 'http' : 'https';
+    const baseUrl = `${protocol}://${ip}:${port}`;
+    
     // Try GET first (older devices)
-    let response = await axiosInstance.get(`https://${ip}/axis-cgi/basicdeviceinfo.cgi`, {
+    let response = await axiosInstance.get(`${baseUrl}/axis-cgi/basicdeviceinfo.cgi`, {
       auth: {
         username: credentials.username,
         password: credentials.password
@@ -181,11 +189,11 @@ export async function identifyCamera(
     
     // If we get 401, it's an Axis device but wrong credentials
     if (response.status === 401) {
-      console.log(`Axis device at ${ip} requires correct authentication`);
+      console.log(`Axis device at ${ip}:${port} requires correct authentication`);
       
       // Try to determine if it's a speaker by checking audio endpoint
       try {
-        const speakerCheck = await axiosInstance.get(`https://${ip}/axis-cgi/audio/transmit.cgi`, {
+        const speakerCheck = await axiosInstance.get(`${baseUrl}/axis-cgi/audio/transmit.cgi`, {
           auth: { username: credentials.username, password: credentials.password },
           validateStatus: () => true,
           timeout: 1000
@@ -217,7 +225,7 @@ export async function identifyCamera(
     
     // Check if it's a newer device that requires POST
     if (response.status === 200 && response.data?.error?.message?.includes('POST supported')) {
-      console.log(`Device at ${ip} requires POST method (newer Axis device)`);
+      console.log(`Device at ${ip}:${port} requires POST method (newer Axis device)`);
       
       // Try POST with JSON-RPC format for newer devices
       // Include all properties we want to retrieve
@@ -227,7 +235,7 @@ export async function identifyCamera(
         'SerialNumber', 'Soc', 'SocSerialNumber', 'Version', 'WebURL'
       ];
       
-      response = await axiosInstance.post(`https://${ip}/axis-cgi/basicdeviceinfo.cgi`, 
+      response = await axiosInstance.post(`${baseUrl}/axis-cgi/basicdeviceinfo.cgi`, 
         {
           "apiVersion": "1.0",
           "method": "getProperties",
@@ -278,7 +286,7 @@ export async function identifyCamera(
         deviceType = 'camera';
       }
       
-      console.log(`✓ Found Axis ${deviceType} at ${ip}: ${model} (${properties.ProdType})`);
+      console.log(`✓ Found Axis ${deviceType} at ${ip}:${port}: ${model} (${properties.ProdType})`);
       
       return {
         accessible: true,
@@ -293,7 +301,7 @@ export async function identifyCamera(
       
       // If it doesn't have Axis-specific fields, it's not an Axis device
       if (!data.includes('ProdNbr=') && !data.includes('Brand=') && !data.includes('SerialNumber=')) {
-        console.log(`Device at ${ip} responded but is not an Axis device`);
+        console.log(`Device at ${ip}:${port} responded but is not an Axis device`);
         return { accessible: false };
       }
       
@@ -314,7 +322,7 @@ export async function identifyCamera(
       }
     }
     
-    console.log(`✓ Found Axis ${deviceType} at ${ip}: ${model} (MAC: ${macAddress})`);
+    console.log(`✓ Found Axis ${deviceType} at ${ip}:${port}: ${model} (MAC: ${macAddress})`);
     
     return {
       accessible: true,

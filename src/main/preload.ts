@@ -84,7 +84,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     useServiceDiscovery?: boolean;
     credentials?: Array<{ username: string; password: string }>;
   }) => ipcRenderer.invoke('enhanced-scan-network', options),
-  fastNetworkScan: (options: { credentials: { username: string; password: string } }) => 
+  fastNetworkScan: (options: { credentials: { username: string; password: string }; port?: number }) => 
     ipcRenderer.invoke('fast-network-scan', options),
   onScanProgress: (callback: (data: { ip: string; status: string }) => void) => {
     ipcRenderer.on('scan-progress', (_, data) => callback(data));
@@ -101,8 +101,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Return cleanup function
     return () => ipcRenderer.removeAllListeners('camera-discovered');
   },
-  quickScanCamera: (ip: string, username: string, password: string) => 
-    ipcRenderer.invoke('quick-scan-camera', ip, username, password),
+  quickScanCamera: (ip: string, username: string, password: string, port?: number) => 
+    ipcRenderer.invoke('quick-scan-camera', ip, username, password, port),
   testCameraCredentials: (cameraId: string, ip: string, username: string, password: string) =>
     ipcRenderer.invoke('test-camera-credentials', cameraId, ip, username, password),
   deployACAP: (camera: any, acapPath: string) => ipcRenderer.invoke('deploy-acap', camera, acapPath),

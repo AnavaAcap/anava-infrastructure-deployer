@@ -36,6 +36,7 @@ import { VisionArchitectDialog } from '../components/VisionArchitectDialog';
 
 interface Camera {
   ip: string;
+  port?: number;
   username: string;
   password: string;
   name?: string;
@@ -53,6 +54,7 @@ const VisionArchitectPage: React.FC = () => {
   const [useManualEntry, setUseManualEntry] = useState(false);
   const [manualCamera, setManualCamera] = useState<Camera>({
     ip: '',
+    port: 443,
     username: 'anava',
     password: 'baton',
     isManual: true
@@ -246,6 +248,16 @@ const VisionArchitectPage: React.FC = () => {
                 onChange={(e) => setManualCamera({ ...manualCamera, ip: e.target.value })}
                 placeholder="192.168.1.100"
                 helperText="Enter the IP address of your camera"
+              />
+              <TextField
+                fullWidth
+                label="Port"
+                type="number"
+                value={manualCamera.port || 443}
+                onChange={(e) => setManualCamera({ ...manualCamera, port: parseInt(e.target.value) || 443 })}
+                placeholder="443"
+                helperText="HTTPS port (default: 443)"
+                inputProps={{ min: 1, max: 65535 }}
               />
               <TextField
                 fullWidth

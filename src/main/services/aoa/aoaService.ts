@@ -114,11 +114,13 @@ export class AOAService {
   private cameraIp: string;
   private username: string;
   private password: string;
+  private port: number;
 
-  constructor(cameraIp: string, username: string, password: string) {
+  constructor(cameraIp: string, username: string, password: string, port: number = 443) {
     this.cameraIp = cameraIp;
     this.username = username;
     this.password = password;
+    this.port = port;
   }
 
   /**
@@ -1004,7 +1006,7 @@ export class AOAService {
     timeout?: number
   ): Promise<any> {
     try {
-      const baseUrl = await getCameraBaseUrl(this.cameraIp, this.username, this.password);
+      const baseUrl = await getCameraBaseUrl(this.cameraIp, this.username, this.password, undefined, this.port);
       const url = `${baseUrl}${uri}`;
       
       logger.debug(`[AOA] ${method} ${url}`);

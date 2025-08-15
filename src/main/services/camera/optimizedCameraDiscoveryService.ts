@@ -244,7 +244,7 @@ export class OptimizedCameraDiscoveryService {
     });
     
     // FAST network scanner
-    ipcMain.handle('fast-network-scan', async (event, options: { credentials: { username: string; password: string } }) => {
+    ipcMain.handle('fast-network-scan', async (event, options: { credentials: { username: string; password: string }; port?: number }) => {
       const { fastNetworkScan } = require('./fastNetworkScanner');
       
       // Send progress updates to renderer
@@ -252,18 +252,18 @@ export class OptimizedCameraDiscoveryService {
         if (event.sender && !event.sender.isDestroyed()) {
           event.sender.send('scan-progress', { ip, status, total });
         }
-      });
+      }, options.port || 443);
     });
     
     ipcMain.handle('discover-service-cameras', async (event) => {
       return this.discoverViaServices(event.sender);
     });
     
-    ipcMain.handle('quick-scan-camera', async (_event, ip: string, username: string, password: string) => {
+    ipcMain.handle('quick-scan-camera', async (_event, ip: string, username: string, password: string, port?: number) => {
       if (!username || !password) {
         throw new Error('Username and password are required');
       }
-      return this.quickScanSpecificCamera(ip, username, password);
+      return this.quickScanSpecificCamera(ip, username, password, port);
     });
     
     ipcMain.handle('test-camera-credentials', async (_event, cameraId: string, ip: string, username: string, password: string) => {
@@ -621,40 +621,40 @@ export class OptimizedCameraDiscoveryService {
     return {};
   }
 
-  async quickScanSpecificCamera(ip: string, username: string, password: string): Promise<Camera[]> {
+  async quickScanSpecificCamera(ip: string, username: string, password: string, port?: number): Promise<Camera[]> {
     try {
       console.log(`=== Quick scanning camera at ${ip} ===`);
       console.log(`Environment: ${app.isPackaged ? 'PACKAGED' : 'DEVELOPMENT'}`);
       console.log(`NODE_TLS_REJECT_UNAUTHORIZED: ${process.env.NODE_TLS_REJECT_UNAUTHORIZED}`);
       
-      // Try all common ports
-      const ports = [...DEFAULT_CAMERA_PORTS.priority, ...DEFAULT_CAMERA_PORTS.common];
+      // Use custom port if provided, otherwise try common ports
+      const ports = port ? [port] : [...DEFAULT_CAMERA_PORTS.priority, ...DEFAULT_CAMERA_PORTS.common];
       let lastAuthError: string | null = null;
       let foundOpenPort = false;
       let connectionErrors: string[] = [];
       
-      for (const port of ports) {
+      for (const scanPort of ports) {
         // First check if port is open
-        console.log(`  Checking port ${port}...`);
-        const isOpen = await this.checkTCPConnection(ip, port, 2000);
+        console.log(`  Checking port ${scanPort}...`);
+        const isOpen = await this.checkTCPConnection(ip, scanPort, 2000);
         
         if (isOpen) {
           foundOpenPort = true;
-          const protocol = port === 443 || port === 8443 ? 'https' : 'http';
-          console.log(`  Port ${port} is open, trying ${protocol} protocol`);
+          const protocol = scanPort === 443 || scanPort === 8443 ? 'https' : 'http';
+          console.log(`  Port ${scanPort} is open, trying ${protocol} protocol`);
           
           // Try to authenticate and get camera info
-          const authResult = await this.checkAxisCameraWithError(ip, username, password, port, protocol);
+          const authResult = await this.checkAxisCameraWithError(ip, username, password, scanPort, protocol);
           
           if (authResult.camera) {
-            console.log(`✓ Found camera at ${ip}:${port}`);
+            console.log(`✓ Found camera at ${ip}:${scanPort}`);
             return [authResult.camera];
           } else if (authResult.error) {
             lastAuthError = authResult.error;
-            console.log(`✗ Authentication failed on port ${port}: ${authResult.error}`);
+            console.log(`✗ Authentication failed on port ${scanPort}: ${authResult.error}`);
           }
         } else {
-          connectionErrors.push(`Port ${port} closed/timeout`);
+          connectionErrors.push(`Port ${scanPort} closed/timeout`);
         }
       }
       

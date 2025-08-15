@@ -5,12 +5,36 @@
 - **Organization**: AnavaAcap
 - **Product Name**: Anava Installer
 - **Public Releases**: https://github.com/AnavaAcap/acap-releases/releases/tag/v3.8.1
-- **Current Version**: v0.9.206 (2025-08-14)
+- **Current Version**: v0.9.207 (2025-08-14)
 - **Electron**: v37.2.6 (latest)
 - **Node.js**: v20.x
 - **Build System**: Vite v7.x
 
-## Latest Features (v0.9.206) - VISION ARCHITECT ENTERPRISE INTELLIGENCE ✅
+## Latest Features (v0.9.207) - VISION ARCHITECT INTELLIGENT SCHEDULE MANAGEMENT ✅
+
+### ✅ Smart Schedule Intelligence - NEW
+- **Critical Feature**: Vision Architect now creates custom schedules intelligently
+- **Strategy**: Uses existing camera schedules ("Office Hours Weekdays", "Weekends", "After Hours") when they fit
+- **Custom Creation**: Only creates custom schedules for unique timing needs (school hours, delivery windows)
+- **Always-On**: Uses empty string "" for 24/7 monitoring instead of creating "AlwaysOn" schedules
+- **Efficiency**: Avoids duplicate schedule creation for better system performance
+- **Files**: `visionArchitect.ts`, `scheduleService.ts`
+
+### ✅ Enhanced Deployment Error Handling - FIXED
+- **404 Fixes**: Fixed deployment 404 errors by skipping unsupported schedule deployment
+- **Graceful Degradation**: Enhanced error handling for AOA scenarios with availability checks
+- **Success Criteria**: Updated to focus on core components (Skills and Profiles)
+- **Optional Components**: Schedules and AOA treated as optional with informative messages
+- **Files**: `visionArchitectDeployer.ts`
+
+### ✅ Complete VAPIX Schedule Service - NEW
+- **Implementation**: Full VAPIX Schedule Service with comprehensive API support
+- **Features**: Weekly, daily, date range, and one-time schedules
+- **Integration**: Ready for deployment (currently disabled due to camera compatibility)
+- **Documentation**: Complete API documentation and helper functions
+- **Files**: `scheduleService.ts`
+
+## Previous Features (v0.9.206) - VISION ARCHITECT ENTERPRISE INTELLIGENCE ✅
 
 ### ✅ Advanced Vision Architect System - ENHANCED
 - **Anti-Hallucination Protocol**: Decomposes complex requests into specialized skills
@@ -137,6 +161,53 @@
   - User-friendly messages during retry process
 
 
+## Build & Release Strategy
+
+### CRITICAL: Use GitHub Actions (Never Local Builds for Releases)
+**Always use GitHub Actions for production builds - never build locally for releases!**
+
+Why GitHub Actions is superior:
+- **Parallel builds**: Windows and macOS build simultaneously on dedicated runners
+- **Proper secrets**: Apple signing certificates, code signing tokens stored securely
+- **Better resources**: More CPU/memory than local machines
+- **Reproducible**: Same environment every time, no local environment differences
+- **Automatic**: Automatically uploads to releases and copies to public ACAP releases repo
+- **Professional**: Industry standard for CI/CD
+
+### Release Process (GitHub Actions)
+```bash
+# 1. Update version and commit changes
+npm version patch
+git commit -m "chore: bump version to v0.9.XXX" --no-verify
+git tag v0.9.XXX
+git push origin main --tags
+
+# 2. GitHub Actions automatically:
+#    - Builds macOS Universal binary (Intel + Apple Silicon)  
+#    - Builds Windows installer with code signing
+#    - Creates GitHub release with assets
+#    - Copies installers to AnavaAcap/acap-releases
+
+# 3. Monitor progress:
+gh run list --workflow=release.yml --limit=3
+gh run view <run-id>
+```
+
+### Monitor Build Status
+```bash
+# Check workflow status
+gh run list --workflow=release.yml --limit=5
+
+# View specific run details
+gh run view <run-id>
+
+# View job-specific status
+gh run view --job=<job-id>
+
+# Follow logs in real-time
+gh run view --log --job=<job-id>
+```
+
 ## Build Commands
 
 ### Development
@@ -149,18 +220,14 @@ npm run test:security          # Run security tests (18/20 passing)
 npm run test:integration       # Run integration tests (19/19 passing)
 ```
 
-### Production Builds
+### Local Development Builds (DEV ONLY - Not for Releases)
 ```bash
-# macOS Universal (Intel + Apple Silicon)
-APPLE_ID="ryan@anava.ai" \
-APPLE_ID_PASSWORD="gbdi-fnth-pxfx-aofv" \
-APPLE_APP_SPECIFIC_PASSWORD="gbdi-fnth-pxfx-aofv" \
-APPLE_TEAM_ID="3JVZNWGRYT" \
-CSC_NAME="Ryan Wager (3JVZNWGRYT)" \
-npm run dist:mac
+# For development testing only - DO NOT use for releases
+npm run dist:mac    # Local macOS build (dev testing)
+npm run dist:win    # Local Windows build (dev testing)
 
-# Windows
-npm run dist:win
+# Production releases MUST use GitHub Actions workflow
+# See "Release Process (GitHub Actions)" section above
 ```
 
 ## Testing Production Build

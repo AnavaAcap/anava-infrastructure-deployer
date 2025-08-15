@@ -35,11 +35,11 @@ export class CameraDiscoveryService {
       return this.scanNetworkForCameras(event.sender, options);
     });
     
-    ipcMain.handle('quick-scan-camera', async (_event, ip: string, username: string, password: string) => {
+    ipcMain.handle('quick-scan-camera', async (_event, ip: string, username: string, password: string, port?: number) => {
       if (!username || !password) {
         throw new Error('Username and password are required');
       }
-      return this.quickScanSpecificCamera(ip, username, password);
+      return this.quickScanSpecificCamera(ip, username, password, port);
     });
     
     ipcMain.handle('test-camera-credentials', async (_event, cameraId: string, ip: string, username: string, password: string) => {
@@ -74,26 +74,29 @@ export class CameraDiscoveryService {
     });
   }
 
-  async quickScanSpecificCamera(ip: string, username: string, password: string): Promise<Camera[]> {
+  async quickScanSpecificCamera(ip: string, username: string, password: string, port?: number): Promise<Camera[]> {
     try {
       console.log(`=== Quick scanning camera at ${ip} with credentials ${username}:****** ===`);
       
-      // First check if the IP is reachable via TCP
-      console.log(`Step 1: Checking if ${ip} is reachable via TCP...`);
-      const isReachable = await this.checkTCPConnection(ip, 80);
+      // Use custom port or default to 443
+      const targetPort = port || 443;
       
-      console.log(`TCP probe result for ${ip}:`, isReachable ? 'reachable' : 'not reachable');
+      // First check if the IP is reachable via TCP
+      console.log(`Step 1: Checking if ${ip} is reachable via TCP on port ${targetPort}...`);
+      const isReachable = await this.checkTCPConnection(ip, targetPort);
+      
+      console.log(`TCP probe result for ${ip}:${targetPort}:`, isReachable ? 'reachable' : 'not reachable');
       
       if (!isReachable) {
-        console.log(`❌ ${ip} is not reachable via TCP on port 80`);
+        console.log(`❌ ${ip} is not reachable via TCP on port ${targetPort}`);
         return [];
       }
       
-      console.log(`✅ ${ip} is reachable`);
+      console.log(`✅ ${ip}:${targetPort} is reachable`);
       console.log(`Step 2: Checking for camera with digest auth...`);
       
-      // Try to connect to the specific camera with digest auth
-      const camera = await this.checkAxisCamera(ip, username, password);
+      // Try to connect to the specific camera with digest auth using custom port
+      const camera = await this.checkAxisCamera(ip, username, password, targetPort);
       if (camera) {
         console.log(`✅ Found camera at ${ip}:`, camera);
         return [camera];
@@ -107,12 +110,12 @@ export class CameraDiscoveryService {
     }
   }
 
-  async testCameraCredentials(ip: string, username: string, password: string) {
+  async testCameraCredentials(ip: string, username: string, password: string, port: number = 443) {
     try {
       console.log(`Testing credentials ${username}:****** for ${ip}`);
       
       // Test with digest auth on a simple endpoint
-      const result = await this.digestAuth(ip, username, password, '/axis-cgi/param.cgi?action=list&group=Brand');
+      const result = await this.digestAuth(ip, username, password, '/axis-cgi/param.cgi?action=list&group=Brand', port);
       
       if (result && result.includes('Brand=AXIS')) {
         console.log(`✅ Credentials work for ${ip}`);
@@ -340,12 +343,12 @@ export class CameraDiscoveryService {
     }
   }
 
-  private async checkAxisCamera(ip: string, username: string, password: string): Promise<Camera | null> {
+  private async checkAxisCamera(ip: string, username: string, password: string, port: number = 443): Promise<Camera | null> {
     try {
       console.log(`=== Checking Axis camera at ${ip} with credentials ${username}:****** ===`);
       
       // Try to get device info with digest auth
-      const response = await this.digestAuth(ip, username, password, '/axis-cgi/param.cgi?action=list&group=Brand');
+      const response = await this.digestAuth(ip, username, password, '/axis-cgi/param.cgi?action=list&group=Brand', port);
       
       if (response && response.includes('Brand=AXIS')) {
         console.log(`  ✅ Confirmed Axis device via VAPIX`);
@@ -390,7 +393,7 @@ export class CameraDiscoveryService {
     }
   }
 
-  private async digestAuth(ip: string, username: string, password: string, path: string): Promise<string | null> {
+  private async digestAuth(ip: string, username: string, password: string, path: string, port: number = 443): Promise<string | null> {
     try {
       console.log(`    Attempting auth to ${ip}${path}...`);
       
@@ -398,7 +401,8 @@ export class CameraDiscoveryService {
       const httpsAgent = new https.Agent({ rejectUnauthorized: false });
       const auth = Buffer.from(`${username}:${password}`).toString('base64');
       
-      const response = await axios.get(`https://${ip}${path}`, {
+      const protocol = port === 80 ? 'http' : 'https';
+      const response = await axios.get(`${protocol}://${ip}:${port}${path}`, {
         httpsAgent,
         headers: { 'Authorization': `Basic ${auth}` },
         timeout: 5000, // 5s timeout for slow networks
