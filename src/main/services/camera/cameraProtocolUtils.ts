@@ -19,28 +19,35 @@ const protocolCache = new Map<string, 'https' | 'http'>();
  * @param username Optional username for authenticated check
  * @param password Optional password for authenticated check
  * @param forceProtocol Force a specific protocol without testing
+ * @param port Optional port number (defaults to 443 for https, 80 for http)
  */
 export async function getCameraBaseUrl(
   ip: string, 
   username?: string, 
   password?: string,
-  forceProtocol?: 'https' | 'http'
+  forceProtocol?: 'https' | 'http',
+  port?: number
 ): Promise<string> {
+  // Determine default port based on protocol
+  const cacheKey = `${ip}:${port || 'default'}`;
+  
   // Check cache first
-  if (!forceProtocol && protocolCache.has(ip)) {
-    const protocol = protocolCache.get(ip)!;
-    return `${protocol}://${ip}`;
+  if (!forceProtocol && protocolCache.has(cacheKey)) {
+    const protocol = protocolCache.get(cacheKey)!;
+    const finalPort = port || (protocol === 'https' ? 443 : 80);
+    return `${protocol}://${ip}:${finalPort}`;
   }
 
   // If forced, use that
   if (forceProtocol) {
-    protocolCache.set(ip, forceProtocol);
-    return `${forceProtocol}://${ip}`;
+    protocolCache.set(cacheKey, forceProtocol);
+    const finalPort = port || (forceProtocol === 'https' ? 443 : 80);
+    return `${forceProtocol}://${ip}:${finalPort}`;
   }
 
   // Test which protocol works
-  const result = await testCameraProtocol(ip, username, password);
-  protocolCache.set(ip, result.protocol);
+  const result = await testCameraProtocol(ip, username, password, port);
+  protocolCache.set(cacheKey, result.protocol);
   return result.baseUrl;
 }
 
@@ -50,14 +57,19 @@ export async function getCameraBaseUrl(
 export async function testCameraProtocol(
   ip: string,
   username?: string,
-  password?: string
+  password?: string,
+  port?: number
 ): Promise<ProtocolTestResult> {
-  logger.info(`[Protocol] Testing camera protocols for ${ip}`);
+  // Determine ports to test
+  const httpsPort = port || 443;
+  const httpPort = port || 80;
+  
+  logger.info(`[Protocol] Testing camera protocols for ${ip}:${httpsPort}/${httpPort}`);
   
   // Try HTTPS first (modern cameras prefer this)
   try {
-    const httpsUrl = `https://${ip}/axis-cgi/param.cgi?action=list&group=Brand`;
-    logger.debug(`[Protocol] Trying HTTPS for ${ip}`);
+    const httpsUrl = `https://${ip}:${httpsPort}/axis-cgi/param.cgi?action=list&group=Brand`;
+    logger.debug(`[Protocol] Trying HTTPS for ${ip}:${httpsPort}`);
     
     await axios.get(httpsUrl, {
       timeout: 3000, // Short timeout for protocol test
@@ -69,27 +81,27 @@ export async function testCameraProtocol(
     });
     
     // If we get here without error, HTTPS works
-    logger.info(`[Protocol] HTTPS works for ${ip}`);
+    logger.info(`[Protocol] HTTPS works for ${ip}:${httpsPort}`);
     return {
       protocol: 'https',
-      baseUrl: `https://${ip}`,
+      baseUrl: `https://${ip}:${httpsPort}`,
       verified: true
     };
   } catch (httpsError: any) {
     // HTTPS failed, log why
     if (httpsError.code === 'ECONNREFUSED') {
-      logger.debug(`[Protocol] HTTPS refused for ${ip}`);
+      logger.debug(`[Protocol] HTTPS refused for ${ip}:${httpsPort}`);
     } else if (httpsError.code === 'ETIMEDOUT') {
-      logger.debug(`[Protocol] HTTPS timeout for ${ip}`);
+      logger.debug(`[Protocol] HTTPS timeout for ${ip}:${httpsPort}`);
     } else {
-      logger.debug(`[Protocol] HTTPS error for ${ip}: ${httpsError.message}`);
+      logger.debug(`[Protocol] HTTPS error for ${ip}:${httpsPort}: ${httpsError.message}`);
     }
   }
   
   // Always use HTTPS for security
   try {
-    const httpsUrl = `https://${ip}/axis-cgi/param.cgi?action=list&group=Brand`;
-    logger.debug(`[Protocol] Using HTTPS for ${ip}`);
+    const httpsUrl = `https://${ip}:${httpsPort}/axis-cgi/param.cgi?action=list&group=Brand`;
+    logger.debug(`[Protocol] Using HTTPS for ${ip}:${httpsPort}`);
     
     const httpsAgent = new https.Agent({ rejectUnauthorized: false });
     await axios.get(httpsUrl, {
@@ -100,20 +112,20 @@ export async function testCameraProtocol(
     });
     
     // If we get here without error, HTTPS works
-    logger.info(`[Protocol] HTTPS works for ${ip}`);
+    logger.info(`[Protocol] HTTPS works for ${ip}:${httpsPort}`);
     return {
       protocol: 'https',
-      baseUrl: `https://${ip}`,
+      baseUrl: `https://${ip}:${httpsPort}`,
       verified: true
     };
   } catch (httpsError: any) {
     // Both failed, log error
-    logger.warn(`[Protocol] Both HTTPS and HTTP failed for ${ip}`);
+    logger.warn(`[Protocol] Both HTTPS and HTTP failed for ${ip}:${httpsPort}`);
     
     // Default to HTTPS for modern cameras
     return {
       protocol: 'https',
-      baseUrl: `https://${ip}`,
+      baseUrl: `https://${ip}:${httpsPort}`,
       verified: false
     };
   }

@@ -51,7 +51,9 @@ export class CameraConfigurationService {
         camera.credentials?.password || '',
         'POST',
         '/local/BatonAnalytic/baton_analytic.cgi?command=getSceneDescription',
-        JSON.stringify(requestData)
+        JSON.stringify(requestData),
+        undefined,
+        camera.port
       );
 
       if (!response || response.status !== 200) {
@@ -104,10 +106,11 @@ export class CameraConfigurationService {
     method: string,
     uri: string,
     data?: any,
-    timeout?: number
+    timeout?: number,
+    port?: number
   ): Promise<any> {
     try {
-      const baseUrl = await getCameraBaseUrl(ip, username, password);
+      const baseUrl = await getCameraBaseUrl(ip, username, password, undefined, port);
       const url = `${baseUrl}${uri}`;
       
       console.log(`[CameraConfig] simpleDigestAuth: ${method} ${url}`);
@@ -377,7 +380,8 @@ export class CameraConfigurationService {
         camera.ip,
         camera.credentials?.username || 'root',
         camera.credentials?.password || 'pass',
-        payload
+        payload,
+        camera.port
       );
 
       if (response.success) {
@@ -428,10 +432,11 @@ export class CameraConfigurationService {
     ip: string,
     username: string,
     password: string,
-    config: any
+    config: any,
+    port?: number
   ): Promise<any> {
     try {
-      const baseUrl = await getCameraBaseUrl(ip, username, password);
+      const baseUrl = await getCameraBaseUrl(ip, username, password, undefined, port);
       const url = `${baseUrl}/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig`;
       const isHttps = url.startsWith('https');
       
@@ -526,12 +531,13 @@ export class CameraConfigurationService {
     ip: string,
     username: string,
     password: string,
-    configPayload: any
+    configPayload: any,
+    port?: number
   ): Promise<any> {
     try {
       // First ensure the application is running before pushing config
       console.log('[CameraConfig] Ensuring BatonAnalytic is running before config push...');
-      const startResult = await this.startApplication(ip, username, password, 'BatonAnalytic');
+      const startResult = await this.startApplication(ip, username, password, 'BatonAnalytic', port);
       if (!startResult.success) {
         console.warn('[CameraConfig] Warning: Could not start application, but will try to push config anyway');
       }
@@ -553,7 +559,9 @@ export class CameraConfigurationService {
           password,
           'POST',
           '/local/BatonAnalytic/baton_analytic.cgi?command=setInstallerConfig',
-          JSON.stringify(configPayload)
+          JSON.stringify(configPayload),
+          undefined,
+          port
         );
 
         console.log('[CameraConfig] SystemConfig push successful!');
@@ -566,7 +574,7 @@ export class CameraConfigurationService {
         if (anavaKey) {
           console.log('[CameraConfig] Activating Anava license key...');
           try {
-            await this.activateLicenseKey(ip, username, password, anavaKey, 'BatonAnalytic');
+            await this.activateLicenseKey(ip, username, password, anavaKey, 'BatonAnalytic', null, port);
             console.log('[CameraConfig] License key activated successfully');
             return { success: true, data: response.data, licenseActivated: true };
           } catch (licenseError: any) {
@@ -592,7 +600,7 @@ export class CameraConfigurationService {
           if (anavaKey) {
             console.log('[CameraConfig] Attempting license activation despite ThreadPool error...');
             try {
-              await this.activateLicenseKey(ip, username, password, anavaKey, 'BatonAnalytic');
+              await this.activateLicenseKey(ip, username, password, anavaKey, 'BatonAnalytic', null, port);
               console.log('[CameraConfig] License key activated successfully');
               return { success: true, message: 'Configuration saved (ACAP restarting)', licenseActivated: true };
             } catch (licenseError: any) {
@@ -667,7 +675,8 @@ export class CameraConfigurationService {
     ip: string,
     username: string,
     password: string,
-    packageName: string
+    packageName: string,
+    port?: number
   ): Promise<{ success: boolean; error?: string }> {
     try {
       console.log(`[CameraConfig] Starting application ${packageName}...`);
@@ -678,7 +687,10 @@ export class CameraConfigurationService {
         username,
         password,
         'GET',
-        startUrl
+        startUrl,
+        undefined,
+        undefined,
+        port
       );
       
       console.log(`[CameraConfig] Start application response:`, response.data);
@@ -688,7 +700,7 @@ export class CameraConfigurationService {
         console.log(`[CameraConfig] Application ${packageName} started successfully`);
         
         // Wait for the application to be fully ready
-        await this.waitForApplicationReady(ip, username, password, packageName);
+        await this.waitForApplicationReady(ip, username, password, packageName, port);
         
         return { success: true };
       } else {
@@ -773,7 +785,8 @@ export class CameraConfigurationService {
     password: string,
     licenseKey: string,
     applicationName: string,
-    macAddress?: string | null
+    macAddress?: string | null,
+    port?: number
   ): Promise<{ success: boolean; licensed?: boolean | string; method?: string }> {
     try {
       // First, check if the application is installed
@@ -945,7 +958,7 @@ export class CameraConfigurationService {
           
           // Now start the application after license activation
           console.log('[CameraConfig] Starting BatonAnalytic application after license activation...');
-          const startResult = await this.startApplication(ip, username, password, 'BatonAnalytic');
+          const startResult = await this.startApplication(ip, username, password, 'BatonAnalytic', port);
           if (startResult.success) {
             console.log('[CameraConfig] Application started successfully');
           } else {

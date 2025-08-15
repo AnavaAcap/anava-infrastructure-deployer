@@ -67,6 +67,7 @@ import { useCameraContext } from '../contexts/CameraContext';
 interface CameraInfo {
   id: string;
   ip: string;
+  port?: number;
   model: string;
   name: string;
   firmwareVersion?: string;
@@ -121,6 +122,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
   const [credentials, setCredentials] = useState(savedState?.credentials || {
     username: 'root',
     password: '',
+    port: 443,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [manualIP, setManualIP] = useState(savedState?.manualIP || '');
@@ -549,14 +551,15 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
     
     try {
       // Show initial status
-      setDeploymentStatus('Scanning network for cameras (port 443)...');
+      setDeploymentStatus(`Scanning network for cameras (port ${credentials.port || 443})...`);
       
       // Use the FAST scanner
       const results = await (window.electronAPI as any).fastNetworkScan?.({
         credentials: {
           username: credentials.username,
           password: credentials.password,
-        }
+        },
+        port: credentials.port || 443
       });
       
       if (!Array.isArray(results)) {
@@ -582,6 +585,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
       const formattedCameras: CameraInfo[] = camerasOnly.map((cam: any) => ({
         id: cam.id || `camera-${cam.ip}`,
         ip: cam.ip,
+        port: cam.port || credentials.port || 443,
         model: cam.model || 'Unknown',
         name: cam.name || `Camera at ${cam.ip}`,
         firmwareVersion: cam.firmwareVersion,
@@ -792,7 +796,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
             credentials.password,
             licenseKey,
             'BatonAnalytic',
-            selectedCamera.mac  // PASS THE MAC ADDRESS!
+            selectedCamera.mac,  // PASS THE MAC ADDRESS!
+            selectedCamera.port || 443
           );
           console.log('License key activated successfully');
         } catch (licenseError: any) {
@@ -903,6 +908,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         const cameraForCapture = {
           id: selectedCamera.id,
           ip: selectedCamera.ip,
+          port: selectedCamera.port || 443,
           name: selectedCamera.model || `Camera at ${selectedCamera.ip}`,
           hasACAP: true,
           hasSpeaker: false,
@@ -1166,6 +1172,17 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                       </InputAdornment>
                     ),
                   }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Port"
+                  type="number"
+                  value={credentials.port || 443}
+                  onChange={(e) => setCredentials({ ...credentials, port: parseInt(e.target.value) || 443 })}
+                  helperText="HTTPS port (default: 443)"
+                  inputProps={{ min: 1, max: 65535 }}
                 />
               </Grid>
               <Grid item xs={12}>
@@ -1642,7 +1659,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                   Camera Connection
                 </Typography>
                 <Grid container spacing={2}>
-                  <Grid item xs={12} md={4}>
+                  <Grid item xs={12} md={3}>
                     <TextField
                       label="Camera IP Address"
                       value={manualCameraIp}
@@ -1652,7 +1669,19 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                       size="small"
                     />
                   </Grid>
-                  <Grid item xs={12} md={4}>
+                  <Grid item xs={12} md={2}>
+                    <TextField
+                      label="Port"
+                      type="number"
+                      value={credentials.port || 443}
+                      onChange={(e) => setCredentials(prev => ({ ...prev, port: parseInt(e.target.value) || 443 }))}
+                      placeholder="443"
+                      fullWidth
+                      size="small"
+                      inputProps={{ min: 1, max: 65535 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={3.5}>
                     <TextField
                       label="Username"
                       value={credentials.username}
@@ -1661,7 +1690,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
                       size="small"
                     />
                   </Grid>
-                  <Grid item xs={12} md={4}>
+                  <Grid item xs={12} md={3.5}>
                     <TextField
                       label="Password"
                       type="password"
@@ -2442,6 +2471,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         <AOAScenarioDialog
           open={showAOADialog}
           cameraIp={selectedCamera.ip}
+          cameraPort={selectedCamera.port}
           username={credentials.username}
           password={credentials.password}
           geminiApiKey={geminiApiKey}
@@ -2461,6 +2491,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         <VisionArchitectDialog
           open={showVisionArchitectDialog}
           cameraIp={selectedCamera.ip}
+          cameraPort={selectedCamera.port}
           username={credentials.username}
           password={credentials.password}
           geminiApiKey={geminiApiKey}

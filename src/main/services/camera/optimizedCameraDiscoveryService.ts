@@ -244,7 +244,7 @@ export class OptimizedCameraDiscoveryService {
     });
     
     // FAST network scanner
-    ipcMain.handle('fast-network-scan', async (event, options: { credentials: { username: string; password: string } }) => {
+    ipcMain.handle('fast-network-scan', async (event, options: { credentials: { username: string; password: string }; port?: number }) => {
       const { fastNetworkScan } = require('./fastNetworkScanner');
       
       // Send progress updates to renderer
@@ -252,7 +252,7 @@ export class OptimizedCameraDiscoveryService {
         if (event.sender && !event.sender.isDestroyed()) {
           event.sender.send('scan-progress', { ip, status, total });
         }
-      });
+      }, options.port || 443);
     });
     
     ipcMain.handle('discover-service-cameras', async (event) => {
