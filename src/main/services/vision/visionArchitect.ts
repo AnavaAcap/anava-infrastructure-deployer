@@ -1362,7 +1362,8 @@ export class VisionArchitect {
     cameraIp: string,
     username: string,
     password: string,
-    systemConfig: any
+    systemConfig: any,
+    port: number = 443
   ): Promise<{
     success: boolean;
     deployed: {
@@ -1383,7 +1384,7 @@ export class VisionArchitect {
     const { VisionArchitectDeployer } = require('./visionArchitectDeployer');
     
     // Create deployer instance
-    const deployer = new VisionArchitectDeployer(cameraIp, username, password);
+    const deployer = new VisionArchitectDeployer(cameraIp, username, password, port);
     
     // Deploy the system using the correct endpoints
     // Professional end-to-end deployment

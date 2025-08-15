@@ -359,6 +359,7 @@ const VisionArchitectPage: React.FC = () => {
         <VisionArchitectDialog
           open={dialogOpen}
           cameraIp={selectedCamera.ip}
+          port={selectedCamera.port || 443}
           username={selectedCamera.username || 'anava'}
           password={selectedCamera.password || 'baton'}
           geminiApiKey={geminiApiKey}

@@ -96,17 +96,19 @@ export function registerVisionArchitectHandlers() {
     cameraIp: string,
     username: string,
     password: string,
-    systemConfig: any
+    systemConfig: any,
+    port: number = 443
   ) => {
     try {
-      logger.info('[Vision IPC] Deploying system to camera:', cameraIp);
+      logger.info('[Vision IPC] Deploying system to camera:', `${cameraIp}:${port}`);
       
       const architect = new VisionArchitect(''); // API key not needed for deployment
       const result = await architect.deploySystem(
         cameraIp,
         username,
         password,
-        systemConfig
+        systemConfig,
+        port
       );
       
       return result;

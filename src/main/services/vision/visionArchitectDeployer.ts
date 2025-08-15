@@ -13,13 +13,15 @@ export class VisionArchitectDeployer {
   private cameraIp: string;
   private username: string;
   private password: string;
+  private port: number;
   private aoaService: AOAService;
 
-  constructor(cameraIp: string, username: string, password: string) {
+  constructor(cameraIp: string, username: string, password: string, port: number = 443) {
     this.cameraIp = cameraIp;
     this.username = username;
     this.password = password;
-    this.aoaService = new AOAService(cameraIp, username, password);
+    this.port = port;
+    this.aoaService = new AOAService(cameraIp, username, password, port);
   }
 
   /**
@@ -256,7 +258,8 @@ export class VisionArchitectDeployer {
    */
   private async createSkill(skill: any): Promise<string | null> {
     try {
-      const url = `https://${this.cameraIp}/local/BatonAnalytic/baton_analytic.cgi?command=createSkill`;
+      const protocol = this.port === 80 ? 'http' : 'https';
+      const url = `${protocol}://${this.cameraIp}:${this.port}/local/BatonAnalytic/baton_analytic.cgi?command=createSkill`;
       
       logger.info('[Vision Deployer] === CREATING SKILL ===');
       logger.info('[Vision Deployer] URL:', url);
@@ -302,7 +305,8 @@ export class VisionArchitectDeployer {
    */
   private async createSecurityProfile(profile: any): Promise<string | null> {
     try {
-      const url = `https://${this.cameraIp}/local/BatonAnalytic/baton_analytic.cgi?command=createSecurityProfile`;
+      const protocol = this.port === 80 ? 'http' : 'https';
+      const url = `${protocol}://${this.cameraIp}:${this.port}/local/BatonAnalytic/baton_analytic.cgi?command=createSecurityProfile`;
       
       logger.info('[Vision Deployer] === CREATING SECURITY PROFILE ===');
       logger.info('[Vision Deployer] URL:', url);

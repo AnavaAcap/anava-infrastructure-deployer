@@ -61,8 +61,18 @@ export async function testCameraProtocol(
   port?: number
 ): Promise<ProtocolTestResult> {
   // Determine ports to test
-  const httpsPort = port || 443;
-  const httpPort = port || 80;
+  let httpsPort: number;
+  let httpPort: number;
+  
+  if (port) {
+    // Custom port specified - use same port for both protocols
+    httpsPort = port;
+    httpPort = port;
+  } else {
+    // No port specified - use standard ports
+    httpsPort = 443;
+    httpPort = 80;
+  }
   
   logger.info(`[Protocol] Testing camera protocols for ${ip}:${httpsPort}/${httpPort}`);
   
@@ -74,7 +84,7 @@ export async function testCameraProtocol(
     await axios.get(httpsUrl, {
       timeout: 3000, // Short timeout for protocol test
       auth: username && password ? { username, password } : undefined,
-      httpsAgent: new (require('https').Agent)({
+      httpsAgent: new https.Agent({
         rejectUnauthorized: false // Accept self-signed certificates
       }),
       validateStatus: (status) => status < 500 // Accept any non-server-error
@@ -98,31 +108,44 @@ export async function testCameraProtocol(
     }
   }
   
-  // Always use HTTPS for security
+  // Try HTTP if HTTPS failed
   try {
-    const httpsUrl = `https://${ip}:${httpsPort}/axis-cgi/param.cgi?action=list&group=Brand`;
-    logger.debug(`[Protocol] Using HTTPS for ${ip}:${httpsPort}`);
+    const httpUrl = `http://${ip}:${httpPort}/axis-cgi/param.cgi?action=list&group=Brand`;
+    logger.debug(`[Protocol] Trying HTTP for ${ip}:${httpPort}`);
     
-    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
-    await axios.get(httpsUrl, {
-      httpsAgent,
-      timeout: 10000, // 10 seconds - HTTPS can be slower on cameras
+    await axios.get(httpUrl, {
+      timeout: 3000, // Short timeout for protocol test
       auth: username && password ? { username, password } : undefined,
       validateStatus: (status) => status < 500 // Accept any non-server-error
     });
     
-    // If we get here without error, HTTPS works
-    logger.info(`[Protocol] HTTPS works for ${ip}:${httpsPort}`);
+    // If we get here without error, HTTP works
+    logger.info(`[Protocol] HTTP works for ${ip}:${httpPort}`);
     return {
-      protocol: 'https',
-      baseUrl: `https://${ip}:${httpsPort}`,
+      protocol: 'http',
+      baseUrl: `http://${ip}:${httpPort}`,
       verified: true
     };
-  } catch (httpsError: any) {
+  } catch (httpError: any) {
     // Both failed, log error
-    logger.warn(`[Protocol] Both HTTPS and HTTP failed for ${ip}:${httpsPort}`);
+    logger.warn(`[Protocol] Both HTTPS and HTTP failed for ${ip}:${httpsPort}/${httpPort}`);
     
-    // Default to HTTPS for modern cameras
+    // For non-standard ports, make an educated guess based on port number
+    if (port && port !== 443 && port !== 80) {
+      // For non-standard ports, prefer HTTP unless it's a common HTTPS port
+      const httpsLikePorts = [443, 8443, 9443];
+      const protocol = httpsLikePorts.includes(port) ? 'https' : 'http';
+      const finalPort = port;
+      
+      logger.info(`[Protocol] Using ${protocol} for non-standard port ${port}`);
+      return {
+        protocol,
+        baseUrl: `${protocol}://${ip}:${finalPort}`,
+        verified: false
+      };
+    }
+    
+    // Default to HTTPS for standard ports
     return {
       protocol: 'https',
       baseUrl: `https://${ip}:${httpsPort}`,
@@ -152,7 +175,7 @@ export function createCameraAxiosInstance(baseUrl: string, username?: string, pa
     baseURL: baseUrl,
     timeout: 10000, // 10 second timeout for actual operations
     auth: username && password ? { username, password } : undefined,
-    httpsAgent: isHttps ? new (require('https').Agent)({
+    httpsAgent: isHttps ? new https.Agent({
       rejectUnauthorized: false // Accept self-signed certificates
     }) : undefined,
     headers: {

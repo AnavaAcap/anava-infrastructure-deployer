@@ -53,6 +53,7 @@ import {
 interface Props {
   open: boolean;
   cameraIp: string;
+  port?: number;
   username: string;
   password: string;
   geminiApiKey: string;
@@ -71,6 +72,7 @@ interface GeneratedSystem {
 export const VisionArchitectDialog: React.FC<Props> = ({
   open,
   cameraIp,
+  port = 443,
   username,
   password,
   geminiApiKey,
@@ -138,6 +140,7 @@ export const VisionArchitectDialog: React.FC<Props> = ({
       // Build camera object with proper credentials structure
       const camera = {
         ip: cameraIp,
+        port: port,
         credentials: {
           username: username,
           password: password
@@ -305,7 +308,8 @@ export const VisionArchitectDialog: React.FC<Props> = ({
         cameraIp,
         username,
         password,
-        generatedSystem
+        generatedSystem,
+        port
       );
 
       clearInterval(deployProgressInterval);

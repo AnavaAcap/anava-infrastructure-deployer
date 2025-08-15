@@ -2493,7 +2493,7 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         <VisionArchitectDialog
           open={showVisionArchitectDialog}
           cameraIp={selectedCamera.ip}
-          cameraPort={selectedCamera.port}
+          port={selectedCamera.port || 443}
           username={credentials.username}
           password={credentials.password}
           geminiApiKey={geminiApiKey}
