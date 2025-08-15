@@ -1,6 +1,6 @@
 {
   "name": "anava-vision",
-  "version": "0.9.207",
+  "version": "0.9.208",
   "description": "Anava Vision - Deploy and configure AI-powered camera systems",
   "main": "dist/main/index.js",
   "scripts": {
