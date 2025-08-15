@@ -251,7 +251,7 @@ export class CameraConfigurationService {
             validateStatus: () => true,
             maxRedirects: 0,
             decompress: false,
-            httpsAgent: isHttps ? new (require('https').Agent)({
+            httpsAgent: isHttps ? new https.Agent({
               rejectUnauthorized: false // Accept self-signed certificates
             }) : undefined,
           });
