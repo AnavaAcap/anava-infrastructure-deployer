@@ -596,7 +596,8 @@ const CameraSetupPage: React.FC<CameraSetupPageProps> = ({ onNavigate }) => {
         hasACAP: false,
         isLicensed: false,
         status: 'idle',
-      }));
+        error: cam.error || undefined,  // Include error from scanner
+      }));;
 
       setCameras(formattedCameras);
       

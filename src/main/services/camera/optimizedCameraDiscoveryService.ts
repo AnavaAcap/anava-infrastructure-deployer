@@ -890,7 +890,115 @@ export class OptimizedCameraDiscoveryService {
   ): Promise<{ data: string | null; error: string | null }> {
     try {
       const url = `${protocol}://${ip}:${port}${path}`;
-      console.log(`    Attempting digest auth to ${url}`);
+      console.log(`    Attempting authentication to ${url}`);
+      
+      // For HTTPS (port 443), try Basic Auth first. For HTTP (port 80), try Digest Auth
+      if (protocol === 'https' || port === 443) {
+        console.log(`    Using Basic Auth for HTTPS`);
+        return await this.basicAuthWithError(ip, username, password, path, port, protocol);
+      } else {
+        console.log(`    Using Digest Auth for HTTP`);
+        return await this.digestAuthImplementation(ip, username, password, path, port, protocol);
+      }
+    } catch (error: any) {
+      console.log(`    Auth error: ${error.message}`);
+      if (error.code === 'ECONNREFUSED') {
+        return { data: null, error: `Cannot connect to ${ip}:${port}` };
+      } else if (error.code === 'ETIMEDOUT') {
+        return { data: null, error: `Connection timeout to ${ip}:${port}` };
+      } else if (process.platform === 'win32') {
+        // Windows-specific error messages
+        if (error.code === 'EACCES' || error.code === 'EPERM') {
+          return { data: null, error: `Access denied to ${ip}:${port} - check Windows Firewall settings` };
+        } else if (error.code === 'WSAEACCES') {
+          return { data: null, error: `Windows socket access denied - firewall or antivirus may be blocking` };
+        } else if (error.code === 'ENETUNREACH' || error.code === 'WSAENETUNREACH') {
+          return { data: null, error: `Network unreachable to ${ip}:${port} - check network connection` };
+        }
+      }
+      return { data: null, error: error.message || 'Connection failed' };
+    }
+  }
+
+  private async basicAuthWithError(
+    ip: string,
+    username: string,
+    password: string,
+    path: string,
+    port = 443,
+    protocol: 'http' | 'https' = 'https'
+  ): Promise<{ data: string | null; error: string | null }> {
+    try {
+      const url = `${protocol}://${ip}:${port}${path}`;
+      
+      // Try GET first (older devices)
+      let response = await this.axiosInstance.get(url, {
+        auth: { username, password },
+        timeout: 5000,
+        validateStatus: () => true
+      });
+
+      console.log(`    Basic Auth GET response: ${response.status}`);
+      
+      // Handle 401 - authentication failed
+      if (response.status === 401) {
+        return { data: null, error: 'Invalid username or password' };
+      }
+      
+      // Check if device requires POST (newer devices)
+      if (response.status === 200 && response.data?.error?.message?.includes('POST supported')) {
+        console.log(`    Device requires POST method, trying POST...`);
+        
+        response = await this.axiosInstance.post(url.replace('/param.cgi?action=list&group=Brand', '/basicdeviceinfo.cgi'),
+          {
+            "apiVersion": "1.0",
+            "method": "getProperties",
+            "params": {
+              "propertyList": ["Brand", "ProdNbr", "ProdFullName", "ProdType", "SerialNumber"]
+            }
+          },
+          {
+            auth: { username, password },
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 5000,
+            validateStatus: () => true
+          }
+        );
+        
+        console.log(`    Basic Auth POST response: ${response.status}`);
+        
+        if (response.status === 401) {
+          return { data: null, error: 'Invalid username or password' };
+        }
+        
+        // Convert JSON response to param format for compatibility
+        if (response.status === 200 && response.data?.data?.propertyList) {
+          const props = response.data.data.propertyList;
+          const paramFormat = `Brand=${props.Brand || 'AXIS'}\nProdNbr=${props.ProdNbr || ''}\nProdType=${props.ProdType || ''}`;
+          return { data: paramFormat, error: null };
+        }
+      }
+      
+      if (response.status === 200) {
+        return { data: response.data, error: null };
+      } else {
+        return { data: null, error: `HTTP ${response.status}: ${response.statusText}` };
+      }
+    } catch (error: any) {
+      return { data: null, error: error.message || 'Basic authentication failed' };
+    }
+  }
+
+  private async digestAuthImplementation(
+    ip: string,
+    username: string,
+    password: string,
+    path: string,
+    port = 80,
+    protocol: 'http' | 'https' = 'http'
+  ): Promise<{ data: string | null; error: string | null }> {
+    try {
+      const url = `${protocol}://${ip}:${port}${path}`;
       
       // First request to get the digest challenge
       const response1 = await this.axiosInstance.get(url, {
@@ -931,22 +1039,7 @@ export class OptimizedCameraDiscoveryService {
         return { data: null, error: `HTTP ${response1.status}: ${response1.statusText}` };
       }
     } catch (error: any) {
-      console.log(`    Auth error: ${error.message}`);
-      if (error.code === 'ECONNREFUSED') {
-        return { data: null, error: `Cannot connect to ${ip}:${port}` };
-      } else if (error.code === 'ETIMEDOUT') {
-        return { data: null, error: `Connection timeout to ${ip}:${port}` };
-      } else if (process.platform === 'win32') {
-        // Windows-specific error messages
-        if (error.code === 'EACCES' || error.code === 'EPERM') {
-          return { data: null, error: `Access denied to ${ip}:${port} - check Windows Firewall settings` };
-        } else if (error.code === 'WSAEACCES') {
-          return { data: null, error: `Windows socket access denied - firewall or antivirus may be blocking` };
-        } else if (error.code === 'ENETUNREACH' || error.code === 'WSAENETUNREACH') {
-          return { data: null, error: `Network unreachable to ${ip}:${port} - check network connection` };
-        }
-      }
-      return { data: null, error: error.message || 'Connection failed' };
+      return { data: null, error: error.message || 'Digest authentication failed' };
     }
   }
 

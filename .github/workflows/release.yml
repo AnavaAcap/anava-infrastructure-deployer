@@ -227,3 +227,218 @@ jobs:
         files: |
           release-mac/*.dmg
           release-win/*.exe
+
+  update-vision-releases:
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Checkout vision-releases repository
+      uses: actions/checkout@v4
+      with:
+        repository: AnavaAcap/vision-releases
+        token: ${{ secrets.VISION_RELEASES_TOKEN }}
+        path: vision-releases
+
+    - name: Download Mac artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Anava-Installer-Mac
+        path: release-mac
+
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: Anava-Installer-Windows
+        path: release-win
+
+    - name: Get version from tag
+      id: get_version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+
+    - name: Copy assets with static names
+      run: |
+        echo "Copying assets to vision-releases with static names..."
+        
+        # Find the actual file names
+        MAC_FILE=$(find release-mac -name "*.dmg" | head -1)
+        WIN_FILE=$(find release-win -name "*.exe" | head -1)
+        
+        if [ -z "$MAC_FILE" ]; then
+          echo "Error: No .dmg file found"
+          exit 1
+        fi
+        
+        if [ -z "$WIN_FILE" ]; then
+          echo "Error: No .exe file found"
+          exit 1
+        fi
+        
+        echo "Found Mac file: $MAC_FILE"
+        echo "Found Windows file: $WIN_FILE"
+        
+        # Copy with static names for website integration
+        cp "$MAC_FILE" vision-releases/Anava.Vision.dmg
+        cp "$WIN_FILE" vision-releases/Anava.Vision.Setup.exe
+        
+        # Also keep versioned copies for reference
+        cp "$MAC_FILE" "vision-releases/Anava.Vision.${{ steps.get_version.outputs.version }}.dmg"
+        cp "$WIN_FILE" "vision-releases/Anava.Vision.Setup.${{ steps.get_version.outputs.version }}.exe"
+        
+        echo "Files copied successfully"
+        ls -la vision-releases/
+
+    - name: Generate README
+      run: |
+        cat > vision-releases/README.md << 'EOF'
+        # Anava Vision - Public Downloads
+        
+        This repository provides static download links for the Anava Vision application.
+        
+        ## Download Links (Always Latest Version)
+        
+        ### Windows
+        **Direct Download**: [Anava.Vision.Setup.exe](https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.Setup.exe)
+        
+        **Website Integration URL**: 
+        ```
+        https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.Setup.exe
+        ```
+        
+        ### macOS
+        **Direct Download**: [Anava.Vision.dmg](https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.dmg)
+        
+        **Website Integration URL**:
+        ```
+        https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.dmg
+        ```
+        
+        ## Current Version
+        
+        **Version**: ${{ steps.get_version.outputs.version }}  
+        **Release Date**: $(date +"%Y-%m-%d")  
+        **Source**: [anava-infrastructure-deployer](https://github.com/AnavaAcap/anava-infrastructure-deployer/releases/tag/${{ steps.get_version.outputs.version }})
+        
+        ## What is Anava Vision?
+        
+        Anava Vision is an intelligent camera configuration and deployment system that:
+        
+        - **Automated Camera Discovery**: Automatically finds and configures Axis cameras on your network
+        - **AI-Powered Analytics**: Deploy advanced computer vision and AI analytics to your cameras
+        - **Cloud Integration**: Seamless integration with Google Cloud Platform for scalable AI processing
+        - **Vision Architect**: AI-driven system that creates custom analytics scenarios based on your specific needs
+        - **Enterprise Ready**: Complete deployment solution for retail, manufacturing, healthcare, and security applications
+        
+        ## Installation
+        
+        ### Windows
+        1. Download `Anava.Vision.Setup.exe`
+        2. Run the installer
+        3. Follow the setup wizard
+        
+        ### macOS
+        1. Download `Anava.Vision.dmg`
+        2. Open the DMG file
+        3. Drag Anava Vision to your Applications folder
+        
+        ## System Requirements
+        
+        ### Windows
+        - Windows 10 or later (64-bit)
+        - 4GB RAM minimum, 8GB recommended
+        - 500MB free disk space
+        - Network access to camera subnet
+        
+        ### macOS
+        - macOS 10.15 (Catalina) or later
+        - Intel or Apple Silicon Mac
+        - 4GB RAM minimum, 8GB recommended
+        - 500MB free disk space
+        - Network access to camera subnet
+        
+        ## Support
+        
+        - **Documentation**: [Anava Vision Docs](https://docs.anava.ai)
+        - **Issues**: [Report Issues](https://github.com/AnavaAcap/anava-infrastructure-deployer/issues)
+        - **Enterprise Support**: contact@anava.ai
+        
+        ## Release History
+        
+        For complete release history and changelog, see the [main repository releases](https://github.com/AnavaAcap/anava-infrastructure-deployer/releases).
+        
+        ---
+        
+        *This repository is automatically updated when new versions are released.*
+        EOF
+
+    - name: Create GitHub Release in vision-releases
+      run: |
+        cd vision-releases
+        
+        # Check if this version already exists
+        if git tag | grep -q "${{ steps.get_version.outputs.version }}"; then
+          echo "Tag ${{ steps.get_version.outputs.version }} already exists, deleting it..."
+          git tag -d "${{ steps.get_version.outputs.version }}" || true
+          git push origin --delete "${{ steps.get_version.outputs.version }}" || true
+        fi
+        
+        # Configure git
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        
+        # Add all files
+        git add .
+        
+        # Check if there are changes to commit
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          # Commit changes
+          git commit -m "Release ${{ steps.get_version.outputs.version }} - Auto-deployed from main repository"
+          
+          # Push changes
+          git push origin main
+        fi
+        
+        # Create and push tag
+        git tag "${{ steps.get_version.outputs.version }}"
+        git push origin "${{ steps.get_version.outputs.version }}"
+
+    - name: Create Release in vision-releases repo
+      uses: softprops/action-gh-release@v2
+      with:
+        token: ${{ secrets.VISION_RELEASES_TOKEN }}
+        repository: AnavaAcap/vision-releases
+        tag_name: ${{ steps.get_version.outputs.version }}
+        name: Anava Vision ${{ steps.get_version.outputs.version }}
+        body: |
+          # Anava Vision ${{ steps.get_version.outputs.version }}
+          
+          Automatically deployed from [anava-infrastructure-deployer](https://github.com/AnavaAcap/anava-infrastructure-deployer/releases/tag/${{ steps.get_version.outputs.version }})
+          
+          ## Download Options
+          
+          ### Windows (x64)
+          - **[Anava.Vision.Setup.exe](https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.Setup.exe)** *(Always latest)*
+          - [Anava.Vision.Setup.${{ steps.get_version.outputs.version }}.exe](https://github.com/AnavaAcap/vision-releases/releases/download/${{ steps.get_version.outputs.version }}/Anava.Vision.Setup.${{ steps.get_version.outputs.version }}.exe) *(This version)*
+          
+          ### macOS (Universal)
+          - **[Anava.Vision.dmg](https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.dmg)** *(Always latest)*
+          - [Anava.Vision.${{ steps.get_version.outputs.version }}.dmg](https://github.com/AnavaAcap/vision-releases/releases/download/${{ steps.get_version.outputs.version }}/Anava.Vision.${{ steps.get_version.outputs.version }}.dmg) *(This version)*
+          
+          ## Static URLs for Website Integration
+          
+          These URLs always point to the latest version:
+          - Windows: `https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.Setup.exe`
+          - macOS: `https://github.com/AnavaAcap/vision-releases/releases/latest/download/Anava.Vision.dmg`
+          
+          Released: $(date +"%Y-%m-%d %H:%M UTC")
+        files: |
+          Anava.Vision.dmg
+          Anava.Vision.Setup.exe
+          Anava.Vision.${{ steps.get_version.outputs.version }}.dmg
+          Anava.Vision.Setup.${{ steps.get_version.outputs.version }}.exe

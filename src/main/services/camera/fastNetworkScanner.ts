@@ -171,11 +171,57 @@ export async function identifyCamera(
   ip: string, 
   credentials: { username: string; password: string },
   port: number = 443
-): Promise<{ accessible: boolean; authRequired?: boolean; model?: string; manufacturer?: string; deviceType?: 'camera' | 'speaker'; mac?: string }> {
+): Promise<{ accessible: boolean; authRequired?: boolean; model?: string; manufacturer?: string; deviceType?: 'camera' | 'speaker'; mac?: string; error?: string }> {
   try {
-    // Determine protocol based on port
     const protocol = port === 80 ? 'http' : 'https';
     const baseUrl = `${protocol}://${ip}:${port}`;
+    
+    console.log(`[identifyCamera] Testing ${ip}:${port} with ${protocol.toUpperCase()}`);
+    console.log(`[identifyCamera] Credentials: ${credentials.username}/${credentials.password ? '***' : 'EMPTY'}`);
+    
+    // Try Basic Auth first (most common for both HTTP and HTTPS)
+    console.log(`[identifyCamera] Trying Basic Auth first`);
+    let result = await tryBasicAuthenticationMethod(baseUrl, credentials);
+    
+    if (result.accessible) {
+      console.log(`[identifyCamera] ✅ Basic Auth successful`);
+      return result;
+    }
+    
+    // If Basic Auth failed and we got a proper auth challenge, try Digest Auth
+    if (result.authRequired && result.error === 'Invalid username or password') {
+      console.log(`[identifyCamera] Basic Auth failed, trying Digest Auth as fallback`);
+      result = await tryDigestAuthenticationMethod(baseUrl, credentials);
+      
+      if (result.accessible) {
+        console.log(`[identifyCamera] ✅ Digest Auth successful`);
+        return result;
+      }
+    }
+    
+    console.log(`[identifyCamera] ❌ All authentication methods failed: ${result.error}`);
+    return result;
+    
+  } catch (error: any) {
+    console.error(`[identifyCamera] Error:`, error.message);
+    return { 
+      accessible: false, 
+      error: error.code === 'ETIMEDOUT' ? 'Connection timeout' : 
+             error.code === 'ECONNREFUSED' ? 'Connection refused' :
+             error.message || 'Network error'
+    };
+  }
+}
+
+/**
+ * Try Basic Authentication with both GET and POST methods
+ */
+async function tryBasicAuthenticationMethod(
+  baseUrl: string, 
+  credentials: { username: string; password: string }
+): Promise<{ accessible: boolean; authRequired?: boolean; model?: string; manufacturer?: string; deviceType?: 'camera' | 'speaker'; mac?: string; error?: string }> {
+  try {
+    console.log(`[tryBasicAuth] Attempting Basic Auth for ${baseUrl}`);
     
     // Try GET first (older devices)
     let response = await axiosInstance.get(`${baseUrl}/axis-cgi/basicdeviceinfo.cgi`, {
@@ -187,60 +233,30 @@ export async function identifyCamera(
       validateStatus: () => true
     });
     
-    // If we get 401, it's an Axis device but wrong credentials
+    console.log(`[tryBasicAuth] GET response status: ${response.status}`);
+    
+    // Handle 401 - authentication failed
     if (response.status === 401) {
-      console.log(`Axis device at ${ip}:${port} requires correct authentication`);
-      
-      // Try to determine if it's a speaker by checking audio endpoint
-      try {
-        const speakerCheck = await axiosInstance.get(`${baseUrl}/axis-cgi/audio/transmit.cgi`, {
-          auth: { username: credentials.username, password: credentials.password },
-          validateStatus: () => true,
-          timeout: 1000
-        });
-        
-        if (speakerCheck.status === 401 || speakerCheck.status === 200) {
-          console.log(`Audio endpoint exists - likely a SPEAKER`);
-          return {
-            accessible: false,  // NOT accessible without correct credentials!
-            authRequired: true,
-            model: 'Axis Speaker (Authentication Required)',
-            manufacturer: 'Axis',
-            deviceType: 'speaker'
-          };
-        }
-      } catch (e) {
-        // Audio endpoint doesn't exist, probably a camera
-      }
-      
-      // Default to camera if can't determine
+      console.log(`[tryBasicAuth] 401 - Invalid credentials`);
       return { 
-        accessible: false,  // NOT accessible without correct credentials!
+        accessible: false, 
         authRequired: true,
-        model: 'Axis Camera (Authentication Required)',
+        error: 'Invalid username or password',
         manufacturer: 'Axis',
         deviceType: 'camera'
       };
     }
     
-    // Check if it's a newer device that requires POST
+    // Check if device requires POST (newer devices)
     if (response.status === 200 && response.data?.error?.message?.includes('POST supported')) {
-      console.log(`Device at ${ip}:${port} requires POST method (newer Axis device)`);
-      
-      // Try POST with JSON-RPC format for newer devices
-      // Include all properties we want to retrieve
-      const propertyList = [
-        'Brand', 'BuildDate', 'HardwareID', 'ProdFullName',
-        'ProdNbr', 'ProdShortName', 'ProdType', 'ProdVariant',
-        'SerialNumber', 'Soc', 'SocSerialNumber', 'Version', 'WebURL'
-      ];
+      console.log(`[tryBasicAuth] Device requires POST method, trying POST...`);
       
       response = await axiosInstance.post(`${baseUrl}/axis-cgi/basicdeviceinfo.cgi`, 
         {
           "apiVersion": "1.0",
           "method": "getProperties",
           "params": {
-            "propertyList": propertyList
+            "propertyList": ["Brand", "ProdNbr", "ProdFullName", "ProdType", "SerialNumber"]
           }
         },
         {
@@ -248,81 +264,184 @@ export async function identifyCamera(
             username: credentials.username,
             password: credentials.password
           },
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           timeout: 3000,
           validateStatus: () => true
         }
       );
-    }
-    
-    // If not 200 at this point, it's not an Axis device
-    if (response.status !== 200) {
-      return { accessible: false };
-    }
-    
-    // Parse the response - could be JSON or key=value format
-    let model = '';
-    let serialNumber = '';
-    let macAddress = '';
-    let deviceType: 'camera' | 'speaker' = 'camera';
-    
-    // Check if response is JSON (newer devices)
-    if (typeof response.data === 'object' && response.data.data?.propertyList) {
-      const properties = response.data.data.propertyList;
       
-      model = properties.ProdNbr || properties.ProdFullName || '';
-      serialNumber = properties.SerialNumber || '';
-      macAddress = serialNumber.toUpperCase();
+      console.log(`[tryBasicAuth] POST response status: ${response.status}`);
       
-      const prodType = (properties.ProdType || '').toLowerCase();
-      console.log(`Product Type: ${properties.ProdType}`);
-      
-      // Check device type - be more specific
-      if (prodType.includes('speaker') || prodType.includes('audio') || prodType.includes('horn')) {
-        deviceType = 'speaker';
-      } else if (prodType.includes('camera') || prodType.includes('dome') || prodType.includes('bullet')) {
-        deviceType = 'camera';
+      // Handle 401 on POST
+      if (response.status === 401) {
+        console.log(`[tryBasicAuth] POST 401 - Invalid credentials`);
+        return { 
+          accessible: false, 
+          authRequired: true,
+          error: 'Invalid username or password',
+          manufacturer: 'Axis',
+          deviceType: 'camera'
+        };
       }
-      
-      console.log(`✓ Found Axis ${deviceType} at ${ip}:${port}: ${model} (${properties.ProdType})`);
-      
-      return {
-        accessible: true,
-        model: model || `Axis ${deviceType}`,
+    }
+    
+    // Success case
+    if (response.status === 200) {
+      console.log(`[tryBasicAuth] ✅ Success - parsing device info`);
+      return parseDeviceInfo(response);
+    }
+    
+    // Other status codes
+    console.log(`[tryBasicAuth] Unexpected status: ${response.status}`);
+    return { 
+      accessible: false, 
+      error: `HTTP ${response.status}` 
+    };
+    
+  } catch (error: any) {
+    console.error(`[tryBasicAuth] Error:`, error.message);
+    return { 
+      accessible: false, 
+      error: error.message || 'Authentication failed' 
+    };
+  }
+}
+
+/**
+ * Try Digest Authentication 
+ */
+async function tryDigestAuthenticationMethod(
+  baseUrl: string, 
+  credentials: { username: string; password: string }
+): Promise<{ accessible: boolean; authRequired?: boolean; model?: string; manufacturer?: string; deviceType?: 'camera' | 'speaker'; mac?: string; error?: string }> {
+  try {
+    console.log(`[tryDigestAuth] Attempting Digest Auth for ${baseUrl}`);
+    
+    // First request to get authentication challenge
+    const challengeResponse = await axiosInstance.get(`${baseUrl}/axis-cgi/basicdeviceinfo.cgi`, {
+      timeout: 3000,
+      validateStatus: () => true
+    });
+    
+    console.log(`[tryDigestAuth] Challenge response status: ${challengeResponse.status}`);
+    
+    if (challengeResponse.status !== 401) {
+      console.log(`[tryDigestAuth] No 401 challenge - digest not supported`);
+      return { 
+        accessible: false, 
+        error: 'Device does not support digest authentication' 
+      };
+    }
+    
+    // Parse WWW-Authenticate header for digest challenge
+    const authHeader = challengeResponse.headers['www-authenticate'];
+    console.log(`[tryDigestAuth] Auth header: ${authHeader}`);
+    
+    if (!authHeader || !authHeader.toLowerCase().includes('digest')) {
+      console.log(`[tryDigestAuth] No digest challenge in header`);
+      return { 
+        accessible: false, 
+        error: 'Device does not support digest authentication' 
+      };
+    }
+    
+    // Extract digest parameters
+    const digestParams: any = {};
+    const regex = /(\w+)="([^"]+)"/g;
+    let match;
+    
+    while ((match = regex.exec(authHeader)) !== null) {
+      digestParams[match[1]] = match[2];
+    }
+    
+    if (!digestParams.realm || !digestParams.nonce) {
+      console.log(`[tryDigestAuth] Missing realm or nonce in challenge`);
+      return { 
+        accessible: false, 
+        error: 'Invalid digest challenge' 
+      };
+    }
+    
+    console.log(`[tryDigestAuth] Creating digest response...`);
+    
+    // Create digest response
+    const crypto = require('crypto');
+    const ha1 = crypto.createHash('md5').update(`${credentials.username}:${digestParams.realm}:${credentials.password}`).digest('hex');
+    const ha2 = crypto.createHash('md5').update(`GET:/axis-cgi/basicdeviceinfo.cgi`).digest('hex');
+    const response = crypto.createHash('md5').update(`${ha1}:${digestParams.nonce}:${ha2}`).digest('hex');
+    
+    const digestAuth = `Digest username="${credentials.username}", realm="${digestParams.realm}", nonce="${digestParams.nonce}", uri="/axis-cgi/basicdeviceinfo.cgi", response="${response}"`;
+    
+    // Make authenticated request
+    const authResponse = await axiosInstance.get(`${baseUrl}/axis-cgi/basicdeviceinfo.cgi`, {
+      headers: {
+        'Authorization': digestAuth
+      },
+      timeout: 3000,
+      validateStatus: () => true
+    });
+    
+    console.log(`[tryDigestAuth] Auth response status: ${authResponse.status}`);
+    
+    if (authResponse.status === 200) {
+      console.log(`[tryDigestAuth] ✅ Success - parsing device info`);
+      return parseDeviceInfo(authResponse);
+    } else if (authResponse.status === 401) {
+      console.log(`[tryDigestAuth] 401 - Invalid credentials`);
+      return { 
+        accessible: false, 
+        authRequired: true,
+        error: 'Invalid username or password',
         manufacturer: 'Axis',
-        deviceType,
-        mac: macAddress || undefined
+        deviceType: 'camera'
       };
     } else {
-      // Old key=value format
-      const data = response.data.toString();
-      
-      // If it doesn't have Axis-specific fields, it's not an Axis device
-      if (!data.includes('ProdNbr=') && !data.includes('Brand=') && !data.includes('SerialNumber=')) {
-        console.log(`Device at ${ip}:${port} responded but is not an Axis device`);
-        return { accessible: false };
-      }
-      
-      const lines = data.split('\n');
-      for (const line of lines) {
-        if (line.startsWith('ProdNbr=')) {
-          model = line.split('=')[1].trim();
-        } else if (line.startsWith('SerialNumber=')) {
-          serialNumber = line.split('=')[1].trim();
-          macAddress = serialNumber.toUpperCase();
-          console.log(`Found SerialNumber/MAC: ${macAddress}`);
-        } else if (line.startsWith('ProdType=')) {
-          const prodType = line.split('=')[1].trim().toLowerCase();
-          if (prodType.includes('speaker') || prodType.includes('audio')) {
-            deviceType = 'speaker';
-          }
-        }
-      }
+      console.log(`[tryDigestAuth] Unexpected status: ${authResponse.status}`);
+      return { 
+        accessible: false, 
+        error: `HTTP ${authResponse.status}` 
+      };
     }
     
-    console.log(`✓ Found Axis ${deviceType} at ${ip}:${port}: ${model} (MAC: ${macAddress})`);
+  } catch (error: any) {
+    console.error(`[tryDigestAuth] Error:`, error.message);
+    return { 
+      accessible: false, 
+      error: error.message || 'Digest authentication failed' 
+    };
+  }
+}
+
+/**
+ * Parse device response to extract model, type, and MAC
+ */
+function parseDeviceInfo(response: any): { accessible: boolean; model?: string; manufacturer?: string; deviceType?: 'camera' | 'speaker'; mac?: string } {
+  let model = '';
+  let serialNumber = '';
+  let macAddress = '';
+  let deviceType: 'camera' | 'speaker' = 'camera';
+  
+  console.log(`[parseDeviceInfo] Parsing response...`);
+  
+  // Check if response is JSON (newer devices)
+  if (typeof response.data === 'object' && response.data.data?.propertyList) {
+    const properties = response.data.data.propertyList;
+    
+    model = properties.ProdNbr || properties.ProdFullName || '';
+    serialNumber = properties.SerialNumber || '';
+    macAddress = serialNumber.toUpperCase();
+    
+    const prodType = (properties.ProdType || '').toLowerCase();
+    console.log(`[parseDeviceInfo] Product Type: ${properties.ProdType}`);
+    
+    // Check device type
+    if (prodType.includes('speaker') || prodType.includes('audio') || prodType.includes('horn')) {
+      deviceType = 'speaker';
+    } else if (prodType.includes('camera') || prodType.includes('dome') || prodType.includes('bullet')) {
+      deviceType = 'camera';
+    }
+    
+    console.log(`[parseDeviceInfo] ✅ Found Axis ${deviceType}: ${model} (${properties.ProdType})`);
     
     return {
       accessible: true,
@@ -331,9 +450,43 @@ export async function identifyCamera(
       deviceType,
       mac: macAddress || undefined
     };
+  } else {
+    // Old key=value format
+    const data = response.data.toString();
     
-  } catch (error) {
-    // Not an Axis device or network error
-    return { accessible: false };
+    // If it doesn't have Axis-specific fields, it's not an Axis device
+    if (!data.includes('ProdNbr=') && !data.includes('Brand=') && !data.includes('SerialNumber=')) {
+      console.log(`[parseDeviceInfo] Device responded but is not an Axis device`);
+      return { accessible: false };
+    }
+    
+    const lines = data.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('ProdNbr=')) {
+        model = line.split('=')[1].trim();
+      } else if (line.startsWith('SerialNumber=')) {
+        serialNumber = line.split('=')[1].trim();
+        macAddress = serialNumber.toUpperCase();
+        console.log(`[parseDeviceInfo] Found SerialNumber/MAC: ${macAddress}`);
+      } else if (line.startsWith('ProdType=')) {
+        const prodType = line.split('=')[1].trim().toLowerCase();
+        if (prodType.includes('speaker') || prodType.includes('audio')) {
+          deviceType = 'speaker';
+        }
+      }
+    }
   }
+  
+  console.log(`[parseDeviceInfo] ✅ Found Axis ${deviceType}: ${model} (MAC: ${macAddress})`);
+  
+  return {
+    accessible: true,
+    model: model || `Axis ${deviceType}`,
+    manufacturer: 'Axis',
+    deviceType,
+    mac: macAddress || undefined
+  };
 }
+
+
+
