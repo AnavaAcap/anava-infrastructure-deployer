@@ -1,6 +1,6 @@
 {
   "name": "anava-vision",
-  "version": "0.9.211",
+  "version": "0.9.212",
   "description": "Anava Vision - Deploy and configure AI-powered camera systems",
   "main": "dist/main/index.js",
   "scripts": {
@@ -107,6 +107,7 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "assets/icon.icns",
+      "artifactName": "Anava.Vision.dmg",
       "target": [
         {
           "target": "dmg",
@@ -162,7 +163,7 @@
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
       "installerHeaderIcon": "assets/icon.ico",
-      "artifactName": "Anava.Installer.Setup.${version}.exe",
+      "artifactName": "Anava.Vision.Setup.exe",
       "unicode": true,
       "warningsAsErrors": false
     }
