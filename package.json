@@ -107,16 +107,10 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "assets/icon.icns",
-      "artifactName": "Anava.Vision.dmg",
+      "artifactName": "Anava.Vision.${ext}",
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "universal"
-          ]
-        },
-        {
-          "target": "zip",
           "arch": [
             "universal"
           ]
