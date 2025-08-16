@@ -260,9 +260,9 @@ jobs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Version: $VERSION"
 
-    - name: Copy assets with static names
+    - name: Prepare release files with static names
       run: |
-        echo "Copying assets to vision-releases with static names..."
+        echo "Preparing release files with static names..."
         
         # Find the actual file names
         MAC_FILE=$(find release-mac -name "*.dmg" | head -1)
@@ -281,16 +281,19 @@ jobs:
         echo "Found Mac file: $MAC_FILE"
         echo "Found Windows file: $WIN_FILE"
         
-        # Copy with static names for website integration
-        cp "$MAC_FILE" vision-releases/Anava.Vision.dmg
-        cp "$WIN_FILE" vision-releases/Anava.Vision.Setup.exe
+        # Create directory for release assets (but don't commit them to git)
+        mkdir -p release-assets
+        
+        # Copy with static names for GitHub release
+        cp "$MAC_FILE" release-assets/Anava.Vision.dmg
+        cp "$WIN_FILE" release-assets/Anava.Vision.Setup.exe
         
         # Also keep versioned copies for reference
-        cp "$MAC_FILE" "vision-releases/Anava.Vision.${{ steps.get_version.outputs.version }}.dmg"
-        cp "$WIN_FILE" "vision-releases/Anava.Vision.Setup.${{ steps.get_version.outputs.version }}.exe"
+        cp "$MAC_FILE" "release-assets/Anava.Vision.${{ steps.get_version.outputs.version }}.dmg"
+        cp "$WIN_FILE" "release-assets/Anava.Vision.Setup.${{ steps.get_version.outputs.version }}.exe"
         
-        echo "Files copied successfully"
-        ls -la vision-releases/
+        echo "Files prepared successfully"
+        ls -la release-assets/
 
     - name: Generate README
       run: |
@@ -375,7 +378,7 @@ jobs:
         *This repository is automatically updated when new versions are released.*
         EOF
 
-    - name: Create GitHub Release in vision-releases
+    - name: Update vision-releases repository
       run: |
         cd vision-releases
         
@@ -390,8 +393,8 @@ jobs:
         git config user.name "GitHub Actions"
         git config user.email "actions@github.com"
         
-        # Add all files
-        git add .
+        # Add only README.md (not binary files)
+        git add README.md
         
         # Check if there are changes to commit
         if git diff --staged --quiet; then
@@ -438,7 +441,7 @@ jobs:
           
           Released: $(date +"%Y-%m-%d %H:%M UTC")
         files: |
-          Anava.Vision.dmg
-          Anava.Vision.Setup.exe
-          Anava.Vision.${{ steps.get_version.outputs.version }}.dmg
-          Anava.Vision.Setup.${{ steps.get_version.outputs.version }}.exe
+          release-assets/Anava.Vision.dmg
+          release-assets/Anava.Vision.Setup.exe
+          release-assets/Anava.Vision.${{ steps.get_version.outputs.version }}.dmg
+          release-assets/Anava.Vision.Setup.${{ steps.get_version.outputs.version }}.exe
